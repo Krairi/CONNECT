@@ -2,26 +2,60 @@ import {
   ArrowLeft,
   Activity,
   Package,
+  Users,
   Utensils,
+  ShieldAlert,
   RefreshCw,
+  ShoppingCart,
+  AlertTriangle,
   CheckCircle2,
 } from "lucide-react";
-import DomyliPageGuard from "../components/DomyliPageGuard";
 import { useDomyliConnection } from "../hooks/useDomyliConnection";
 import { useDashboard } from "../hooks/useDashboard";
 import { navigateTo } from "../lib/navigation";
 
 export default function DashboardPage() {
-  return (
-    <DomyliPageGuard loadingTitle="Chargement du dashboard...">
-      <DashboardPageContent />
-    </DomyliPageGuard>
-  );
-}
+  const {
+    sessionEmail,
+    activeMembership,
+    bootstrap,
+    isAuthenticated,
+    hasHousehold,
+    authLoading,
+  } = useDomyliConnection();
 
-function DashboardPageContent() {
-  const { sessionEmail, activeMembership, bootstrap } = useDomyliConnection();
   const { loading, error, health, feed, refresh } = useDashboard();
+
+  if (authLoading) {
+    return (
+      <div className="min-h-screen bg-obsidian text-alabaster flex items-center justify-center px-6">
+        <div className="text-center">
+          <p className="text-xs uppercase tracking-[0.3em] text-gold/80">DOMYLI</p>
+          <h1 className="mt-4 text-3xl font-serif italic">Chargement du dashboard...</h1>
+        </div>
+      </div>
+    );
+  }
+
+  if (!isAuthenticated || !hasHousehold) {
+    return (
+      <div className="min-h-screen bg-obsidian text-alabaster flex items-center justify-center px-6">
+        <div className="max-w-xl w-full border border-white/10 bg-white/5 p-8">
+          <p className="text-xs uppercase tracking-[0.3em] text-gold/80">DOMYLI</p>
+          <h1 className="mt-4 text-3xl font-serif italic">Contexte insuffisant</h1>
+          <p className="mt-4 text-alabaster/70">
+            Il faut une session authentifiée et un foyer actif pour accéder au dashboard.
+          </p>
+          <button
+            onClick={() => navigateTo("/")}
+            className="mt-8 border border-gold/40 px-6 py-3 text-sm uppercase tracking-[0.25em] text-gold hover:bg-gold hover:text-obsidian transition-colors"
+          >
+            Retour à l’accueil
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   const cards = [
     {
@@ -62,11 +96,8 @@ function DashboardPageContent() {
             >
               <ArrowLeft size={18} className="text-gold" />
             </button>
-
             <div>
-              <p className="text-[10px] uppercase tracking-[0.3em] text-gold/80">
-                DOMYLI
-              </p>
+              <p className="text-[10px] uppercase tracking-[0.3em] text-gold/80">DOMYLI</p>
               <h1 className="text-2xl font-serif italic">Dashboard</h1>
             </div>
           </div>
@@ -146,13 +177,10 @@ function DashboardPageContent() {
               <div className="w-12 h-12 border border-gold/20 flex items-center justify-center mb-4">
                 {card.icon}
               </div>
-
               <div className="text-sm uppercase tracking-[0.25em] text-alabaster/50">
                 {card.title}
               </div>
-
               <div className="mt-3 text-3xl font-serif italic">{card.value}</div>
-
               <p className="mt-4 text-sm text-alabaster/65">{card.text}</p>
             </div>
           ))}
@@ -160,9 +188,7 @@ function DashboardPageContent() {
 
         <section className="grid lg:grid-cols-2 gap-8 mt-10">
           <div className="border border-white/10 bg-white/5 p-8">
-            <p className="text-xs uppercase tracking-[0.3em] text-gold/80">
-              Contexte réel
-            </p>
+            <p className="text-xs uppercase tracking-[0.3em] text-gold/80">Contexte réel</p>
             <h2 className="mt-4 text-3xl font-serif italic">État du foyer actif</h2>
 
             <div className="mt-8 space-y-4 text-sm">
@@ -173,9 +199,7 @@ function DashboardPageContent() {
 
               <div className="border border-white/10 bg-black/20 p-4">
                 <span className="text-alabaster/50">Foyer actif :</span>
-                <div className="mt-1 text-alabaster">
-                  {activeMembership?.household_name ?? "—"}
-                </div>
+                <div className="mt-1 text-alabaster">{activeMembership?.household_name ?? "—"}</div>
               </div>
 
               <div className="border border-white/10 bg-black/20 p-4">
@@ -185,9 +209,7 @@ function DashboardPageContent() {
 
               <div className="border border-white/10 bg-black/20 p-4">
                 <span className="text-alabaster/50">Super Admin :</span>
-                <div className="mt-1 text-alabaster">
-                  {bootstrap?.is_super_admin ? "Oui" : "Non"}
-                </div>
+                <div className="mt-1 text-alabaster">{bootstrap?.is_super_admin ? "Oui" : "Non"}</div>
               </div>
 
               <div className="border border-white/10 bg-black/20 p-4">
@@ -198,9 +220,7 @@ function DashboardPageContent() {
           </div>
 
           <div className="border border-white/10 bg-white/5 p-8">
-            <p className="text-xs uppercase tracking-[0.3em] text-gold/80">
-              Charge du jour
-            </p>
+            <p className="text-xs uppercase tracking-[0.3em] text-gold/80">Charge du jour</p>
             <h2 className="mt-4 text-3xl font-serif italic">Répartition par membre</h2>
 
             {loading && (
@@ -233,14 +253,11 @@ function DashboardPageContent() {
                         <div className="text-xs uppercase tracking-[0.25em] text-gold/80">
                           {member.role}
                         </div>
-
                         <div className="mt-2 text-lg font-serif italic">
                           {member.user_id}
                         </div>
-
                         <div className="mt-2 text-sm text-alabaster/60">
-                          Capacité : {member.capacity_points_daily} • Tâches :{" "}
-                          {member.assigned_task_count}
+                          Capacité : {member.capacity_points_daily} • Tâches : {member.assigned_task_count}
                         </div>
                       </div>
 
@@ -257,9 +274,7 @@ function DashboardPageContent() {
 
         <section className="grid lg:grid-cols-2 gap-8 mt-10">
           <div className="border border-white/10 bg-white/5 p-8">
-            <p className="text-xs uppercase tracking-[0.3em] text-gold/80">
-              Santé opérationnelle
-            </p>
+            <p className="text-xs uppercase tracking-[0.3em] text-gold/80">Santé opérationnelle</p>
             <h2 className="mt-4 text-3xl font-serif italic">Résumé métier</h2>
 
             <div className="mt-8 grid sm:grid-cols-2 gap-4 text-sm">
@@ -294,16 +309,11 @@ function DashboardPageContent() {
           </div>
 
           <div className="border border-white/10 bg-white/5 p-8">
-            <p className="text-xs uppercase tracking-[0.3em] text-gold/80">
-              Suite logique
-            </p>
-            <h2 className="mt-4 text-3xl font-serif italic">
-              Base prête, valeur métier visible
-            </h2>
-
+            <p className="text-xs uppercase tracking-[0.3em] text-gold/80">Suite logique</p>
+            <h2 className="mt-4 text-3xl font-serif italic">Base prête, valeur métier visible</h2>
             <p className="mt-6 text-alabaster/70 leading-relaxed">
-              Le dashboard lit maintenant les vrais JSON de ta base DOMYLI. Tu peux
-              naviguer vers les modules métiers pour enrichir l’exécution réelle du foyer.
+              Le dashboard lit maintenant les vrais JSON de ta base DOMYLI. Tu peux naviguer vers les
+              modules métiers pour enrichir l’exécution réelle du foyer.
             </p>
 
             <div className="mt-8 grid gap-4">
@@ -313,14 +323,12 @@ function DashboardPageContent() {
               >
                 Revenir aux profils
               </button>
-
               <button
                 onClick={() => navigateTo("/status")}
                 className="border border-white/10 px-5 py-4 text-sm uppercase tracking-[0.25em] text-alabaster hover:border-gold/40 hover:text-gold transition-colors text-left"
               >
                 Ouvrir le status
               </button>
-
               <button
                 onClick={() => navigateTo("/")}
                 className="border border-white/10 px-5 py-4 text-sm uppercase tracking-[0.25em] text-alabaster hover:border-gold/40 hover:text-gold transition-colors text-left"

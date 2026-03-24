@@ -1,0 +1,3 @@
+Ce pack regroupe les fichiers des lots 1 à 5 tels que produits dans la conversation.
+Il suppose que ton repo contient déjà : src/hooks/useDomyliConnection.ts, src/services/rpc.ts, src/lib/errors.ts, src/lib/supabase.ts, src/index.css, et les pages métier existantes (LandingPage, DashboardPage, etc.).
+Adapte les imports si certains noms diffèrent dans ton dépôt réel.
