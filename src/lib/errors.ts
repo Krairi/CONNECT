@@ -1,25 +1,38 @@
-export type DomyliAppError = {
-  code: string;
-  message: string;
-  hint?: string | null;
+export type DomyliAppError = Error & {
+  code?: string;
   details?: string | null;
+  hint?: string | null;
 };
 
-export const toDomyliError = (error: unknown): DomyliAppError => {
-  if (typeof error === "object" && error !== null) {
-    const e = error as Record<string, unknown>;
-    return {
-      code: typeof e.code === "string" ? e.code : "UNKNOWN_ERROR",
-      message: typeof e.message === "string" ? e.message : "Une erreur est survenue.",
-      hint: typeof e.hint === "string" ? e.hint : null,
-      details: typeof e.details === "string" ? e.details : null,
-    };
+export function toDomyliError(error: unknown): DomyliAppError {
+  if (error instanceof Error) {
+    return error as DomyliAppError;
   }
 
-  return {
-    code: "UNKNOWN_ERROR",
-    message: error instanceof Error ? error.message : "Une erreur est survenue.",
-    hint: null,
-    details: null,
-  };
-};
+  const fallback = new Error("Une erreur DOMYLI est survenue.") as DomyliAppError;
+
+  if (typeof error === "object" && error !== null) {
+    const maybe = error as {
+      message?: unknown;
+      code?: unknown;
+      details?: unknown;
+      hint?: unknown;
+    };
+
+    fallback.message =
+      typeof maybe.message === "string"
+        ? maybe.message
+        : "Une erreur DOMYLI est survenue.";
+
+    if (typeof maybe.code === "string") fallback.code = maybe.code;
+    if (typeof maybe.details === "string" || maybe.details === null) fallback.details = maybe.details;
+    if (typeof maybe.hint === "string" || maybe.hint === null) fallback.hint = maybe.hint;
+  }
+
+  return fallback;
+}
+
+export function isMissingRpcError(error: unknown): boolean {
+  const err = toDomyliError(error);
+  return err.code === "PGRST202";
+}

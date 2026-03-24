@@ -40,6 +40,31 @@ function normalizeMembership(input?: Partial<Membership> | null): Membership | n
   };
 }
 
+function mergeMemberships(
+  memberships: Membership[],
+  activeMembership: Membership | null
+): Membership[] {
+  const result = [...memberships];
+
+  if (!activeMembership) return result;
+
+  const index = result.findIndex(
+    (membership) => membership.household_id === activeMembership.household_id
+  );
+
+  if (index >= 0) {
+    result[index] = {
+      ...result[index],
+      household_name:
+        activeMembership.household_name || result[index].household_name,
+      role: activeMembership.role || result[index].role,
+    };
+    return result;
+  }
+
+  return [activeMembership, ...result];
+}
+
 export function useDomyliConnection() {
   const [state, setState] = useState<ConnectionState>(initialState);
 
@@ -53,9 +78,6 @@ export function useDomyliConnection() {
 
       const bootstrap = await Promise.race([userBootstrap(), timeoutPromise]);
       const active = await userActiveHousehold();
-
-      console.log("DOMYLI bootstrap raw =>", bootstrap);
-      console.log("DOMYLI active household raw =>", active);
 
       const normalizedMemberships: Membership[] = Array.isArray(bootstrap.memberships)
         ? bootstrap.memberships
@@ -75,24 +97,10 @@ export function useDomyliConnection() {
         role: active.role ?? null,
       });
 
-      let mergedMemberships = [...normalizedMemberships];
-
-      if (activeMembershipFromRpc) {
-        const existingIndex = mergedMemberships.findIndex(
-          (membership) => membership.household_id === activeMembershipFromRpc.household_id
-        );
-
-        if (existingIndex >= 0) {
-          mergedMemberships[existingIndex] = {
-            ...mergedMemberships[existingIndex],
-            household_name:
-              activeMembershipFromRpc.household_name || mergedMemberships[existingIndex].household_name,
-            role: activeMembershipFromRpc.role || mergedMemberships[existingIndex].role,
-          };
-        } else {
-          mergedMemberships.unshift(activeMembershipFromRpc);
-        }
-      }
+      const mergedMemberships = mergeMemberships(
+        normalizedMemberships,
+        activeMembershipFromRpc
+      );
 
       const normalized: RpcUserBootstrapOutput = {
         user_id: bootstrap.user_id ?? "",
@@ -102,6 +110,8 @@ export function useDomyliConnection() {
         memberships: mergedMemberships,
       };
 
+      console.log("DOMYLI bootstrap raw =>", bootstrap);
+      console.log("DOMYLI active household raw =>", active);
       console.log("DOMYLI merged bootstrap =>", normalized);
 
       setState((prev) => ({
@@ -257,9 +267,7 @@ export function useDomyliConnection() {
               .filter((membership): membership is Membership => Boolean(membership))
           : [];
 
-        const alreadyExists = existingMemberships.some(
-          (membership) => membership.household_id === created.household_id
-        );
+        const merged = mergeMemberships(existingMemberships, createdMembership);
 
         return {
           ...prev,
@@ -268,9 +276,7 @@ export function useDomyliConnection() {
             user_id: prev.bootstrap?.user_id ?? "",
             active_household_id: created.household_id,
             is_super_admin: prev.bootstrap?.is_super_admin ?? false,
-            memberships: alreadyExists
-              ? existingMemberships
-              : [createdMembership, ...existingMemberships],
+            memberships: merged,
           },
         };
       });
@@ -294,13 +300,7 @@ export function useDomyliConnection() {
         (membership) => membership.household_id === state.bootstrap?.active_household_id
       ) ??
       memberships[0] ??
-      (state.bootstrap?.active_household_id
-        ? {
-            household_id: state.bootstrap.active_household_id,
-            household_name: "Foyer DOMYLI",
-            role: "—",
-          }
-        : null);
+      null;
 
     return {
       isAuthenticated: Boolean(state.sessionEmail),

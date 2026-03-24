@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
-import { Check, LoaderCircle, X } from "lucide-react";
+import { Check, LoaderCircle, X, LogOut } from "lucide-react";
 import { useDomyliConnection } from "../hooks/useDomyliConnection";
+import { navigateTo } from "../lib/navigation";
 
 type Props = {
   isOpen: boolean;
@@ -95,7 +96,7 @@ export default function DomyliConnectionModal({ isOpen, onClose }: Props) {
       setTimeout(() => {
         setLocalMessage(null);
         onClose();
-        window.location.href = "/profiles";
+        navigateTo("/profiles");
       }, 800);
     } catch (err) {
       setLocalMessage(getErrorMessage(err));
@@ -110,10 +111,11 @@ export default function DomyliConnectionModal({ isOpen, onClose }: Props) {
 
     try {
       await signOut();
-      setLocalMessage("Déconnexion effectuée.");
       setEmail("");
       setPassword("");
       setHouseholdName("");
+      onClose();
+      navigateTo("/");
     } catch (err) {
       setLocalMessage(getErrorMessage(err));
     } finally {
@@ -148,7 +150,21 @@ export default function DomyliConnectionModal({ isOpen, onClose }: Props) {
             </div>
           )}
 
-          {bootstrapLoading && isAuthenticated && hasHousehold && (
+          {!authLoading && isAuthenticated && (
+            <div className="flex justify-end">
+              <button
+                type="button"
+                onClick={handleLogout}
+                disabled={busy === "logout"}
+                className="flex items-center gap-2 border border-white/10 px-4 py-3 text-xs uppercase tracking-[0.25em] text-alabaster hover:border-gold/40 hover:text-gold transition-colors disabled:opacity-50"
+              >
+                <LogOut size={14} />
+                {busy === "logout" ? "Déconnexion..." : "Se déconnecter"}
+              </button>
+            </div>
+          )}
+
+          {bootstrapLoading && isAuthenticated && (
             <div className="flex items-center gap-3 text-sm text-alabaster/80">
               <LoaderCircle className="animate-spin" size={18} />
               Synchronisation du contexte DOMYLI...
@@ -265,8 +281,16 @@ export default function DomyliConnectionModal({ isOpen, onClose }: Props) {
                 <div>
                   <div className="font-medium text-alabaster">Connexion active</div>
                   <div className="mt-1 text-alabaster/75">
-                    {sessionEmail} est relié au foyer{" "}
-                    <span className="text-gold">{activeMembership?.household_name ?? "Foyer DOMYLI"}</span>.
+                    {activeMembership?.household_name ? (
+                      <>
+                        {sessionEmail} est relié au foyer{" "}
+                        <span className="text-gold">{activeMembership.household_name}</span>.
+                      </>
+                    ) : (
+                      <>
+                        {sessionEmail} est connecté à DOMYLI, mais aucun foyer exploitable n’a encore été résolu.
+                      </>
+                    )}
                   </div>
                 </div>
               </div>
@@ -288,14 +312,29 @@ export default function DomyliConnectionModal({ isOpen, onClose }: Props) {
                 </div>
               </div>
 
-              <button
-                type="button"
-                onClick={handleLogout}
-                disabled={busy === "logout"}
-                className="w-full border border-white/10 px-5 py-4 text-sm uppercase tracking-[0.25em] text-alabaster transition hover:border-gold/40 hover:text-gold disabled:opacity-50"
-              >
-                {busy === "logout" ? "Déconnexion..." : "Se déconnecter"}
-              </button>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    onClose();
+                    navigateTo("/profiles");
+                  }}
+                  className="border border-gold/40 px-5 py-4 text-sm uppercase tracking-[0.25em] text-gold hover:bg-gold hover:text-obsidian transition-colors"
+                >
+                  Ouvrir Profiles
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    onClose();
+                    navigateTo("/dashboard");
+                  }}
+                  className="border border-white/10 px-5 py-4 text-sm uppercase tracking-[0.25em] text-alabaster hover:border-gold/40 hover:text-gold transition-colors"
+                >
+                  Ouvrir Dashboard
+                </button>
+              </div>
             </div>
           )}
 

@@ -1,4 +1,5 @@
 import { callRpc } from "../rpc";
+import { unwrapRpcRow } from "../unwrapRpcRow";
 
 export type DomyliHouseholdRole =
   | "GARANTE"
@@ -33,19 +34,22 @@ type RawBootstrap = {
 };
 
 export async function userBootstrap(): Promise<RpcUserBootstrapOutput> {
-  const raw = await callRpc<Record<string, never>, RawBootstrap>(
+  const rawResult = await callRpc<Record<string, never>, RawBootstrap | RawBootstrap[]>(
     "rpc_user_bootstrap",
     {}
   );
 
-  console.log("DOMYLI rpc_user_bootstrap raw =>", raw);
+  const raw = unwrapRpcRow(rawResult);
+
+  console.log("DOMYLI rpc_user_bootstrap raw =>", rawResult);
+  console.log("DOMYLI rpc_user_bootstrap normalized =>", raw);
 
   return {
-    user_id: raw.user_id ?? "",
-    active_household_id: raw.active_household_id ?? null,
-    is_super_admin: Boolean(raw.is_super_admin),
-    memberships: Array.isArray(raw.memberships)
-      ? raw.memberships.map((membership) => ({
+    user_id: raw?.user_id ?? "",
+    active_household_id: raw?.active_household_id ?? null,
+    is_super_admin: Boolean(raw?.is_super_admin),
+    memberships: Array.isArray(raw?.memberships)
+      ? raw!.memberships.map((membership) => ({
           household_id: membership.household_id ?? "",
           household_name: membership.household_name ?? "",
           role: membership.role ?? "",
