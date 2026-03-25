@@ -34,11 +34,13 @@ type RawBootstrap = {
   user_id?: string | null;
   active_household_id?: string | null;
   is_super_admin?: boolean | null;
-  memberships?: Array<{
-    household_id?: string | null;
-    household_name?: string | null;
-    role?: string | null;
-  }> | null;
+  memberships?:
+    | Array<{
+        household_id?: string | null;
+        household_name?: string | null;
+        role?: string | null;
+      }>
+    | null;
 };
 
 type RawActiveHousehold = {
@@ -63,7 +65,9 @@ const initialState: AuthState = {
   error: null,
 };
 
-function normalizeMembership(input: Partial<Membership> | null | undefined): Membership | null {
+function normalizeMembership(
+  input?: Partial<Membership> | null
+): Membership | null {
   if (!input?.household_id) return null;
 
   return {
@@ -84,17 +88,17 @@ export function useDomyliAuthState() {
     }));
 
     try {
-      const rawBootstrap = (await callRpc<RawBootstrap | RawBootstrap[]>(
+      const rawBootstrap = await callRpc<RawBootstrap | null>(
         "rpc_user_bootstrap",
         {},
         { unwrap: true }
-      )) as RawBootstrap;
+      );
 
-      const rawActive = (await callRpc<RawActiveHousehold | RawActiveHousehold[]>(
+      const rawActive = await callRpc<RawActiveHousehold | null>(
         "rpc_user_active_household",
         {},
         { unwrap: true }
-      )) as RawActiveHousehold;
+      );
 
       const memberships = Array.isArray(rawBootstrap?.memberships)
         ? rawBootstrap.memberships
@@ -118,7 +122,9 @@ export function useDomyliAuthState() {
       const mergedMemberships = activeMembership
         ? memberships.some((m) => m.household_id === activeMembership.household_id)
           ? memberships.map((m) =>
-              m.household_id === activeMembership.household_id ? activeMembership : m
+              m.household_id === activeMembership.household_id
+                ? activeMembership
+                : m
             )
           : [activeMembership, ...memberships]
         : memberships;
@@ -217,26 +223,17 @@ export function useDomyliAuthState() {
 
   const signInWithPassword = useCallback(async (email: string, password: string) => {
     const { error } = await supabase.auth.signInWithPassword({ email, password });
-
-    if (error) {
-      throw toDomyliError(error);
-    }
+    if (error) throw toDomyliError(error);
   }, []);
 
   const signUpWithPassword = useCallback(async (email: string, password: string) => {
     const { error } = await supabase.auth.signUp({ email, password });
-
-    if (error) {
-      throw toDomyliError(error);
-    }
+    if (error) throw toDomyliError(error);
   }, []);
 
   const signOut = useCallback(async () => {
     const { error } = await supabase.auth.signOut();
-
-    if (error) {
-      throw toDomyliError(error);
-    }
+    if (error) throw toDomyliError(error);
   }, []);
 
   const createFirstHousehold = useCallback(
@@ -250,11 +247,11 @@ export function useDomyliAuthState() {
         });
       }
 
-      const created = (await callRpc<RawHouseholdCreate | RawHouseholdCreate[]>(
+      const created = await callRpc<RawHouseholdCreate | null>(
         "rpc_household_create",
         { p_name: trimmedName },
         { unwrap: true }
-      )) as RawHouseholdCreate;
+      );
 
       await refreshBootstrap();
 
@@ -273,7 +270,9 @@ export function useDomyliAuthState() {
       memberships.find(
         (membership) =>
           membership.household_id === state.bootstrap?.active_household_id
-      ) ?? memberships[0] ?? null;
+      ) ??
+      memberships[0] ??
+      null;
 
     return {
       isAuthenticated: Boolean(state.sessionEmail),

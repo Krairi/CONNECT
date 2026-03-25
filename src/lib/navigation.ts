@@ -1,4 +1,6 @@
-export { ROUTES } from "@/src/constants/routes";
+import { ROUTES } from "@/src/constants/routes";
+
+export { ROUTES };
 
 export function navigateTo(path: string, replace = false) {
   if (typeof window === "undefined") return;

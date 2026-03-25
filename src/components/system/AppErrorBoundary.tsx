@@ -28,15 +28,15 @@ export class AppErrorBoundary extends React.Component<PropsWithChildren, State> 
   render() {
     if (this.state.hasError) {
       return (
-        <div className="min-h-screen bg-black text-white flex items-center justify-center px-6">
+        <div className="min-h-screen bg-obsidian text-alabaster flex items-center justify-center px-6">
           <div className="max-w-xl text-center">
-            <div className="text-xs uppercase tracking-[0.35em] text-amber-300">
+            <div className="text-xs uppercase tracking-[0.35em] text-gold">
               DOMYLI
             </div>
             <h1 className="mt-4 text-3xl font-semibold">
               Une erreur a interrompu l’application
             </h1>
-            <p className="mt-4 text-white/70 leading-7">
+            <p className="mt-4 text-alabaster/70 leading-7">
               Recharge la page pour repartir proprement.
             </p>
             {this.state.errorMessage ? (

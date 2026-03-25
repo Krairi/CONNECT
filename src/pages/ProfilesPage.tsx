@@ -47,13 +47,9 @@ export default function ProfilesPage() {
     setSaving(true);
 
     try {
-      const result = (await callRpc<{
-        profile_id?: string | null;
-        display_name?: string | null;
-      } | {
-        profile_id?: string | null;
-        display_name?: string | null;
-      }[]>(
+      const result = await callRpc<
+        { profile_id?: string | null; display_name?: string | null } | null
+      >(
         "rpc_human_profile_upsert",
         {
           p_household_id: householdId,
@@ -71,9 +67,11 @@ export default function ProfilesPage() {
           p_cultural_constraints: parseCsv(culturalConstraints),
         },
         { unwrap: true }
-      )) as { profile_id?: string | null; display_name?: string | null };
+      );
 
-      setMessage(`Profil enregistré : ${result?.display_name ?? displayName.trim()}`);
+      setMessage(
+        `Profil enregistré : ${result?.display_name ?? displayName.trim()}`
+      );
     } catch (error) {
       setMessage(getErrorMessage(error));
     } finally {
@@ -82,27 +80,27 @@ export default function ProfilesPage() {
   };
 
   return (
-    <div className="min-h-screen bg-black text-white px-6 py-10">
+    <div className="min-h-screen bg-obsidian text-alabaster px-6 py-10">
       <div className="mx-auto max-w-5xl">
         <div className="flex items-start gap-4">
           <button
             type="button"
             onClick={() => navigate(ROUTES.DASHBOARD)}
-            className="mt-1 h-10 w-10 border border-white/10 flex items-center justify-center hover:border-amber-300/40 transition-colors"
+            className="mt-1 h-10 w-10 border border-white/10 flex items-center justify-center hover:border-gold/40 transition-colors"
             aria-label="Retour"
           >
             <ArrowLeft size={18} />
           </button>
 
           <div>
-            <div className="text-xs uppercase tracking-[0.35em] text-amber-300">
+            <div className="text-xs uppercase tracking-[0.35em] text-gold">
               DOMYLI
             </div>
             <h1 className="mt-2 text-4xl font-semibold">Profiles</h1>
-            <p className="mt-3 text-white/70 leading-7">
+            <p className="mt-3 text-alabaster/70 leading-7">
               Premier profil réel du foyer actif.
             </p>
-            <p className="mt-2 text-sm text-white/50">
+            <p className="mt-2 text-sm text-alabaster/50">
               Foyer : {activeMembership?.household_name ?? "—"}
             </p>
           </div>
@@ -110,40 +108,40 @@ export default function ProfilesPage() {
 
         <form
           onSubmit={handleSubmit}
-          className="mt-10 border border-white/10 bg-white/[0.03] p-6 grid gap-5 md:grid-cols-2"
+          className="mt-10 glass metallic-border p-6 grid gap-5 md:grid-cols-2"
         >
           <div className="md:col-span-2">
-            <label className="mb-2 block text-xs uppercase tracking-[0.25em] text-amber-300/80">
+            <label className="mb-2 block text-xs uppercase tracking-[0.25em] text-gold/80">
               Nom affiché
             </label>
             <input
               value={displayName}
               onChange={(e) => setDisplayName(e.target.value)}
               required
-              className="w-full border border-white/10 bg-black/20 px-4 py-4 text-sm outline-none focus:border-amber-300/50"
+              className="w-full border border-white/10 bg-black/20 px-4 py-4 text-sm outline-none focus:border-gold/50"
             />
           </div>
 
           <div>
-            <label className="mb-2 block text-xs uppercase tracking-[0.25em] text-amber-300/80">
+            <label className="mb-2 block text-xs uppercase tracking-[0.25em] text-gold/80">
               Date de naissance
             </label>
             <input
               type="date"
               value={birthDate}
               onChange={(e) => setBirthDate(e.target.value)}
-              className="w-full border border-white/10 bg-black/20 px-4 py-4 text-sm outline-none focus:border-amber-300/50"
+              className="w-full border border-white/10 bg-black/20 px-4 py-4 text-sm outline-none focus:border-gold/50"
             />
           </div>
 
           <div>
-            <label className="mb-2 block text-xs uppercase tracking-[0.25em] text-amber-300/80">
+            <label className="mb-2 block text-xs uppercase tracking-[0.25em] text-gold/80">
               Sexe
             </label>
             <select
               value={sex}
               onChange={(e) => setSex(e.target.value)}
-              className="w-full border border-white/10 bg-black/20 px-4 py-4 text-sm outline-none focus:border-amber-300/50"
+              className="w-full border border-white/10 bg-black/20 px-4 py-4 text-sm outline-none focus:border-gold/50"
             >
               <option value="">Non renseigné</option>
               <option value="FEMALE">Femme</option>
@@ -152,83 +150,83 @@ export default function ProfilesPage() {
           </div>
 
           <div>
-            <label className="mb-2 block text-xs uppercase tracking-[0.25em] text-amber-300/80">
+            <label className="mb-2 block text-xs uppercase tracking-[0.25em] text-gold/80">
               Taille (cm)
             </label>
             <input
               value={heightCm}
               onChange={(e) => setHeightCm(e.target.value)}
-              className="w-full border border-white/10 bg-black/20 px-4 py-4 text-sm outline-none focus:border-amber-300/50"
+              className="w-full border border-white/10 bg-black/20 px-4 py-4 text-sm outline-none focus:border-gold/50"
             />
           </div>
 
           <div>
-            <label className="mb-2 block text-xs uppercase tracking-[0.25em] text-amber-300/80">
+            <label className="mb-2 block text-xs uppercase tracking-[0.25em] text-gold/80">
               Poids (kg)
             </label>
             <input
               value={weightKg}
               onChange={(e) => setWeightKg(e.target.value)}
-              className="w-full border border-white/10 bg-black/20 px-4 py-4 text-sm outline-none focus:border-amber-300/50"
+              className="w-full border border-white/10 bg-black/20 px-4 py-4 text-sm outline-none focus:border-gold/50"
             />
           </div>
 
           <div>
-            <label className="mb-2 block text-xs uppercase tracking-[0.25em] text-amber-300/80">
+            <label className="mb-2 block text-xs uppercase tracking-[0.25em] text-gold/80">
               Objectif
             </label>
             <input
               value={goal}
               onChange={(e) => setGoal(e.target.value)}
-              className="w-full border border-white/10 bg-black/20 px-4 py-4 text-sm outline-none focus:border-amber-300/50"
+              className="w-full border border-white/10 bg-black/20 px-4 py-4 text-sm outline-none focus:border-gold/50"
             />
           </div>
 
           <div>
-            <label className="mb-2 block text-xs uppercase tracking-[0.25em] text-amber-300/80">
+            <label className="mb-2 block text-xs uppercase tracking-[0.25em] text-gold/80">
               Activité
             </label>
             <input
               value={activityLevel}
               onChange={(e) => setActivityLevel(e.target.value)}
-              className="w-full border border-white/10 bg-black/20 px-4 py-4 text-sm outline-none focus:border-amber-300/50"
+              className="w-full border border-white/10 bg-black/20 px-4 py-4 text-sm outline-none focus:border-gold/50"
             />
           </div>
 
           <div className="md:col-span-2">
-            <label className="mb-2 block text-xs uppercase tracking-[0.25em] text-amber-300/80">
+            <label className="mb-2 block text-xs uppercase tracking-[0.25em] text-gold/80">
               Allergies (CSV)
             </label>
             <input
               value={allergies}
               onChange={(e) => setAllergies(e.target.value)}
-              className="w-full border border-white/10 bg-black/20 px-4 py-4 text-sm outline-none focus:border-amber-300/50"
+              className="w-full border border-white/10 bg-black/20 px-4 py-4 text-sm outline-none focus:border-gold/50"
             />
           </div>
 
           <div className="md:col-span-2">
-            <label className="mb-2 block text-xs uppercase tracking-[0.25em] text-amber-300/80">
+            <label className="mb-2 block text-xs uppercase tracking-[0.25em] text-gold/80">
               Contraintes alimentaires (CSV)
             </label>
             <input
               value={foodConstraints}
               onChange={(e) => setFoodConstraints(e.target.value)}
-              className="w-full border border-white/10 bg-black/20 px-4 py-4 text-sm outline-none focus:border-amber-300/50"
+              className="w-full border border-white/10 bg-black/20 px-4 py-4 text-sm outline-none focus:border-gold/50"
             />
           </div>
 
           <div className="md:col-span-2">
-            <label className="mb-2 block text-xs uppercase tracking-[0.25em] text-amber-300/80">
+            <label className="mb-2 block text-xs uppercase tracking-[0.25em] text-gold/80">
               Contraintes culturelles (CSV)
             </label>
             <input
               value={culturalConstraints}
               onChange={(e) => setCulturalConstraints(e.target.value)}
-              className="w-full border border-white/10 bg-black/20 px-4 py-4 text-sm outline-none focus:border-amber-300/50"
+              className="w-full border border-white/10 bg-black/20 px-4 py-4 text-sm outline-none focus:border-gold/50"
             />
           </div>
 
-          <label className="flex items-center gap-3 border border-white/10 px-4 py-4 text-sm text-white/75">
+          <label className="flex items-center gap-3 border border-white/10 px-4 py-4 text-sm text-alabaster/75">
             <input
               type="checkbox"
               checked={isPregnant}
@@ -237,7 +235,7 @@ export default function ProfilesPage() {
             Grossesse
           </label>
 
-          <label className="flex items-center gap-3 border border-white/10 px-4 py-4 text-sm text-white/75">
+          <label className="flex items-center gap-3 border border-white/10 px-4 py-4 text-sm text-alabaster/75">
             <input
               type="checkbox"
               checked={hasDiabetes}
@@ -250,7 +248,7 @@ export default function ProfilesPage() {
             <button
               type="submit"
               disabled={!canSubmit || saving}
-              className="inline-flex w-full items-center justify-center gap-3 border border-amber-300 bg-amber-300 px-5 py-4 text-sm uppercase tracking-[0.25em] text-black disabled:opacity-50"
+              className="inline-flex w-full items-center justify-center gap-3 border border-gold bg-gold px-5 py-4 text-sm uppercase tracking-[0.25em] text-obsidian disabled:opacity-50 gold-glow"
             >
               <Save size={16} />
               {saving ? "Enregistrement..." : "Enregistrer le profil"}
@@ -259,7 +257,7 @@ export default function ProfilesPage() {
         </form>
 
         {message && (
-          <div className="mt-6 border border-amber-300/20 bg-amber-300/5 px-4 py-4 text-sm text-amber-200">
+          <div className="mt-6 border border-gold/20 bg-gold/5 px-4 py-4 text-sm text-gold">
             {message}
           </div>
         )}

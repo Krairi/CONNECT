@@ -9,20 +9,19 @@ import { ROUTES } from "@/src/constants/routes";
 
 function PlaceholderPage({ title }: { title: string }) {
   return (
-    <div className="min-h-screen bg-black text-white px-6 py-16">
+    <div className="min-h-screen bg-obsidian text-alabaster px-6 py-16">
       <div className="mx-auto max-w-3xl">
-        <div className="text-xs uppercase tracking-[0.35em] text-amber-300">
+        <div className="text-xs uppercase tracking-[0.35em] text-gold">
           DOMYLI
         </div>
         <h1 className="mt-4 text-4xl font-semibold">{title}</h1>
-        <p className="mt-5 text-white/70 leading-8">
-          Cette page est temporairement neutralisée pour remettre le repo CONNECT
-          dans un état exécutable. Le parcours réel prioritaire passe par
-          connexion → foyer → profils → dashboard.
+        <p className="mt-5 text-alabaster/70 leading-8">
+          Cette page est temporairement neutralisée pour remettre CONNECT en
+          production sans casser le design ni le parcours principal.
         </p>
         <Link
           to={ROUTES.DASHBOARD}
-          className="mt-8 inline-block border border-amber-300/40 px-6 py-3 text-sm uppercase tracking-[0.25em] text-amber-300 hover:bg-amber-300 hover:text-black transition-colors"
+          className="mt-8 inline-block border border-gold/40 px-6 py-3 text-sm uppercase tracking-[0.25em] text-gold hover:bg-gold hover:text-obsidian transition-colors"
         >
           Retour au dashboard
         </Link>

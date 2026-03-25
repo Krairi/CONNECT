@@ -14,7 +14,7 @@ export async function callRpc<TOutput>(
   options?: { requireAuth?: boolean; timeoutMs?: number; unwrap?: boolean }
 ): Promise<TOutput> {
   const requireAuth = options?.requireAuth ?? true;
-  const timeoutMs = options?.timeoutMs ?? 10000;
+  const timeoutMs = options?.timeoutMs ?? 10_000;
   const unwrap = options?.unwrap ?? false;
 
   if (requireAuth) {
@@ -24,7 +24,7 @@ export async function callRpc<TOutput>(
       throw createDomyliError({
         message: "Aucune session valide pour exécuter la RPC DOMYLI.",
         code: "DOMYLI_RPC_UNAUTHENTICATED",
-        hint: "Connecte-toi puis relance l’action."
+        hint: "Connecte-toi puis relance l’action.",
       });
     }
   }
@@ -35,7 +35,7 @@ export async function callRpc<TOutput>(
         createDomyliError({
           message: `Délai dépassé pour app.${name}.`,
           code: "DOMYLI_RPC_TIMEOUT",
-          hint: "Vérifie Supabase et la disponibilité du RPC."
+          hint: "Vérifie Supabase et la disponibilité du RPC.",
         })
       );
     }, timeoutMs);
@@ -44,13 +44,13 @@ export async function callRpc<TOutput>(
   try {
     const result = await Promise.race([
       supabase.schema("app").rpc(name, payload),
-      timeoutPromise
+      timeoutPromise,
     ]);
 
     const { data, error } = result as { data: unknown; error: any };
 
     if (error) {
-      throw toDomyliError(error);
+      throw error;
     }
 
     return (unwrap ? unwrapSingle(data) : data) as TOutput;
