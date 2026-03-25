@@ -1,14 +1,14 @@
 import { useCallback, useState } from "react";
-import { toDomyliError, type DomyliAppError } from "../lib/errors";
+
+import { toDomyliError, type DomyliAppError } from "@/src/lib/errors";
 import {
   upsertTool,
   reserveTool,
   releaseTool,
-  type ToolUpsertInput,
   type ToolUpsertOutput,
   type ToolReserveOutput,
   type ToolReleaseOutput,
-} from "../services/tools/toolService";
+} from "@/src/services/tools/toolService";
 
 type ToolsState = {
   saving: boolean;
@@ -31,13 +31,23 @@ const initialState: ToolsState = {
 };
 
 export function useTools() {
-  const [state, setState] = useState<ToolsState>(initialState);
+  const [state, setState] = useState(initialState);
 
-  const saveTool = useCallback(async (payload: ToolUpsertInput) => {
-    setState((prev) => ({ ...prev, saving: true, error: null }));
+  const saveTool = useCallback(async (payload: {
+    name: string;
+    category?: string | null;
+  }) => {
+    setState((prev) => ({
+      ...prev,
+      saving: true,
+      error: null,
+    }));
 
     try {
-      const result = await upsertTool(payload);
+      const result = await upsertTool({
+        p_name: payload.name,
+        p_category: payload.category ?? null,
+      });
 
       setState((prev) => ({
         ...prev,
@@ -59,76 +69,75 @@ export function useTools() {
     }
   }, []);
 
-  const reserveToolSlot = useCallback(
-    async (payload: {
-      householdId: string;
-      toolAssetId: string;
-      startAt: string;
-      endAt: string;
-    }) => {
-      setState((prev) => ({ ...prev, reserving: true, error: null }));
+  const reserveToolSlot = useCallback(async (payload: {
+    toolAssetId: string;
+    startAt: string;
+    endAt: string;
+  }) => {
+    setState((prev) => ({
+      ...prev,
+      reserving: true,
+      error: null,
+    }));
 
-      try {
-        const result = await reserveTool({
-          p_household_id: payload.householdId,
-          p_tool_asset_id: payload.toolAssetId,
-          p_start_at: payload.startAt,
-          p_end_at: payload.endAt,
-        });
+    try {
+      const result = await reserveTool({
+        p_tool_asset_id: payload.toolAssetId,
+        p_start_at: payload.startAt,
+        p_end_at: payload.endAt,
+      });
 
-        setState((prev) => ({
-          ...prev,
-          reserving: false,
-          lastReservation: result,
-        }));
+      setState((prev) => ({
+        ...prev,
+        reserving: false,
+        lastReservation: result,
+      }));
 
-        return result;
-      } catch (error) {
-        const normalized = toDomyliError(error);
+      return result;
+    } catch (error) {
+      const normalized = toDomyliError(error);
 
-        setState((prev) => ({
-          ...prev,
-          reserving: false,
-          error: normalized,
-        }));
+      setState((prev) => ({
+        ...prev,
+        reserving: false,
+        error: normalized,
+      }));
 
-        throw normalized;
-      }
-    },
-    []
-  );
+      throw normalized;
+    }
+  }, []);
 
-  const releaseToolSlot = useCallback(
-    async (payload: { householdId: string; reservationId: string }) => {
-      setState((prev) => ({ ...prev, releasing: true, error: null }));
+  const releaseToolSlot = useCallback(async (reservationId: string) => {
+    setState((prev) => ({
+      ...prev,
+      releasing: true,
+      error: null,
+    }));
 
-      try {
-        const result = await releaseTool({
-          p_household_id: payload.householdId,
-          p_reservation_id: payload.reservationId,
-        });
+    try {
+      const result = await releaseTool({
+        p_tool_reservation_id: reservationId,
+      });
 
-        setState((prev) => ({
-          ...prev,
-          releasing: false,
-          lastRelease: result,
-        }));
+      setState((prev) => ({
+        ...prev,
+        releasing: false,
+        lastRelease: result,
+      }));
 
-        return result;
-      } catch (error) {
-        const normalized = toDomyliError(error);
+      return result;
+    } catch (error) {
+      const normalized = toDomyliError(error);
 
-        setState((prev) => ({
-          ...prev,
-          releasing: false,
-          error: normalized,
-        }));
+      setState((prev) => ({
+        ...prev,
+        releasing: false,
+        error: normalized,
+      }));
 
-        throw normalized;
-      }
-    },
-    []
-  );
+      throw normalized;
+    }
+  }, []);
 
   return {
     ...state,

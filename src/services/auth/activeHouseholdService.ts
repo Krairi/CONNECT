@@ -1,5 +1,5 @@
-import { callRpc } from "../rpc";
-import { unwrapRpcRow } from "../unwrapRpcRow";
+import { callRpc } from "@/src/services/rpc";
+import { unwrapRpcRow } from "@/src/services/unwrapRpcRow";
 
 export type RpcUserActiveHouseholdOutput = {
   active_household_id: string | null;
@@ -20,15 +20,12 @@ type RawActiveHousehold = {
 };
 
 export async function userActiveHousehold(): Promise<RpcUserActiveHouseholdOutput> {
-  const rawResult = await callRpc<Record<string, never>, RawActiveHousehold | RawActiveHousehold[]>(
+  const rawResult = await callRpc<RawActiveHousehold | RawActiveHousehold[]>(
     "rpc_user_active_household",
     {}
   );
 
   const data = unwrapRpcRow(rawResult);
-
-  console.log("DOMYLI rpc_user_active_household raw =>", rawResult);
-  console.log("DOMYLI rpc_user_active_household normalized =>", data);
 
   return {
     active_household_id: data?.active_household_id ?? data?.household_id ?? null,

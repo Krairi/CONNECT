@@ -1,15 +1,17 @@
 import { useCallback, useEffect, useState } from "react";
-import { toDomyliError, type DomyliAppError } from "../lib/errors";
+
+import { toDomyliError, type DomyliAppError } from "@/src/lib/errors";
 import {
   rebuildShoppingList,
   readShoppingList,
   type ShoppingListItem,
   type ShoppingListRebuildOutput,
-} from "../services/shopping/shoppingService";
+} from "@/src/services/shopping/shoppingService";
 
 type ShoppingState = {
   loading: boolean;
   rebuilding: boolean;
+  degraded: boolean;
   error: DomyliAppError | null;
   items: ShoppingListItem[];
   lastRebuild: ShoppingListRebuildOutput | null;
@@ -18,6 +20,7 @@ type ShoppingState = {
 const initialState: ShoppingState = {
   loading: false,
   rebuilding: false,
+  degraded: false,
   error: null,
   items: [],
   lastRebuild: null,
@@ -31,6 +34,7 @@ export function useShopping() {
       ...prev,
       loading: true,
       error: null,
+      degraded: false,
     }));
 
     try {
@@ -39,6 +43,7 @@ export function useShopping() {
       setState((prev) => ({
         ...prev,
         loading: false,
+        degraded: false,
         items,
       }));
 
@@ -49,6 +54,7 @@ export function useShopping() {
       setState((prev) => ({
         ...prev,
         loading: false,
+        degraded: prev.items.length > 0,
         error: normalized,
       }));
 
@@ -57,7 +63,7 @@ export function useShopping() {
   }, []);
 
   useEffect(() => {
-    refresh();
+    void refresh();
   }, [refresh]);
 
   const rebuild = useCallback(async () => {
@@ -65,6 +71,7 @@ export function useShopping() {
       ...prev,
       rebuilding: true,
       error: null,
+      degraded: false,
     }));
 
     try {
@@ -74,6 +81,7 @@ export function useShopping() {
       setState((prev) => ({
         ...prev,
         rebuilding: false,
+        degraded: false,
         items,
         lastRebuild: rebuilt,
       }));
@@ -85,6 +93,7 @@ export function useShopping() {
       setState((prev) => ({
         ...prev,
         rebuilding: false,
+        degraded: prev.items.length > 0 || Boolean(prev.lastRebuild),
         error: normalized,
       }));
 

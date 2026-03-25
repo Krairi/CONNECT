@@ -1,0 +1,40 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "useDefineForClassFields": false,
+    "module": "ESNext",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "skipLibCheck": true,
+    "moduleResolution": "bundler",
+    "isolatedModules": true,
+    "moduleDetection": "force",
+    "jsx": "react-jsx",
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["./*"]
+    },
+    "noEmit": true
+  },
+  "include": [
+    "src/main.tsx",
+    "src/App.tsx",
+    "src/app/router.tsx",
+    "src/constants/routes.ts",
+    "src/lib/env.ts",
+    "src/lib/errors.ts",
+    "src/lib/navigation.ts",
+    "src/lib/supabase.ts",
+    "src/hooks/useDomyliAuthState.ts",
+    "src/hooks/useDomyliConnection.ts",
+    "src/providers/AuthProvider.tsx",
+    "src/components/common/ProtectedRoute.tsx",
+    "src/components/system/AppErrorBoundary.tsx",
+    "src/components/system/SessionExpiredModal.tsx",
+    "src/pages/LandingPage.tsx",
+    "src/pages/DashboardPage.tsx",
+    "src/pages/ProfilesPage.tsx",
+    "src/pages/NotFoundPage.tsx",
+    "src/index.css",
+    "test/setup.ts"
+  ]
+}

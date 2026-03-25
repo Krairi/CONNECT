@@ -1,13 +1,15 @@
 import { useCallback, useState } from "react";
-import { toDomyliError, type DomyliAppError } from "../lib/errors";
+
+import { toDomyliError, type DomyliAppError } from "@/src/lib/errors";
 import {
   createMealPlan,
   upsertMealSlot,
-  confirmMealV3,
+  confirmMeal,
   type MealPlanCreateOutput,
+  type MealSlotUpsertInput,
   type MealSlotUpsertOutput,
-  type MealConfirmV3Output,
-} from "../services/meals/mealService";
+  type MealConfirmOutput,
+} from "@/src/services/meals/mealService";
 
 type MealsState = {
   creatingPlan: boolean;
@@ -16,7 +18,7 @@ type MealsState = {
   error: DomyliAppError | null;
   lastCreatedPlan: MealPlanCreateOutput | null;
   lastSavedSlot: MealSlotUpsertOutput | null;
-  lastConfirmedMeal: MealConfirmV3Output | null;
+  lastConfirmedMeal: MealConfirmOutput | null;
 };
 
 const initialState: MealsState = {
@@ -29,19 +31,18 @@ const initialState: MealsState = {
   lastConfirmedMeal: null,
 };
 
-function makeIdempotencyKey(prefix: string) {
-  return `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
-}
-
 export function useMeals() {
-  const [state, setState] = useState<MealsState>(initialState);
+  const [state, setState] = useState(initialState);
 
-  const createPlan = useCallback(async (householdId: string, day: string) => {
-    setState((prev) => ({ ...prev, creatingPlan: true, error: null }));
+  const createPlan = useCallback(async (day: string) => {
+    setState((prev) => ({
+      ...prev,
+      creatingPlan: true,
+      error: null,
+    }));
 
     try {
       const result = await createMealPlan({
-        p_household_id: householdId,
         p_day: day,
       });
 
@@ -54,93 +55,97 @@ export function useMeals() {
       return result;
     } catch (error) {
       const normalized = toDomyliError(error);
+
       setState((prev) => ({
         ...prev,
         creatingPlan: false,
         error: normalized,
       }));
+
       throw normalized;
     }
   }, []);
 
-  const saveSlot = useCallback(
-    async (payload: {
-      householdId: string;
-      mealPlanId: string;
-      day: string;
-      slotCode: string;
-      profileId?: string | null;
-      recipeId?: string | null;
-      status?: string | null;
-    }) => {
-      setState((prev) => ({ ...prev, savingSlot: true, error: null }));
+  const saveSlot = useCallback(async (payload: {
+    mealPlanId: string;
+    day: string;
+    slotCode: string;
+    profileId?: string | null;
+    recipeId?: string | null;
+    status?: string | null;
+  }) => {
+    setState((prev) => ({
+      ...prev,
+      savingSlot: true,
+      error: null,
+    }));
 
-      try {
-        const result = await upsertMealSlot({
-          p_household_id: payload.householdId,
-          p_meal_plan_id: payload.mealPlanId,
-          p_day: payload.day,
-          p_slot_code: payload.slotCode,
-          p_profile_id: payload.profileId ?? null,
-          p_recipe_id: payload.recipeId ?? null,
-          p_status: payload.status ?? "PENDING",
-        });
+    try {
+      const result = await upsertMealSlot({
+        p_meal_plan_id: payload.mealPlanId,
+        p_day: payload.day,
+        p_slot_code: payload.slotCode,
+        p_profile_id: payload.profileId ?? null,
+        p_recipe_id: payload.recipeId ?? null,
+        p_status: payload.status ?? "PENDING",
+      } satisfies MealSlotUpsertInput);
 
-        setState((prev) => ({
-          ...prev,
-          savingSlot: false,
-          lastSavedSlot: result,
-        }));
+      setState((prev) => ({
+        ...prev,
+        savingSlot: false,
+        lastSavedSlot: result,
+      }));
 
-        return result;
-      } catch (error) {
-        const normalized = toDomyliError(error);
-        setState((prev) => ({
-          ...prev,
-          savingSlot: false,
-          error: normalized,
-        }));
-        throw normalized;
-      }
-    },
-    []
-  );
+      return result;
+    } catch (error) {
+      const normalized = toDomyliError(error);
 
-  const confirmMeal = useCallback(
-    async (payload: { householdId: string; mealSlotId: string }) => {
-      setState((prev) => ({ ...prev, confirming: true, error: null }));
+      setState((prev) => ({
+        ...prev,
+        savingSlot: false,
+        error: normalized,
+      }));
 
-      try {
-        const result = await confirmMealV3({
-          p_household_id: payload.householdId,
-          p_meal_slot_id: payload.mealSlotId,
-          p_idempotency_key: makeIdempotencyKey("meal_confirm"),
-        });
+      throw normalized;
+    }
+  }, []);
 
-        setState((prev) => ({
-          ...prev,
-          confirming: false,
-          lastConfirmedMeal: result,
-        }));
+  const confirmMealAction = useCallback(async (mealSlotId: string) => {
+    setState((prev) => ({
+      ...prev,
+      confirming: true,
+      error: null,
+    }));
 
-        return result;
-      } catch (error) {
-        const normalized = toDomyliError(error);
-        setState((prev) => ({
-          ...prev,
-          confirming: false,
-          error: normalized,
-        }));
-        throw normalized;
-      }
-    },
-    []
-  );
+    try {
+      const result = await confirmMeal({
+        p_meal_slot_id: mealSlotId,
+      });
+
+      setState((prev) => ({
+        ...prev,
+        confirming: false,
+        lastConfirmedMeal: result,
+      }));
+
+      return result;
+    } catch (error) {
+      const normalized = toDomyliError(error);
+
+      setState((prev) => ({
+        ...prev,
+        confirming: false,
+        error: normalized,
+      }));
+
+      throw normalized;
+    }
+  }, []);
 
   return {
     ...state,
     createPlan,
     saveSlot,
-    confirmMeal,
+    confirmMeal: confirmMealAction,
   };
 }

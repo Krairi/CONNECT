@@ -1,20 +1,24 @@
-<div align="center">
-<img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
-</div>
+# DOMYLI Front
 
-# Run and deploy your AI Studio app
+Front-end DOMYLI construit avec React, TypeScript, Vite et Supabase.
 
-This contains everything you need to run your app locally.
+## Objectif
 
-View your app in AI Studio: https://ai.studio/apps/4a7593cd-3681-4dd1-894e-638be680fc6b
+Cette application est un front branché sur la base DOMYLI via des RPC du schéma `app`.
+Le front ne doit pas appeler directement les tables métier depuis les composants.
 
-## Run Locally
+## Pré-requis
 
-**Prerequisites:**  Node.js
+- Node.js 20+
+- npm 10+
+- un projet Supabase fonctionnel
+- les variables d’environnement renseignées
 
+## Variables d’environnement
 
-1. Install dependencies:
-   `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
-3. Run the app:
-   `npm run dev`
+Créer un fichier `.env.local` à la racine du projet à partir de `.env.example`.
+
+Exemple :
+
+```bash
+cp .env.example .env.local

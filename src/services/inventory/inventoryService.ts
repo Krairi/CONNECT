@@ -1,9 +1,7 @@
-import { callRpc } from "../rpc";
-import { unwrapRpcRow } from "../unwrapRpcRow";
+import { callRpc } from "@/src/services/rpc";
+import { unwrapRpcRow } from "@/src/services/unwrapRpcRow";
 
 export type InventoryItemUpsertInput = {
-  p_household_id: string;
-  p_item_id?: string | null;
   p_name: string;
   p_category?: string | null;
   p_unit?: string | null;
@@ -12,23 +10,24 @@ export type InventoryItemUpsertInput = {
 };
 
 export type InventoryItemUpsertOutput = {
-  item_id: string;
-  stock_key: string;
+  inventory_item_id: string;
+  item_name: string;
   qty_on_hand: number;
-  min_qty: number | null;
-  updated_at: string;
+  min_qty: number;
 };
 
 type RawInventoryItemUpsertOutput = {
+  inventory_item_id?: string | null;
   item_id?: string | null;
-  stock_key?: string | null;
+  item_name?: string | null;
+  name?: string | null;
   qty_on_hand?: number | null;
   min_qty?: number | null;
-  updated_at?: string | null;
 };
 
-export type ShoppingListRebuildInput = {
-  p_household_id: string;
+type RawShoppingListRebuildOutput = {
+  inserted_count?: number | null;
+  existing_open_count?: number | null;
 };
 
 export type ShoppingListRebuildOutput = {
@@ -37,50 +36,35 @@ export type ShoppingListRebuildOutput = {
   generated_at: string;
 };
 
-type RawShoppingListRebuildOutput = {
-  rebuilt?: boolean | null;
-  items_count?: number | null;
-  generated_at?: string | null;
-};
-
 export async function upsertInventoryItem(
   payload: InventoryItemUpsertInput
 ): Promise<InventoryItemUpsertOutput> {
-  const rawResult = await callRpc<
-    InventoryItemUpsertInput,
-    RawInventoryItemUpsertOutput | RawInventoryItemUpsertOutput[]
-  >("rpc_inventory_item_upsert", payload);
+  const rawResult = await callRpc<RawInventoryItemUpsertOutput | RawInventoryItemUpsertOutput[]>(
+    "rpc_inventory_item_upsert",
+    payload
+  );
 
   const raw = unwrapRpcRow(rawResult);
 
-  console.log("DOMYLI rpc_inventory_item_upsert raw =>", rawResult);
-  console.log("DOMYLI rpc_inventory_item_upsert normalized =>", raw);
-
   return {
-    item_id: raw?.item_id ?? "",
-    stock_key: raw?.stock_key ?? "",
-    qty_on_hand: Number(raw?.qty_on_hand ?? payload.p_qty_on_hand ?? 0),
-    min_qty: raw?.min_qty ?? payload.p_min_qty ?? null,
-    updated_at: raw?.updated_at ?? new Date().toISOString(),
+    inventory_item_id: raw?.inventory_item_id ?? raw?.item_id ?? "",
+    item_name: raw?.item_name ?? raw?.name ?? payload.p_name,
+    qty_on_hand: Number(raw?.qty_on_hand ?? payload.p_qty_on_hand),
+    min_qty: Number(raw?.min_qty ?? payload.p_min_qty ?? 0),
   };
 }
 
-export async function rebuildShoppingList(
-  payload: ShoppingListRebuildInput
-): Promise<ShoppingListRebuildOutput> {
-  const rawResult = await callRpc<
-    ShoppingListRebuildInput,
-    RawShoppingListRebuildOutput | RawShoppingListRebuildOutput[]
-  >("rpc_shopping_list_rebuild", payload);
+export async function rebuildShoppingList(): Promise<ShoppingListRebuildOutput> {
+  const rawResult = await callRpc<RawShoppingListRebuildOutput | RawShoppingListRebuildOutput[]>(
+    "rpc_shopping_list_rebuild",
+    {}
+  );
 
   const raw = unwrapRpcRow(rawResult);
 
-  console.log("DOMYLI rpc_shopping_list_rebuild raw =>", rawResult);
-  console.log("DOMYLI rpc_shopping_list_rebuild normalized =>", raw);
-
   return {
-    rebuilt: Boolean(raw?.rebuilt),
-    items_count: Number(raw?.items_count ?? 0),
-    generated_at: raw?.generated_at ?? new Date().toISOString(),
+    rebuilt: true,
+    items_count: Number(raw?.inserted_count ?? raw?.existing_open_count ?? 0),
+    generated_at: new Date().toISOString(),
   };
 }

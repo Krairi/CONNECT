@@ -13,7 +13,7 @@ export default function ShoppingPage() {
     authLoading,
   } = useDomyliConnection();
 
-  const { loading, rebuilding, error, items, lastRebuild, refresh, rebuild } =
+  const { loading, rebuilding, degraded, error, items, lastRebuild, refresh, rebuild } =
     useShopping();
 
   if (authLoading) {
@@ -103,6 +103,13 @@ export default function ShoppingPage() {
             {error && (
               <div className="mt-8 border border-white/10 bg-black/20 p-4 text-sm text-alabaster/70">
                 {error.message}
+              </div>
+            )}
+
+            {degraded && !error && (
+              <div className="mt-8 border border-gold/20 bg-gold/10 p-4 text-sm text-gold/80">
+                Certaines données n’ont pas pu être chargées. L’affichage est
+                partiel.
               </div>
             )}
 

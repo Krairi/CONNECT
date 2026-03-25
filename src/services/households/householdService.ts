@@ -1,4 +1,4 @@
-import { callRpc } from "../rpc";
+import { callRpc } from "@/src/services/rpc";
 
 export type RpcHouseholdCreateInput = {
   p_name: string;
@@ -13,5 +13,10 @@ export type RpcHouseholdCreateOutput = {
 export async function createHousehold(
   payload: RpcHouseholdCreateInput
 ): Promise<RpcHouseholdCreateOutput> {
-  return callRpc<RpcHouseholdCreateInput, RpcHouseholdCreateOutput>("rpc_household_create", payload);
+  const result = await callRpc<RpcHouseholdCreateOutput>(
+    "rpc_household_create",
+    payload
+  );
+
+  return result!;
 }

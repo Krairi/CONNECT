@@ -1,6 +1,5 @@
-import { callRpc } from "../rpc";
-import { unwrapRpcRow } from "../unwrapRpcRow";
-import { isMissingRpcError } from "../../lib/errors";
+import { callRpc } from "@/src/services/rpc";
+import { unwrapRpcRow } from "@/src/services/unwrapRpcRow";
 
 export type ShoppingListRebuildOutput = {
   rebuilt: boolean;
@@ -33,61 +32,38 @@ type RawShoppingListItem = {
 };
 
 export async function rebuildShoppingList(): Promise<ShoppingListRebuildOutput> {
-  try {
-    const rawResult = await callRpc<
-      Record<string, never>,
-      RawShoppingListRebuildOutput | RawShoppingListRebuildOutput[]
-    >("rpc_shopping_list_rebuild", {});
+  const rawResult = await callRpc<RawShoppingListRebuildOutput | RawShoppingListRebuildOutput[]>(
+    "rpc_shopping_list_rebuild",
+    {}
+  );
 
-    const raw = unwrapRpcRow(rawResult);
+  const raw = unwrapRpcRow(rawResult);
 
-    console.log("DOMYLI rpc_shopping_list_rebuild raw =>", rawResult);
-    console.log("DOMYLI rpc_shopping_list_rebuild normalized =>", raw);
-
-    return {
-      rebuilt: true,
-      items_count: Number(raw?.inserted_count ?? 0),
-      generated_at: new Date().toISOString(),
-    };
-  } catch (error) {
-    if (isMissingRpcError(error)) {
-      return {
-        rebuilt: false,
-        items_count: 0,
-        generated_at: new Date().toISOString(),
-      };
-    }
-    throw error;
-  }
+  return {
+    rebuilt: true,
+    items_count: Number(raw?.inserted_count ?? 0),
+    generated_at: new Date().toISOString(),
+  };
 }
 
 export async function readShoppingList(): Promise<ShoppingListItem[]> {
-  try {
-    const rawResult = await callRpc<
-      Record<string, never>,
-      RawShoppingListItem[] | RawShoppingListItem | null
-    >("rpc_shopping_list_list", {});
+  const rawResult = await callRpc<RawShoppingListItem[] | RawShoppingListItem | null>(
+    "rpc_shopping_list_list",
+    {}
+  );
 
-    console.log("DOMYLI rpc_shopping_list_list raw =>", rawResult);
+  const rows = Array.isArray(rawResult)
+    ? rawResult
+    : rawResult
+    ? [rawResult]
+    : [];
 
-    const rows = Array.isArray(rawResult)
-      ? rawResult
-      : rawResult
-        ? [rawResult]
-        : [];
-
-    return rows.map((row) => ({
-      shopping_item_id: row.shopping_item_id ?? "",
-      item_name: row.item_name ?? "Article DOMYLI",
-      quantity_needed: Number(row.quantity_needed ?? 0),
-      unit: row.unit ?? null,
-      priority: row.priority ?? null,
-      status: row.status ?? null,
-    }));
-  } catch (error) {
-    if (isMissingRpcError(error)) {
-      return [];
-    }
-    throw error;
-  }
+  return rows.map((row) => ({
+    shopping_item_id: row.shopping_item_id ?? "",
+    item_name: row.item_name ?? "Article DOMYLI",
+    quantity_needed: Number(row.quantity_needed ?? 0),
+    unit: row.unit ?? null,
+    priority: row.priority ?? null,
+    status: row.status ?? null,
+  }));
 }

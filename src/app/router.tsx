@@ -1,19 +1,116 @@
-import { createBrowserRouter } from "react-router-dom";
+import { createBrowserRouter, Link } from "react-router-dom";
+
 import LandingPage from "@/src/pages/LandingPage";
-import ProfilesPage from "@/src/pages/ProfilesPage";
 import DashboardPage from "@/src/pages/DashboardPage";
-import StatusPage from "@/src/pages/StatusPage";
-import CapacityPage from "@/src/pages/CapacityPage";
-import InventoryPage from "@/src/pages/InventoryPage";
-import ShoppingPage from "@/src/pages/ShoppingPage";
-import MealsPage from "@/src/pages/MealsPage";
-import TasksPage from "@/src/pages/TasksPage";
-import ToolsPage from "@/src/pages/ToolsPage";
+import ProfilesPage from "@/src/pages/ProfilesPage";
 import NotFoundPage from "@/src/pages/NotFoundPage";
-import RecipesLibraryPage from "@/src/pages/recipes/RecipesLibraryPage";
-import AdminHomePage from "@/src/pages/admin/AdminHomePage";
-import AdminCatalogPage from "@/src/pages/admin/AdminCatalogPage";
 import ProtectedRoute from "@/src/components/common/ProtectedRoute";
-import AdminRoute from "@/src/components/common/AdminRoute";
 import { ROUTES } from "@/src/constants/routes";
-export const router = createBrowserRouter([{ path: ROUTES.landing, element: <LandingPage />, errorElement: <NotFoundPage /> }, { path: ROUTES.profiles, element: <ProtectedRoute><ProfilesPage /></ProtectedRoute> }, { path: ROUTES.dashboard, element: <ProtectedRoute><DashboardPage /></ProtectedRoute> }, { path: ROUTES.status, element: <ProtectedRoute><StatusPage /></ProtectedRoute> }, { path: ROUTES.capacity, element: <ProtectedRoute><CapacityPage /></ProtectedRoute> }, { path: ROUTES.inventory, element: <ProtectedRoute><InventoryPage /></ProtectedRoute> }, { path: ROUTES.shopping, element: <ProtectedRoute><ShoppingPage /></ProtectedRoute> }, { path: ROUTES.meals, element: <ProtectedRoute><MealsPage /></ProtectedRoute> }, { path: ROUTES.tasks, element: <ProtectedRoute><TasksPage /></ProtectedRoute> }, { path: ROUTES.tools, element: <ProtectedRoute><ToolsPage /></ProtectedRoute> }, { path: ROUTES.recipes, element: <ProtectedRoute><RecipesLibraryPage /></ProtectedRoute> }, { path: ROUTES.admin, element: <AdminRoute><AdminHomePage /></AdminRoute> }, { path: ROUTES.adminCatalog, element: <AdminRoute><AdminCatalogPage /></AdminRoute> }, { path: "*", element: <NotFoundPage /> }]);
+
+function PlaceholderPage({ title }: { title: string }) {
+  return (
+    <div className="min-h-screen bg-black text-white px-6 py-16">
+      <div className="mx-auto max-w-3xl">
+        <div className="text-xs uppercase tracking-[0.35em] text-amber-300">
+          DOMYLI
+        </div>
+        <h1 className="mt-4 text-4xl font-semibold">{title}</h1>
+        <p className="mt-5 text-white/70 leading-8">
+          Cette page est temporairement neutralisée pour remettre le repo CONNECT
+          dans un état exécutable. Le parcours réel prioritaire passe par
+          connexion → foyer → profils → dashboard.
+        </p>
+        <Link
+          to={ROUTES.DASHBOARD}
+          className="mt-8 inline-block border border-amber-300/40 px-6 py-3 text-sm uppercase tracking-[0.25em] text-amber-300 hover:bg-amber-300 hover:text-black transition-colors"
+        >
+          Retour au dashboard
+        </Link>
+      </div>
+    </div>
+  );
+}
+
+export const router = createBrowserRouter([
+  {
+    path: ROUTES.HOME,
+    element: <LandingPage />,
+    errorElement: <NotFoundPage />,
+  },
+  {
+    path: ROUTES.DASHBOARD,
+    element: (
+      <ProtectedRoute requireHousehold>
+        <DashboardPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: ROUTES.PROFILES,
+    element: (
+      <ProtectedRoute requireHousehold>
+        <ProfilesPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: ROUTES.STATUS,
+    element: (
+      <ProtectedRoute requireHousehold>
+        <PlaceholderPage title="Status" />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: ROUTES.CAPACITY,
+    element: (
+      <ProtectedRoute requireHousehold>
+        <PlaceholderPage title="Capacity" />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: ROUTES.INVENTORY,
+    element: (
+      <ProtectedRoute requireHousehold>
+        <PlaceholderPage title="Inventory" />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: ROUTES.SHOPPING,
+    element: (
+      <ProtectedRoute requireHousehold>
+        <PlaceholderPage title="Shopping" />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: ROUTES.MEALS,
+    element: (
+      <ProtectedRoute requireHousehold>
+        <PlaceholderPage title="Meals" />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: ROUTES.TASKS,
+    element: (
+      <ProtectedRoute requireHousehold>
+        <PlaceholderPage title="Tasks" />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: ROUTES.TOOLS,
+    element: (
+      <ProtectedRoute requireHousehold>
+        <PlaceholderPage title="Tools" />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: "*",
+    element: <NotFoundPage />,
+  },
+]);

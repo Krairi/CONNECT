@@ -1,5 +1,5 @@
-import { callRpc } from "../rpc";
-import { isMissingRpcError } from "../../lib/errors";
+import { callRpc } from "@/src/services/rpc";
+import { unwrapRpcRow } from "@/src/services/unwrapRpcRow";
 
 export type TeamCapacityInput = {
   p_capacity_date: string;
@@ -14,7 +14,6 @@ export type TeamCapacityMember = {
 };
 
 export type TeamCapacityOutput = {
-  household_id: string | null;
   day: string;
   total_capacity_points: number;
   assigned_points: number;
@@ -34,7 +33,6 @@ type RawTeamCapacityMember = {
 };
 
 type RawTeamCapacityJson = {
-  household_id?: string | null;
   day?: string | null;
   capacity_date?: string | null;
   total_capacity_points?: number | null;
@@ -55,63 +53,47 @@ export type CapacitySetMemberDailyOutput = {
   capacity_entry_id: string;
 };
 
+type RawCapacitySetMemberDailyOutput = {
+  capacity_entry_id?: string | null;
+};
+
 export async function getTeamCapacity(
   payload: TeamCapacityInput
 ): Promise<TeamCapacityOutput> {
-  try {
-    const rawResult = await callRpc<TeamCapacityInput, RawTeamCapacityJson>(
-      "rpc_team_capacity",
-      payload
-    );
+  const rawResult = await callRpc<RawTeamCapacityJson | RawTeamCapacityJson[]>(
+    "rpc_team_capacity",
+    payload
+  );
 
-    console.log("DOMYLI rpc_team_capacity raw =>", rawResult);
+  const raw = unwrapRpcRow(rawResult);
 
-    const raw = rawResult ?? {};
-
-    return {
-      household_id: raw.household_id ?? null,
-      day: raw.day ?? raw.capacity_date ?? payload.p_capacity_date,
-      total_capacity_points: Number(raw.total_capacity_points ?? raw.total_points ?? 0),
-      assigned_points: Number(raw.assigned_points ?? 0),
-      remaining_points: Number(raw.remaining_points ?? 0),
-      members: Array.isArray(raw.members)
-        ? raw.members.map((member) => ({
-            member_user_id: member.member_user_id ?? member.user_id ?? "",
-            display_name: member.display_name ?? member.full_name ?? "Membre DOMYLI",
-            capacity_points_daily: Number(
-              member.capacity_points_daily ?? member.capacity_points ?? 0
-            ),
-            assigned_points: Number(member.assigned_points ?? 0),
-            remaining_points: Number(member.remaining_points ?? 0),
-          }))
-        : [],
-    };
-  } catch (error) {
-    if (isMissingRpcError(error)) {
-      return {
-        household_id: null,
-        day: payload.p_capacity_date,
-        total_capacity_points: 0,
-        assigned_points: 0,
-        remaining_points: 0,
-        members: [],
-      };
-    }
-    throw error;
-  }
+  return {
+    day: raw?.day ?? raw?.capacity_date ?? payload.p_capacity_date,
+    total_capacity_points: Number(raw?.total_capacity_points ?? raw?.total_points ?? 0),
+    assigned_points: Number(raw?.assigned_points ?? 0),
+    remaining_points: Number(raw?.remaining_points ?? 0),
+    members: Array.isArray(raw?.members)
+      ? raw.members.map((member) => ({
+          member_user_id: member.member_user_id ?? member.user_id ?? "",
+          display_name: member.display_name ?? member.full_name ?? "Membre DOMYLI",
+          capacity_points_daily: Number(member.capacity_points_daily ?? member.capacity_points ?? 0),
+          assigned_points: Number(member.assigned_points ?? 0),
+          remaining_points: Number(member.remaining_points ?? 0),
+        }))
+      : [],
+  };
 }
 
 export async function setMemberCapacityDaily(
   payload: CapacitySetMemberDailyInput
 ): Promise<CapacitySetMemberDailyOutput> {
-  const rawResult = await callRpc<CapacitySetMemberDailyInput, string>(
-    "rpc_capacity_set_member_daily",
-    payload
-  );
+  const rawResult = await callRpc<
+    RawCapacitySetMemberDailyOutput | RawCapacitySetMemberDailyOutput[]
+  >("rpc_capacity_set_member_daily", payload);
 
-  console.log("DOMYLI rpc_capacity_set_member_daily raw =>", rawResult);
+  const raw = unwrapRpcRow(rawResult);
 
   return {
-    capacity_entry_id: rawResult ?? "",
+    capacity_entry_id: raw?.capacity_entry_id ?? "",
   };
 }

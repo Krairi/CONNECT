@@ -1,7 +1,9 @@
 import { useMemo, useState } from "react";
-import { Check, LoaderCircle, X, LogOut } from "lucide-react";
-import { useDomyliConnection } from "../hooks/useDomyliConnection";
-import { navigateTo } from "../lib/navigation";
+import { Check, LoaderCircle, LogOut, X } from "lucide-react";
+import { useNavigate } from "react-router-dom";
+
+import { useAuth } from "@/src/contexts/AuthContext";
+import { ROUTES } from "@/src/constants/routes";
 
 type Props = {
   isOpen: boolean;
@@ -20,12 +22,16 @@ function getErrorMessage(err: unknown): string {
 }
 
 export default function DomyliConnectionModal({ isOpen, onClose }: Props) {
+  const navigate = useNavigate();
+
   const [mode, setMode] = useState<"login" | "signup">("login");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [householdName, setHouseholdName] = useState("");
   const [localMessage, setLocalMessage] = useState<string | null>(null);
-  const [busy, setBusy] = useState<"login" | "signup" | "household" | "logout" | null>(null);
+  const [busy, setBusy] = useState<
+    "login" | "signup" | "household" | "logout" | null
+  >(null);
 
   const {
     authLoading,
@@ -40,11 +46,15 @@ export default function DomyliConnectionModal({ isOpen, onClose }: Props) {
     signUpWithPassword,
     signOut,
     createFirstHousehold,
-  } = useDomyliConnection();
+  } = useAuth();
 
   const title = useMemo(() => {
     if (authLoading) return "Connexion DOMYLI";
-    if (!isAuthenticated) return mode === "login" ? "Connexion DOMYLI" : "Créer votre accès DOMYLI";
+    if (!isAuthenticated) {
+      return mode === "login"
+        ? "Connexion DOMYLI"
+        : "Créer votre accès DOMYLI";
+    }
     if (!hasHousehold) return "Créer votre foyer";
     return "DOMYLI connecté";
   }, [authLoading, isAuthenticated, hasHousehold, mode]);
@@ -93,10 +103,10 @@ export default function DomyliConnectionModal({ isOpen, onClose }: Props) {
       setLocalMessage(`Foyer créé : ${created.household_name}`);
       setHouseholdName("");
 
-      setTimeout(() => {
+      window.setTimeout(() => {
         setLocalMessage(null);
         onClose();
-        navigateTo("/profiles");
+        navigate(ROUTES.PROFILES);
       }, 800);
     } catch (err) {
       setLocalMessage(getErrorMessage(err));
@@ -115,7 +125,7 @@ export default function DomyliConnectionModal({ isOpen, onClose }: Props) {
       setPassword("");
       setHouseholdName("");
       onClose();
-      navigateTo("/");
+      navigate(ROUTES.HOME);
     } catch (err) {
       setLocalMessage(getErrorMessage(err));
     } finally {
@@ -124,226 +134,247 @@ export default function DomyliConnectionModal({ isOpen, onClose }: Props) {
   };
 
   return (
-    <div className="fixed inset-0 z-[200] bg-black/70 backdrop-blur-md flex items-center justify-center p-4">
-      <div className="relative w-full max-w-xl border border-white/10 bg-[#0A0A0B] text-alabaster shadow-2xl">
+    <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/75 px-4">
+      <div className="relative w-full max-w-2xl border border-gold/15 bg-obsidian p-8 text-white shadow-2xl">
         <button
+          type="button"
           onClick={onClose}
-          className="absolute right-4 top-4 text-alabaster/60 hover:text-alabaster transition-colors"
+          className="absolute right-4 top-4 inline-flex h-10 w-10 items-center justify-center border border-white/10 text-white/70 hover:border-gold/40 hover:text-gold"
           aria-label="Fermer"
         >
-          <X />
+          <X size={18} />
         </button>
 
-        <div className="border-b border-white/10 px-8 py-6">
-          <p className="text-xs uppercase tracking-[0.35em] text-gold/80">DOMYLI</p>
-          <h3 className="mt-3 font-serif text-3xl">{title}</h3>
-          <p className="mt-3 text-sm text-alabaster/70">
-            Connexion réelle à la base DOMYLI via Supabase, sans casser la landing.
-          </p>
+        <div className="mb-3 text-xs uppercase tracking-[0.35em] text-gold/70">
+          DOMYLI
         </div>
 
-        <div className="px-8 py-8 space-y-6">
-          {authLoading && (
-            <div className="flex items-center gap-3 text-sm text-alabaster/80">
-              <LoaderCircle className="animate-spin" size={18} />
-              Chargement de la session DOMYLI...
-            </div>
-          )}
+        <h2 className="text-3xl font-semibold text-white">{title}</h2>
 
-          {!authLoading && isAuthenticated && (
-            <div className="flex justify-end">
+        <p className="mt-3 text-sm leading-7 text-white/70">
+          Connexion réelle à la base DOMYLI via Supabase, avec un contexte auth
+          centralisé.
+        </p>
+
+        {authLoading && (
+          <div className="mt-6 flex items-center gap-3 border border-white/10 bg-white/[0.03] px-4 py-4 text-sm text-white/75">
+            <LoaderCircle size={18} className="animate-spin text-gold" />
+            Chargement de la session DOMYLI...
+          </div>
+        )}
+
+        {!authLoading && isAuthenticated && (
+          <div className="mt-6 flex flex-wrap items-center gap-3">
+            <button
+              type="button"
+              onClick={handleLogout}
+              disabled={busy === "logout"}
+              className="inline-flex items-center gap-2 border border-white/10 px-4 py-3 text-xs uppercase tracking-[0.25em] text-white/75 hover:border-gold/40 hover:text-gold disabled:opacity-50"
+            >
+              <LogOut size={16} />
+              {busy === "logout" ? "Déconnexion..." : "Se déconnecter"}
+            </button>
+          </div>
+        )}
+
+        {bootstrapLoading && isAuthenticated && (
+          <div className="mt-6 flex items-center gap-3 border border-gold/20 bg-gold/5 px-4 py-4 text-sm text-gold/90">
+            <LoaderCircle size={18} className="animate-spin" />
+            Synchronisation du contexte DOMYLI...
+          </div>
+        )}
+
+        {!authLoading && !isAuthenticated && (
+          <>
+            <div className="mt-8 flex gap-3">
               <button
                 type="button"
-                onClick={handleLogout}
-                disabled={busy === "logout"}
-                className="flex items-center gap-2 border border-white/10 px-4 py-3 text-xs uppercase tracking-[0.25em] text-alabaster hover:border-gold/40 hover:text-gold transition-colors disabled:opacity-50"
+                onClick={() => setMode("login")}
+                className={`flex-1 py-3 text-xs uppercase tracking-[0.25em] border ${
+                  mode === "login"
+                    ? "border-gold bg-gold text-obsidian"
+                    : "border-white/10 text-white/70"
+                }`}
               >
-                <LogOut size={14} />
-                {busy === "logout" ? "Déconnexion..." : "Se déconnecter"}
+                Connexion
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setMode("signup")}
+                className={`flex-1 py-3 text-xs uppercase tracking-[0.25em] border ${
+                  mode === "signup"
+                    ? "border-gold bg-gold text-obsidian"
+                    : "border-white/10 text-white/70"
+                }`}
+              >
+                Inscription
               </button>
             </div>
-          )}
 
-          {bootstrapLoading && isAuthenticated && (
-            <div className="flex items-center gap-3 text-sm text-alabaster/80">
-              <LoaderCircle className="animate-spin" size={18} />
-              Synchronisation du contexte DOMYLI...
-            </div>
-          )}
-
-          {!authLoading && !isAuthenticated && (
-            <>
-              <div className="flex gap-2">
-                <button
-                  type="button"
-                  onClick={() => setMode("login")}
-                  className={`flex-1 py-3 text-xs uppercase tracking-[0.25em] border ${
-                    mode === "login"
-                      ? "border-gold bg-gold text-obsidian"
-                      : "border-white/10 text-alabaster/70"
-                  }`}
-                >
-                  Connexion
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setMode("signup")}
-                  className={`flex-1 py-3 text-xs uppercase tracking-[0.25em] border ${
-                    mode === "signup"
-                      ? "border-gold bg-gold text-obsidian"
-                      : "border-white/10 text-alabaster/70"
-                  }`}
-                >
-                  Inscription
-                </button>
-              </div>
-
-              <form onSubmit={mode === "login" ? handleLogin : handleSignup} className="space-y-4">
-                <div>
-                  <label className="mb-2 block text-xs uppercase tracking-[0.25em] text-alabaster/60">
-                    Email
-                  </label>
-                  <input
-                    type="email"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    required
-                    placeholder="vous@exemple.com"
-                    className="w-full border border-white/10 bg-white/5 px-4 py-4 text-sm outline-none focus:border-gold/50"
-                  />
-                </div>
-
-                <div>
-                  <label className="mb-2 block text-xs uppercase tracking-[0.25em] text-alabaster/60">
-                    Mot de passe
-                  </label>
-                  <input
-                    type="password"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    required
-                    placeholder="Votre mot de passe"
-                    className="w-full border border-white/10 bg-white/5 px-4 py-4 text-sm outline-none focus:border-gold/50"
-                  />
-                </div>
-
-                <button
-                  type="submit"
-                  disabled={busy === "login" || busy === "signup"}
-                  className="w-full bg-gold px-5 py-4 text-sm font-medium uppercase tracking-[0.25em] text-obsidian transition hover:opacity-90 disabled:opacity-50"
-                >
-                  {mode === "login"
-                    ? busy === "login"
-                      ? "Connexion..."
-                      : "Se connecter"
-                    : busy === "signup"
-                      ? "Création du compte..."
-                      : "Créer mon compte"}
-                </button>
-              </form>
-            </>
-          )}
-
-          {!authLoading && isAuthenticated && !hasHousehold && (
-            <form onSubmit={handleHouseholdCreate} className="space-y-4">
-              <div className="rounded border border-gold/20 bg-gold/5 px-4 py-4 text-sm text-alabaster/80">
-                Connecté en tant que <span className="text-gold">{sessionEmail}</span>
+            <form
+              onSubmit={mode === "login" ? handleLogin : handleSignup}
+              className="mt-8 space-y-5"
+            >
+              <div>
+                <label className="mb-2 block text-xs uppercase tracking-[0.25em] text-gold/70">
+                  Email
+                </label>
+                <input
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  required
+                  placeholder="vous@exemple.com"
+                  className="w-full border border-white/10 bg-white/5 px-4 py-4 text-sm outline-none focus:border-gold/50"
+                />
               </div>
 
               <div>
-                <label className="mb-2 block text-xs uppercase tracking-[0.25em] text-alabaster/60">
-                  Nom du foyer
+                <label className="mb-2 block text-xs uppercase tracking-[0.25em] text-gold/70">
+                  Mot de passe
                 </label>
                 <input
-                  type="text"
-                  value={householdName}
-                  onChange={(e) => setHouseholdName(e.target.value)}
+                  type="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
                   required
-                  placeholder="Maison Krairi"
+                  placeholder="Votre mot de passe"
                   className="w-full border border-white/10 bg-white/5 px-4 py-4 text-sm outline-none focus:border-gold/50"
                 />
               </div>
 
               <button
                 type="submit"
-                disabled={busy === "household"}
-                className="w-full bg-gold px-5 py-4 text-sm font-medium uppercase tracking-[0.25em] text-obsidian transition hover:opacity-90 disabled:opacity-50"
+                disabled={busy === "login" || busy === "signup"}
+                className="w-full border border-gold bg-gold px-5 py-4 text-sm uppercase tracking-[0.25em] text-obsidian disabled:opacity-50"
               >
-                {busy === "household" ? "Création..." : "Créer mon foyer"}
+                {mode === "login"
+                  ? busy === "login"
+                    ? "Connexion..."
+                    : "Se connecter"
+                  : busy === "signup"
+                  ? "Création du compte..."
+                  : "Créer mon compte"}
               </button>
             </form>
-          )}
+          </>
+        )}
 
-          {!authLoading && isAuthenticated && hasHousehold && (
-            <div className="space-y-4">
-              <div className="flex items-start gap-3 rounded border border-emerald-400/20 bg-emerald-400/10 px-4 py-4 text-sm">
-                <Check className="mt-0.5 text-emerald-300" size={18} />
-                <div>
-                  <div className="font-medium text-alabaster">Connexion active</div>
-                  <div className="mt-1 text-alabaster/75">
-                    {activeMembership?.household_name ? (
-                      <>
-                        {sessionEmail} est relié au foyer{" "}
-                        <span className="text-gold">{activeMembership.household_name}</span>.
-                      </>
-                    ) : (
-                      <>
-                        {sessionEmail} est connecté à DOMYLI, mais aucun foyer exploitable n’a encore été résolu.
-                      </>
-                    )}
-                  </div>
+        {!authLoading && isAuthenticated && !hasHousehold && (
+          <form onSubmit={handleHouseholdCreate} className="mt-8 space-y-5">
+            <div className="rounded-2xl border border-gold/15 bg-gold/5 px-5 py-4 text-sm text-white/80">
+              Connecté en tant que <span className="text-gold">{sessionEmail}</span>
+            </div>
+
+            <div>
+              <label className="mb-2 block text-xs uppercase tracking-[0.25em] text-gold/70">
+                Nom du foyer
+              </label>
+              <input
+                value={householdName}
+                onChange={(e) => setHouseholdName(e.target.value)}
+                required
+                placeholder="Maison Krairi"
+                className="w-full border border-white/10 bg-white/5 px-4 py-4 text-sm outline-none focus:border-gold/50"
+              />
+            </div>
+
+            <button
+              type="submit"
+              disabled={busy === "household"}
+              className="w-full border border-gold bg-gold px-5 py-4 text-sm uppercase tracking-[0.25em] text-obsidian disabled:opacity-50"
+            >
+              {busy === "household" ? "Création..." : "Créer mon foyer"}
+            </button>
+          </form>
+        )}
+
+        {!authLoading && isAuthenticated && hasHousehold && (
+          <div className="mt-8 space-y-5">
+            <div className="flex items-center gap-3 rounded-2xl border border-emerald-500/20 bg-emerald-500/10 px-5 py-4 text-sm text-emerald-300">
+              <Check size={18} />
+              Connexion active
+            </div>
+
+            <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-5 text-sm leading-7 text-white/75">
+              {activeMembership?.household_name ? (
+                <>
+                  <strong className="text-white">{sessionEmail}</strong> est relié
+                  au foyer{" "}
+                  <strong className="text-gold">
+                    {activeMembership.household_name}
+                  </strong>
+                  .
+                </>
+              ) : (
+                <>
+                  <strong className="text-white">{sessionEmail}</strong> est
+                  connecté à DOMYLI, mais aucun foyer exploitable n’a encore été
+                  résolu.
+                </>
+              )}
+            </div>
+
+            <div className="grid gap-4 md:grid-cols-3">
+              <div className="border border-white/10 p-4">
+                <div className="text-xs uppercase tracking-[0.25em] text-gold/70">
+                  Foyer actif
+                </div>
+                <div className="mt-2 text-sm text-white">
+                  {activeMembership?.household_name ?? "—"}
                 </div>
               </div>
 
-              <div className="grid gap-3 border border-white/10 bg-white/5 p-4 text-sm">
-                <div>
-                  <span className="text-alabaster/50">Foyer actif :</span>{" "}
-                  <span className="text-alabaster">{activeMembership?.household_name ?? "—"}</span>
+              <div className="border border-white/10 p-4">
+                <div className="text-xs uppercase tracking-[0.25em] text-gold/70">
+                  Rôle
                 </div>
-                <div>
-                  <span className="text-alabaster/50">Rôle :</span>{" "}
-                  <span className="text-alabaster">{activeMembership?.role ?? "—"}</span>
-                </div>
-                <div>
-                  <span className="text-alabaster/50">Super Admin :</span>{" "}
-                  <span className={bootstrap?.is_super_admin ? "text-gold" : "text-alabaster"}>
-                    {bootstrap?.is_super_admin ? "Oui" : "Non"}
-                  </span>
+                <div className="mt-2 text-sm text-white">
+                  {activeMembership?.role ?? "—"}
                 </div>
               </div>
 
-              <div className="grid gap-3 sm:grid-cols-2">
-                <button
-                  type="button"
-                  onClick={() => {
-                    onClose();
-                    navigateTo("/profiles");
-                  }}
-                  className="border border-gold/40 px-5 py-4 text-sm uppercase tracking-[0.25em] text-gold hover:bg-gold hover:text-obsidian transition-colors"
-                >
-                  Ouvrir Profiles
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => {
-                    onClose();
-                    navigateTo("/dashboard");
-                  }}
-                  className="border border-white/10 px-5 py-4 text-sm uppercase tracking-[0.25em] text-alabaster hover:border-gold/40 hover:text-gold transition-colors"
-                >
-                  Ouvrir Dashboard
-                </button>
+              <div className="border border-white/10 p-4">
+                <div className="text-xs uppercase tracking-[0.25em] text-gold/70">
+                  Super Admin
+                </div>
+                <div className="mt-2 text-sm text-white">
+                  {bootstrap?.is_super_admin ? "Oui" : "Non"}
+                </div>
               </div>
             </div>
-          )}
 
-          {(localMessage || error) && (
-            <div className="border border-white/10 bg-white/5 px-4 py-4 text-sm text-alabaster/75">
-              {localMessage ?? error?.message}
+            <div className="flex flex-col gap-3 sm:flex-row">
+              <button
+                type="button"
+                onClick={() => {
+                  onClose();
+                  navigate(ROUTES.PROFILES);
+                }}
+                className="border border-gold/40 px-5 py-4 text-sm uppercase tracking-[0.25em] text-gold hover:bg-gold hover:text-obsidian transition-colors"
+              >
+                Ouvrir Profiles
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  onClose();
+                  navigate(ROUTES.DASHBOARD);
+                }}
+                className="border border-white/10 px-5 py-4 text-sm uppercase tracking-[0.25em] text-white hover:border-gold/40 hover:text-gold transition-colors"
+              >
+                Ouvrir Dashboard
+              </button>
             </div>
-          )}
-        </div>
+          </div>
+        )}
+
+        {(localMessage || error) && (
+          <div className="mt-6 border border-gold/20 bg-gold/5 px-4 py-4 text-sm text-gold/90">
+            {localMessage ?? error?.message}
+          </div>
+        )}
       </div>
     </div>
   );

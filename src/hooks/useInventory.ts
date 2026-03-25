@@ -1,12 +1,13 @@
 import { useCallback, useState } from "react";
-import { toDomyliError, type DomyliAppError } from "../lib/errors";
+
+import { toDomyliError, type DomyliAppError } from "@/src/lib/errors";
 import {
   upsertInventoryItem,
   rebuildShoppingList,
   type InventoryItemUpsertInput,
   type InventoryItemUpsertOutput,
   type ShoppingListRebuildOutput,
-} from "../services/inventory/inventoryService";
+} from "@/src/services/inventory/inventoryService";
 
 type InventoryState = {
   saving: boolean;
@@ -25,7 +26,7 @@ const initialState: InventoryState = {
 };
 
 export function useInventory() {
-  const [state, setState] = useState<InventoryState>(initialState);
+  const [state, setState] = useState(initialState);
 
   const saveItem = useCallback(async (payload: InventoryItemUpsertInput) => {
     setState((prev) => ({
@@ -40,7 +41,6 @@ export function useInventory() {
       setState((prev) => ({
         ...prev,
         saving: false,
-        error: null,
         lastSavedItem: result,
       }));
 
@@ -58,7 +58,7 @@ export function useInventory() {
     }
   }, []);
 
-  const rebuildShopping = useCallback(async (householdId: string) => {
+  const rebuildShopping = useCallback(async () => {
     setState((prev) => ({
       ...prev,
       rebuilding: true,
@@ -66,14 +66,11 @@ export function useInventory() {
     }));
 
     try {
-      const result = await rebuildShoppingList({
-        p_household_id: householdId,
-      });
+      const result = await rebuildShoppingList();
 
       setState((prev) => ({
         ...prev,
         rebuilding: false,
-        error: null,
         lastRebuild: result,
       }));
 

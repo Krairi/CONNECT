@@ -1,9 +1,5 @@
-import { callRpc } from "../rpc";
-import { unwrapRpcRow } from "../unwrapRpcRow";
-
-export type TodayHealthInput = {
-  p_household_id: string;
-};
+import { callRpc } from "@/src/services/rpc";
+import { unwrapRpcRow } from "@/src/services/unwrapRpcRow";
 
 export type TodayHealthOutput = {
   day: string;
@@ -23,10 +19,6 @@ type RawTodayHealthOutput = {
   blocked_tools_count?: number | null;
 };
 
-export type TodayLoadFeedInput = {
-  p_household_id: string;
-};
-
 export type TodayLoadFeedItem = {
   item_type: "TASK" | "MEAL" | "ALERT" | "TOOL" | string;
   item_id: string;
@@ -43,18 +35,13 @@ type RawTodayLoadFeedItem = {
   scheduled_at?: string | null;
 };
 
-export async function getTodayHealth(
-  payload: TodayHealthInput
-): Promise<TodayHealthOutput> {
-  const rawResult = await callRpc<
-    TodayHealthInput,
-    RawTodayHealthOutput | RawTodayHealthOutput[]
-  >("rpc_today_health", payload);
+export async function getTodayHealth(): Promise<TodayHealthOutput> {
+  const rawResult = await callRpc<RawTodayHealthOutput | RawTodayHealthOutput[]>(
+    "rpc_today_health",
+    {}
+  );
 
   const raw = unwrapRpcRow(rawResult);
-
-  console.log("DOMYLI status rpc_today_health raw =>", rawResult);
-  console.log("DOMYLI status rpc_today_health normalized =>", raw);
 
   return {
     day: raw?.day ?? new Date().toISOString().slice(0, 10),
@@ -66,15 +53,11 @@ export async function getTodayHealth(
   };
 }
 
-export async function getTodayLoadFeed(
-  payload: TodayLoadFeedInput
-): Promise<TodayLoadFeedItem[]> {
-  const rawResult = await callRpc<
-    TodayLoadFeedInput,
-    RawTodayLoadFeedItem[] | RawTodayLoadFeedItem | null
-  >("rpc_today_load_feed", payload);
-
-  console.log("DOMYLI status rpc_today_load_feed raw =>", rawResult);
+export async function getTodayLoadFeed(): Promise<TodayLoadFeedItem[]> {
+  const rawResult = await callRpc<RawTodayLoadFeedItem[] | RawTodayLoadFeedItem | null>(
+    "rpc_today_load_feed",
+    {}
+  );
 
   const rows = Array.isArray(rawResult)
     ? rawResult

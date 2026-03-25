@@ -1,32 +1,26 @@
 import { useMemo, useState } from "react";
 import {
   ArrowLeft,
-  ArrowRight,
+  CheckCircle2,
   ClipboardCheck,
-  House,
   Play,
   Save,
-  ShieldCheck,
   Sparkles,
-  CheckCircle2,
 } from "lucide-react";
-import { useDomyliConnection } from "../hooks/useDomyliConnection";
-import { useTasks } from "../hooks/useTasks";
-import { navigateTo } from "../lib/navigation";
+import { useNavigate } from "react-router-dom";
+
+import { useAuth } from "@/src/contexts/AuthContext";
+import { useTasks } from "@/src/hooks/useTasks";
+import { ROUTES } from "@/src/constants/routes";
 
 function todayIsoDate() {
   return new Date().toISOString().slice(0, 10);
 }
 
 export default function TasksPage() {
-  const {
-    sessionEmail,
-    activeMembership,
-    bootstrap,
-    isAuthenticated,
-    hasHousehold,
-    authLoading,
-  } = useDomyliConnection();
+  const navigate = useNavigate();
+  const { bootstrap, isAuthenticated, hasHousehold, authLoading, bootstrapLoading } =
+    useAuth();
 
   const {
     saveTask,
@@ -52,20 +46,25 @@ export default function TasksPage() {
   const [durationMin, setDurationMin] = useState("");
   const [dateFrom, setDateFrom] = useState(todayIsoDate());
   const [dateTo, setDateTo] = useState(todayIsoDate());
+  const [taskId, setTaskId] = useState("");
   const [taskInstanceId, setTaskInstanceId] = useState("");
+  const [taskExecutionId, setTaskExecutionId] = useState("");
   const [proofNote, setProofNote] = useState("");
   const [localMessage, setLocalMessage] = useState<string | null>(null);
 
-  const canCreate = useMemo(() => {
-    return Boolean(householdId && title.trim());
-  }, [householdId, title]);
+  const canCreate = useMemo(() => Boolean(householdId && title.trim()), [householdId, title]);
+  const effectiveTaskId = taskId.trim() || lastCreatedTask?.task_id || "";
 
-  if (authLoading) {
+  if (authLoading || bootstrapLoading) {
     return (
-      <div className="min-h-screen bg-obsidian text-alabaster flex items-center justify-center px-6">
-        <div className="text-center">
-          <p className="text-xs uppercase tracking-[0.3em] text-gold/80">DOMYLI</p>
-          <h1 className="mt-4 text-3xl font-serif italic">Chargement des tâches...</h1>
+      <div className="min-h-screen bg-obsidian text-white px-6 py-16">
+        <div className="mx-auto max-w-5xl">
+          <div className="text-xs uppercase tracking-[0.35em] text-gold/70">
+            DOMYLI
+          </div>
+          <h1 className="mt-4 text-4xl font-semibold text-white">
+            Chargement des tâches...
+          </h1>
         </div>
       </div>
     );
@@ -73,15 +72,20 @@ export default function TasksPage() {
 
   if (!isAuthenticated || !hasHousehold || !householdId) {
     return (
-      <div className="min-h-screen bg-obsidian text-alabaster flex items-center justify-center px-6">
-        <div className="max-w-xl w-full border border-white/10 bg-white/5 p-8">
-          <p className="text-xs uppercase tracking-[0.3em] text-gold/80">DOMYLI</p>
-          <h1 className="mt-4 text-3xl font-serif italic">Foyer requis</h1>
-          <p className="mt-4 text-alabaster/70">
+      <div className="min-h-screen bg-obsidian text-white px-6 py-16">
+        <div className="mx-auto max-w-3xl">
+          <div className="text-xs uppercase tracking-[0.35em] text-gold/70">
+            DOMYLI
+          </div>
+          <h1 className="mt-4 text-4xl font-semibold text-white">
+            Foyer requis
+          </h1>
+          <p className="mt-5 max-w-2xl text-base leading-8 text-white/70">
             Il faut une session authentifiée et un foyer actif pour accéder aux tâches.
           </p>
           <button
-            onClick={() => navigateTo("/")}
+            type="button"
+            onClick={() => navigate(ROUTES.HOME)}
             className="mt-8 border border-gold/40 px-6 py-3 text-sm uppercase tracking-[0.25em] text-gold hover:bg-gold hover:text-obsidian transition-colors"
           >
             Retour à l’accueil
@@ -91,378 +95,307 @@ export default function TasksPage() {
     );
   }
 
-  const handleCreateTask = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleCreate = async () => {
     setLocalMessage(null);
 
     try {
       const result = await saveTask({
-        p_household_id: householdId,
-        p_title: title.trim(),
-        p_description: description.trim() || null,
-        p_effort_points: effortPoints !== "" ? Number(effortPoints) : null,
-        p_default_duration_min: durationMin !== "" ? Number(durationMin) : null,
-        p_required_tools: null,
+        title: title.trim(),
+        description: description.trim() || null,
+        effortPoints: effortPoints === "" ? null : Number(effortPoints),
+        durationMin: durationMin === "" ? null : Number(durationMin),
       });
 
-      setLocalMessage(`Tâche créée : ${result.title}`);
+      setTaskId(result.task_id);
+      setLocalMessage(`Tâche créée : ${result.task_id}`);
     } catch {
-      //
+      // erreur déjà gérée par le hook
     }
   };
 
-  const handleGenerateInstances = async () => {
+  const handleGenerate = async () => {
     setLocalMessage(null);
 
-    if (!lastCreatedTask?.task_id) {
-      setLocalMessage("Créez d’abord une tâche.");
+    if (!effectiveTaskId) {
+      setLocalMessage("Créez d’abord une tâche ou renseignez un task_id.");
       return;
     }
 
     try {
-      const result = await generateInstances({
-        householdId,
-        taskId: lastCreatedTask.task_id,
-        dateFrom,
-        dateTo,
-      });
-
+      const result = await generateInstances(effectiveTaskId, dateFrom, dateTo);
+      if (result.first_instance_id) {
+        setTaskInstanceId(result.first_instance_id);
+      }
       setLocalMessage(`Instances générées : ${result.generated_count}`);
     } catch {
-      //
+      // erreur déjà gérée par le hook
     }
   };
 
-  const handleStartTask = async () => {
+  const handleStart = async () => {
     setLocalMessage(null);
 
     if (!taskInstanceId.trim()) {
-      setLocalMessage("Renseignez un task_instance_id pour démarrer.");
+      setLocalMessage("Renseignez un task_instance_id.");
       return;
     }
 
     try {
-      const result = await startTaskExecution({
-        householdId,
-        taskInstanceId: taskInstanceId.trim(),
-      });
-
-      setLocalMessage(`Tâche démarrée : ${result.execution_id}`);
+      const result = await startTaskExecution(taskInstanceId.trim());
+      setTaskExecutionId(result.task_execution_id);
+      setLocalMessage(`Exécution démarrée : ${result.task_execution_id}`);
     } catch {
-      //
+      // erreur déjà gérée par le hook
     }
   };
 
-  const handleCompleteTask = async () => {
+  const handleComplete = async () => {
     setLocalMessage(null);
 
-    if (!taskInstanceId.trim()) {
-      setLocalMessage("Renseignez un task_instance_id pour clôturer.");
+    if (!taskExecutionId.trim()) {
+      setLocalMessage("Renseignez un task_execution_id.");
       return;
     }
 
     try {
-      const result = await completeTaskExecution({
-        householdId,
-        taskInstanceId: taskInstanceId.trim(),
-        proofNote: proofNote.trim() || null,
-      });
-
-      setLocalMessage(
-        result.run_status === "NOOP"
-          ? "Exécution déjà traitée (NOOP)."
-          : `Tâche terminée : ${result.execution_id ?? "OK"}`
+      const result = await completeTaskExecution(
+        taskExecutionId.trim(),
+        proofNote.trim() || null
       );
+      setLocalMessage(`Exécution terminée : ${result.status}`);
     } catch {
-      //
+      // erreur déjà gérée par le hook
     }
   };
 
   return (
-    <div className="min-h-screen bg-obsidian text-alabaster">
-      <header className="border-b border-white/5 glass">
-        <div className="max-w-7xl mx-auto px-6 h-20 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <button
-              onClick={() => navigateTo("/dashboard")}
-              className="w-10 h-10 border border-white/10 flex items-center justify-center hover:border-gold/40 transition-colors"
-              aria-label="Retour"
-            >
-              <ArrowLeft size={18} className="text-gold" />
-            </button>
-            <div>
-              <p className="text-[10px] uppercase tracking-[0.3em] text-gold/80">DOMYLI</p>
-              <h1 className="text-2xl font-serif italic">Tasks</h1>
+    <div className="min-h-screen bg-obsidian text-white px-6 py-10">
+      <div className="mx-auto max-w-7xl">
+        <div className="flex items-start gap-4">
+          <button
+            type="button"
+            onClick={() => navigate(ROUTES.DASHBOARD)}
+            className="mt-1 h-10 w-10 border border-white/10 flex items-center justify-center hover:border-gold/40 transition-colors"
+            aria-label="Retour"
+          >
+            <ArrowLeft size={18} />
+          </button>
+
+          <div>
+            <div className="text-xs uppercase tracking-[0.35em] text-gold/70">
+              DOMYLI
             </div>
-          </div>
-
-          <div className="flex items-center gap-3">
-            <button
-              onClick={() => navigateTo("/dashboard")}
-              className="border border-white/10 px-5 py-3 text-xs uppercase tracking-[0.25em] text-alabaster hover:border-gold/40 hover:text-gold transition-colors"
-            >
-              Dashboard
-            </button>
-
-            <button
-              onClick={() => navigateTo("/inventory")}
-              className="border border-gold/40 px-5 py-3 text-xs uppercase tracking-[0.25em] text-gold hover:bg-gold hover:text-obsidian transition-colors"
-            >
-              Inventory
-            </button>
+            <h1 className="mt-2 text-4xl font-semibold text-white">Tasks</h1>
+            <p className="mt-3 text-sm leading-7 text-white/65">
+              Création, génération, démarrage et clôture d’exécution.
+            </p>
           </div>
         </div>
-      </header>
 
-      <main className="max-w-7xl mx-auto px-6 py-12">
-        <section className="grid lg:grid-cols-3 gap-8">
-          <div className="lg:col-span-2 border border-white/10 bg-white/5 p-8">
-            <p className="text-xs uppercase tracking-[0.3em] text-gold/80">Exécution opérationnelle</p>
-            <h2 className="mt-4 text-4xl font-serif italic">Créer et exécuter une tâche</h2>
-            <p className="mt-6 text-alabaster/70 leading-relaxed">
-              Cette page branche l’expérience DOMYLI sur
-              <span className="text-gold"> rpc_task_create</span>,
-              <span className="text-gold"> rpc_task_generate_instances</span>,
-              <span className="text-gold"> rpc_task_start</span> et
-              <span className="text-gold"> rpc_task_done_v2</span>.
-            </p>
-
-            <form onSubmit={handleCreateTask} className="mt-10 grid md:grid-cols-2 gap-6">
-              <div className="md:col-span-2">
-                <label className="mb-2 block text-xs uppercase tracking-[0.25em] text-alabaster/60">
+        <div className="mt-10 grid gap-6 xl:grid-cols-[1.2fr_0.8fr]">
+          <section className="border border-white/10 bg-white/[0.03] p-6">
+            <div className="grid gap-5">
+              <div>
+                <label className="mb-2 block text-xs uppercase tracking-[0.25em] text-gold/70">
                   Titre
                 </label>
                 <input
-                  type="text"
                   value={title}
                   onChange={(e) => setTitle(e.target.value)}
-                  required
-                  placeholder="Nettoyer la cuisine"
+                  placeholder="Passer l’aspirateur"
                   className="w-full border border-white/10 bg-black/20 px-4 py-4 text-sm outline-none focus:border-gold/50"
                 />
               </div>
 
-              <div className="md:col-span-2">
-                <label className="mb-2 block text-xs uppercase tracking-[0.25em] text-alabaster/60">
+              <div>
+                <label className="mb-2 block text-xs uppercase tracking-[0.25em] text-gold/70">
                   Description
                 </label>
-                <textarea
+                <input
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
-                  placeholder="Checklist courte de l’action à réaliser"
-                  className="w-full min-h-[120px] border border-white/10 bg-black/20 px-4 py-4 text-sm outline-none focus:border-gold/50"
+                  placeholder="Salon + couloir"
+                  className="w-full border border-white/10 bg-black/20 px-4 py-4 text-sm outline-none focus:border-gold/50"
                 />
               </div>
 
+              <div className="grid gap-5 md:grid-cols-2">
+                <div>
+                  <label className="mb-2 block text-xs uppercase tracking-[0.25em] text-gold/70">
+                    Effort points
+                  </label>
+                  <input
+                    value={effortPoints}
+                    onChange={(e) => setEffortPoints(e.target.value)}
+                    placeholder="3"
+                    className="w-full border border-white/10 bg-black/20 px-4 py-4 text-sm outline-none focus:border-gold/50"
+                  />
+                </div>
+
+                <div>
+                  <label className="mb-2 block text-xs uppercase tracking-[0.25em] text-gold/70">
+                    Durée (min)
+                  </label>
+                  <input
+                    value={durationMin}
+                    onChange={(e) => setDurationMin(e.target.value)}
+                    placeholder="20"
+                    className="w-full border border-white/10 bg-black/20 px-4 py-4 text-sm outline-none focus:border-gold/50"
+                  />
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={handleCreate}
+                disabled={!canCreate || creating}
+                className="inline-flex w-full items-center justify-center gap-3 border border-gold bg-gold px-5 py-4 text-sm uppercase tracking-[0.25em] text-obsidian disabled:opacity-50"
+              >
+                <Save size={16} />
+                {creating ? "Création..." : "Créer la tâche"}
+              </button>
+
               <div>
-                <label className="mb-2 block text-xs uppercase tracking-[0.25em] text-alabaster/60">
-                  Effort (points)
+                <label className="mb-2 block text-xs uppercase tracking-[0.25em] text-gold/70">
+                  Task ID
                 </label>
                 <input
-                  type="number"
-                  value={effortPoints}
-                  onChange={(e) => setEffortPoints(e.target.value)}
-                  placeholder="3"
+                  value={taskId}
+                  onChange={(e) => setTaskId(e.target.value)}
+                  placeholder="UUID de la tâche"
+                  className="w-full border border-white/10 bg-black/20 px-4 py-4 text-sm outline-none focus:border-gold/50"
+                />
+              </div>
+
+              <div className="grid gap-5 md:grid-cols-2">
+                <div>
+                  <label className="mb-2 block text-xs uppercase tracking-[0.25em] text-gold/70">
+                    Date début
+                  </label>
+                  <input
+                    type="date"
+                    value={dateFrom}
+                    onChange={(e) => setDateFrom(e.target.value)}
+                    className="w-full border border-white/10 bg-black/20 px-4 py-4 text-sm outline-none focus:border-gold/50"
+                  />
+                </div>
+
+                <div>
+                  <label className="mb-2 block text-xs uppercase tracking-[0.25em] text-gold/70">
+                    Date fin
+                  </label>
+                  <input
+                    type="date"
+                    value={dateTo}
+                    onChange={(e) => setDateTo(e.target.value)}
+                    className="w-full border border-white/10 bg-black/20 px-4 py-4 text-sm outline-none focus:border-gold/50"
+                  />
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={handleGenerate}
+                disabled={generating}
+                className="inline-flex w-full items-center justify-center gap-3 border border-gold/40 px-5 py-4 text-sm uppercase tracking-[0.25em] text-gold hover:bg-gold hover:text-obsidian transition-colors disabled:opacity-50"
+              >
+                <Sparkles size={16} />
+                {generating ? "Génération..." : "Générer les instances"}
+              </button>
+
+              <div>
+                <label className="mb-2 block text-xs uppercase tracking-[0.25em] text-gold/70">
+                  Task Instance ID
+                </label>
+                <input
+                  value={taskInstanceId}
+                  onChange={(e) => setTaskInstanceId(e.target.value)}
+                  placeholder="UUID de l’instance"
+                  className="w-full border border-white/10 bg-black/20 px-4 py-4 text-sm outline-none focus:border-gold/50"
+                />
+              </div>
+
+              <button
+                type="button"
+                onClick={handleStart}
+                disabled={starting}
+                className="inline-flex w-full items-center justify-center gap-3 border border-white/10 px-5 py-4 text-sm uppercase tracking-[0.25em] text-white hover:border-gold/40 hover:text-gold transition-colors disabled:opacity-50"
+              >
+                <Play size={16} />
+                {starting ? "Démarrage..." : "Démarrer l’exécution"}
+              </button>
+
+              <div>
+                <label className="mb-2 block text-xs uppercase tracking-[0.25em] text-gold/70">
+                  Task Execution ID
+                </label>
+                <input
+                  value={taskExecutionId}
+                  onChange={(e) => setTaskExecutionId(e.target.value)}
+                  placeholder="UUID de l’exécution"
                   className="w-full border border-white/10 bg-black/20 px-4 py-4 text-sm outline-none focus:border-gold/50"
                 />
               </div>
 
               <div>
-                <label className="mb-2 block text-xs uppercase tracking-[0.25em] text-alabaster/60">
-                  Durée (min)
+                <label className="mb-2 block text-xs uppercase tracking-[0.25em] text-gold/70">
+                  Note de preuve
                 </label>
                 <input
-                  type="number"
-                  value={durationMin}
-                  onChange={(e) => setDurationMin(e.target.value)}
-                  placeholder="20"
+                  value={proofNote}
+                  onChange={(e) => setProofNote(e.target.value)}
+                  placeholder="Photo prise / tâche terminée"
                   className="w-full border border-white/10 bg-black/20 px-4 py-4 text-sm outline-none focus:border-gold/50"
                 />
               </div>
 
-              <div className="md:col-span-2">
-                <button
-                  type="submit"
-                  disabled={!canCreate || creating}
-                  className="flex items-center justify-center gap-3 bg-gold px-6 py-4 text-sm font-medium uppercase tracking-[0.25em] text-obsidian transition hover:opacity-90 disabled:opacity-50"
-                >
-                  <Save size={18} />
-                  {creating ? "Création..." : "Créer la tâche"}
-                </button>
-              </div>
-            </form>
+              <button
+                type="button"
+                onClick={handleComplete}
+                disabled={completing}
+                className="inline-flex w-full items-center justify-center gap-3 border border-emerald-500/40 px-5 py-4 text-sm uppercase tracking-[0.25em] text-emerald-300 hover:bg-emerald-500 hover:text-obsidian transition-colors disabled:opacity-50"
+              >
+                <CheckCircle2 size={16} />
+                {completing ? "Clôture..." : "Clôturer l’exécution"}
+              </button>
 
-            <div className="mt-10 grid md:grid-cols-2 gap-6">
-              <div className="border border-white/10 bg-black/20 p-6">
-                <div className="flex items-center gap-3 mb-4">
-                  <Sparkles size={18} className="text-gold" />
-                  <h3 className="text-xl font-serif italic">Générer les instances</h3>
+              {(localMessage || error) && (
+                <div className="border border-gold/20 bg-gold/5 px-4 py-4 text-sm text-gold/90">
+                  {localMessage ?? error?.message}
                 </div>
+              )}
+            </div>
+          </section>
 
-                <div className="grid gap-4">
-                  <div>
-                    <label className="mb-2 block text-xs uppercase tracking-[0.25em] text-alabaster/60">
-                      Date début
-                    </label>
-                    <input
-                      type="date"
-                      value={dateFrom}
-                      onChange={(e) => setDateFrom(e.target.value)}
-                      className="w-full border border-white/10 bg-obsidian px-4 py-3 text-sm outline-none focus:border-gold/50"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="mb-2 block text-xs uppercase tracking-[0.25em] text-alabaster/60">
-                      Date fin
-                    </label>
-                    <input
-                      type="date"
-                      value={dateTo}
-                      onChange={(e) => setDateTo(e.target.value)}
-                      className="w-full border border-white/10 bg-obsidian px-4 py-3 text-sm outline-none focus:border-gold/50"
-                    />
-                  </div>
-
-                  <button
-                    type="button"
-                    onClick={handleGenerateInstances}
-                    disabled={generating || !lastCreatedTask?.task_id}
-                    className="flex items-center justify-center gap-3 border border-white/10 px-5 py-3 text-sm uppercase tracking-[0.25em] text-alabaster hover:border-gold/40 hover:text-gold transition-colors disabled:opacity-50"
-                  >
-                    <ClipboardCheck size={18} />
-                    {generating ? "Génération..." : "Générer les instances"}
-                  </button>
-                </div>
-              </div>
-
-              <div className="border border-white/10 bg-black/20 p-6">
-                <div className="flex items-center gap-3 mb-4">
-                  <Play size={18} className="text-gold" />
-                  <h3 className="text-xl font-serif italic">Exécution</h3>
-                </div>
-
-                <div className="grid gap-4">
-                  <div>
-                    <label className="mb-2 block text-xs uppercase tracking-[0.25em] text-alabaster/60">
-                      Task instance ID
-                    </label>
-                    <input
-                      type="text"
-                      value={taskInstanceId}
-                      onChange={(e) => setTaskInstanceId(e.target.value)}
-                      placeholder="UUID d'instance"
-                      className="w-full border border-white/10 bg-obsidian px-4 py-3 text-sm outline-none focus:border-gold/50"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="mb-2 block text-xs uppercase tracking-[0.25em] text-alabaster/60">
-                      Note de preuve
-                    </label>
-                    <input
-                      type="text"
-                      value={proofNote}
-                      onChange={(e) => setProofNote(e.target.value)}
-                      placeholder="Cuisine nettoyée, surfaces faites"
-                      className="w-full border border-white/10 bg-obsidian px-4 py-3 text-sm outline-none focus:border-gold/50"
-                    />
-                  </div>
-
-                  <div className="grid sm:grid-cols-2 gap-3">
-                    <button
-                      type="button"
-                      onClick={handleStartTask}
-                      disabled={starting || !taskInstanceId.trim()}
-                      className="flex items-center justify-center gap-3 border border-white/10 px-5 py-3 text-sm uppercase tracking-[0.25em] text-alabaster hover:border-gold/40 hover:text-gold transition-colors disabled:opacity-50"
-                    >
-                      <Play size={18} />
-                      {starting ? "Démarrage..." : "Démarrer"}
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={handleCompleteTask}
-                      disabled={completing || !taskInstanceId.trim()}
-                      className="flex items-center justify-center gap-3 bg-gold px-5 py-3 text-sm font-medium uppercase tracking-[0.25em] text-obsidian transition hover:opacity-90 disabled:opacity-50"
-                    >
-                      <CheckCircle2 size={18} />
-                      {completing ? "Clôture..." : "Terminer"}
-                    </button>
-                  </div>
-                </div>
-              </div>
+          <aside className="border border-white/10 bg-white/[0.03] p-6">
+            <div className="mb-6 flex items-center gap-3 text-gold">
+              <ClipboardCheck size={18} />
+              <span className="text-xs uppercase tracking-[0.3em]">
+                Derniers résultats
+              </span>
             </div>
 
-            {(localMessage || error || lastCreatedTask || lastGenerated || lastStarted || lastCompleted) && (
-              <div className="mt-8 border border-white/10 bg-black/20 p-4 text-sm text-alabaster/75">
-                {localMessage ??
-                  error?.message ??
-                  (lastCreatedTask ? `Tâche créée : ${lastCreatedTask.title}` : null) ??
-                  (lastGenerated ? `Instances générées : ${lastGenerated.generated_count}` : null) ??
-                  (lastStarted ? `Tâche démarrée : ${lastStarted.execution_id}` : null) ??
-                  (lastCompleted ? `Tâche terminée : ${lastCompleted.run_status}` : null)}
+            <div className="space-y-4 text-sm leading-7 text-white/70">
+              <div>
+                <span className="text-gold">Dernière tâche :</span>{" "}
+                {lastCreatedTask?.task_id ?? "—"}
               </div>
-            )}
-          </div>
-
-          <aside className="border border-white/10 bg-white/5 p-8">
-            <p className="text-xs uppercase tracking-[0.3em] text-gold/80">Contexte actif</p>
-
-            <div className="mt-6 space-y-4 text-sm">
-              <div className="border border-white/10 bg-black/20 p-4">
-                <span className="text-alabaster/50">Email :</span>
-                <div className="mt-1 text-alabaster">{sessionEmail ?? "—"}</div>
+              <div>
+                <span className="text-gold">Instances générées :</span>{" "}
+                {lastGenerated?.generated_count ?? 0}
               </div>
-
-              <div className="border border-white/10 bg-black/20 p-4">
-                <span className="text-alabaster/50">Foyer :</span>
-                <div className="mt-1 text-alabaster">{activeMembership?.household_name ?? "—"}</div>
+              <div>
+                <span className="text-gold">Dernière exécution :</span>{" "}
+                {lastStarted?.task_execution_id ?? "—"}
               </div>
-
-              <div className="border border-white/10 bg-black/20 p-4">
-                <span className="text-alabaster/50">Rôle :</span>
-                <div className="mt-1 text-alabaster">{activeMembership?.role ?? "—"}</div>
-              </div>
-
-              <div className="border border-white/10 bg-black/20 p-4">
-                <span className="text-alabaster/50">Super Admin :</span>
-                <div className="mt-1 text-alabaster">{bootstrap?.is_super_admin ? "Oui" : "Non"}</div>
-              </div>
-            </div>
-
-            <div className="mt-8 space-y-4">
-              <div className="border border-gold/20 bg-gold/5 p-4 text-sm text-alabaster/75">
-                <div className="flex items-center gap-3">
-                  <House size={18} className="text-gold" />
-                  <span>Les tâches structurent l’exécution concrète du foyer.</span>
-                </div>
-              </div>
-
-              <div className="border border-white/10 bg-black/20 p-4">
-                <div className="flex items-center gap-3">
-                  <ShieldCheck size={18} className="text-gold" />
-                  <span className="text-sm">RPC : app.rpc_task_create</span>
-                </div>
-              </div>
-
-              <div className="border border-white/10 bg-black/20 p-4">
-                <div className="flex items-center gap-3">
-                  <ShieldCheck size={18} className="text-gold" />
-                  <span className="text-sm">RPC : app.rpc_task_generate_instances</span>
-                </div>
-              </div>
-
-              <div className="border border-white/10 bg-black/20 p-4">
-                <div className="flex items-center gap-3">
-                  <ShieldCheck size={18} className="text-gold" />
-                  <span className="text-sm">RPC : app.rpc_task_start / rpc_task_done_v2</span>
-                </div>
+              <div>
+                <span className="text-gold">Dernier statut :</span>{" "}
+                {lastCompleted?.status ?? "—"}
               </div>
             </div>
           </aside>
-        </section>
-      </main>
+        </div>
+      </div>
     </div>
   );
 }

@@ -1,16 +1,16 @@
 import { useCallback, useState } from "react";
-import { toDomyliError, type DomyliAppError } from "../lib/errors";
+
+import { toDomyliError, type DomyliAppError } from "@/src/lib/errors";
 import {
   createTask,
   generateTaskInstances,
   startTask,
-  doneTaskV2,
-  type TaskCreateInput,
+  completeTask,
   type TaskCreateOutput,
   type TaskGenerateInstancesOutput,
   type TaskStartOutput,
-  type TaskDoneV2Output,
-} from "../services/tasks/taskService";
+  type TaskDoneOutput,
+} from "@/src/services/tasks/taskService";
 
 type TasksState = {
   creating: boolean;
@@ -21,7 +21,7 @@ type TasksState = {
   lastCreatedTask: TaskCreateOutput | null;
   lastGenerated: TaskGenerateInstancesOutput | null;
   lastStarted: TaskStartOutput | null;
-  lastCompleted: TaskDoneV2Output | null;
+  lastCompleted: TaskDoneOutput | null;
 };
 
 const initialState: TasksState = {
@@ -36,18 +36,28 @@ const initialState: TasksState = {
   lastCompleted: null,
 };
 
-function makeIdempotencyKey(prefix: string) {
-  return `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
-}
-
 export function useTasks() {
-  const [state, setState] = useState<TasksState>(initialState);
+  const [state, setState] = useState(initialState);
 
-  const saveTask = useCallback(async (payload: TaskCreateInput) => {
-    setState((prev) => ({ ...prev, creating: true, error: null }));
+  const saveTask = useCallback(async (payload: {
+    title: string;
+    description?: string | null;
+    effortPoints?: number | null;
+    durationMin?: number | null;
+  }) => {
+    setState((prev) => ({
+      ...prev,
+      creating: true,
+      error: null,
+    }));
 
     try {
-      const result = await createTask(payload);
+      const result = await createTask({
+        p_title: payload.title,
+        p_description: payload.description ?? null,
+        p_effort_points: payload.effortPoints ?? null,
+        p_duration_min: payload.durationMin ?? null,
+      });
 
       setState((prev) => ({
         ...prev,
@@ -58,92 +68,99 @@ export function useTasks() {
       return result;
     } catch (error) {
       const normalized = toDomyliError(error);
+
       setState((prev) => ({
         ...prev,
         creating: false,
         error: normalized,
       }));
+
       throw normalized;
     }
   }, []);
 
-  const generateInstances = useCallback(
-    async (payload: { householdId: string; taskId: string; dateFrom: string; dateTo: string }) => {
-      setState((prev) => ({ ...prev, generating: true, error: null }));
+  const generateInstances = useCallback(async (
+    taskId: string,
+    dateFrom: string,
+    dateTo: string
+  ) => {
+    setState((prev) => ({
+      ...prev,
+      generating: true,
+      error: null,
+    }));
 
-      try {
-        const result = await generateTaskInstances({
-          p_household_id: payload.householdId,
-          p_task_id: payload.taskId,
-          p_date_from: payload.dateFrom,
-          p_date_to: payload.dateTo,
-        });
+    try {
+      const result = await generateTaskInstances({
+        p_task_id: taskId,
+        p_date_from: dateFrom,
+        p_date_to: dateTo,
+      });
 
-        setState((prev) => ({
-          ...prev,
-          generating: false,
-          lastGenerated: result,
-        }));
+      setState((prev) => ({
+        ...prev,
+        generating: false,
+        lastGenerated: result,
+      }));
 
-        return result;
-      } catch (error) {
-        const normalized = toDomyliError(error);
-        setState((prev) => ({
-          ...prev,
-          generating: false,
-          error: normalized,
-        }));
-        throw normalized;
-      }
-    },
-    []
-  );
+      return result;
+    } catch (error) {
+      const normalized = toDomyliError(error);
 
-  const startTaskExecution = useCallback(
-    async (payload: { householdId: string; taskInstanceId: string }) => {
-      setState((prev) => ({ ...prev, starting: true, error: null }));
+      setState((prev) => ({
+        ...prev,
+        generating: false,
+        error: normalized,
+      }));
 
-      try {
-        const result = await startTask({
-          p_household_id: payload.householdId,
-          p_task_instance_id: payload.taskInstanceId,
-          p_idempotency_key: makeIdempotencyKey("task_start"),
-        });
+      throw normalized;
+    }
+  }, []);
 
-        setState((prev) => ({
-          ...prev,
-          starting: false,
-          lastStarted: result,
-        }));
+  const startTaskExecution = useCallback(async (taskInstanceId: string) => {
+    setState((prev) => ({
+      ...prev,
+      starting: true,
+      error: null,
+    }));
 
-        return result;
-      } catch (error) {
-        const normalized = toDomyliError(error);
-        setState((prev) => ({
-          ...prev,
-          starting: false,
-          error: normalized,
-        }));
-        throw normalized;
-      }
-    },
-    []
-  );
+    try {
+      const result = await startTask({
+        p_task_instance_id: taskInstanceId,
+      });
+
+      setState((prev) => ({
+        ...prev,
+        starting: false,
+        lastStarted: result,
+      }));
+
+      return result;
+    } catch (error) {
+      const normalized = toDomyliError(error);
+
+      setState((prev) => ({
+        ...prev,
+        starting: false,
+        error: normalized,
+      }));
+
+      throw normalized;
+    }
+  }, []);
 
   const completeTaskExecution = useCallback(
-    async (payload: {
-      householdId: string;
-      taskInstanceId: string;
-      proofNote?: string | null;
-    }) => {
-      setState((prev) => ({ ...prev, completing: true, error: null }));
+    async (taskExecutionId: string, proofNote?: string | null) => {
+      setState((prev) => ({
+        ...prev,
+        completing: true,
+        error: null,
+      }));
 
       try {
-        const result = await doneTaskV2({
-          p_household_id: payload.householdId,
-          p_task_instance_id: payload.taskInstanceId,
-          p_idempotency_key: makeIdempotencyKey("task_done"),
-          p_proof_note: payload.proofNote ?? null,
+        const result = await completeTask({
+          p_task_execution_id: taskExecutionId,
+          p_proof_note: proofNote ?? null,
         });
 
         setState((prev) => ({
@@ -155,11 +172,13 @@ export function useTasks() {
         return result;
       } catch (error) {
         const normalized = toDomyliError(error);
+
         setState((prev) => ({
           ...prev,
           completing: false,
           error: normalized,
         }));
+
         throw normalized;
       }
     },

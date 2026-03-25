@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useState } from "react";
-import { toDomyliError, type DomyliAppError } from "../lib/errors";
+
+import { toDomyliError, type DomyliAppError } from "@/src/lib/errors";
 import {
   getTeamCapacity,
   setMemberCapacityDaily,
   type TeamCapacityOutput,
   type CapacitySetMemberDailyOutput,
-} from "../services/capacity/capacityService";
+} from "@/src/services/capacity/capacityService";
 
 type CapacityState = {
   loading: boolean;
@@ -24,7 +25,7 @@ const initialState: CapacityState = {
 };
 
 export function useCapacity(day: string) {
-  const [state, setState] = useState<CapacityState>(initialState);
+  const [state, setState] = useState(initialState);
 
   const refresh = useCallback(async () => {
     setState((prev) => ({
@@ -59,11 +60,15 @@ export function useCapacity(day: string) {
   }, [day]);
 
   useEffect(() => {
-    refresh();
+    void refresh();
   }, [refresh]);
 
   const saveMemberCapacity = useCallback(
-    async (memberUserId: string, capacityPointsDaily: number, reason?: string | null) => {
+    async (
+      memberUserId: string,
+      capacityPointsDaily: number,
+      reason?: string | null
+    ) => {
       setState((prev) => ({
         ...prev,
         saving: true,
