@@ -46,9 +46,7 @@ type RawTodayLoadFeedItem = {
 export async function getTodayHealth(
   payload: TodayHealthInput
 ): Promise<TodayHealthOutput> {
-  const rawResult = await callRpc<
-    TodayHealthInput,
-    RawTodayHealthOutput | RawTodayHealthOutput[]
+  const rawResult = await callRpc<RawTodayHealthOutput | RawTodayHealthOutput[]
   >("rpc_today_health", payload);
 
   const raw = unwrapRpcRow(rawResult);
@@ -69,9 +67,7 @@ export async function getTodayHealth(
 export async function getTodayLoadFeed(
   payload: TodayLoadFeedInput
 ): Promise<TodayLoadFeedItem[]> {
-  const rawResult = await callRpc<
-    TodayLoadFeedInput,
-    RawTodayLoadFeedItem[] | RawTodayLoadFeedItem | null
+  const rawResult = await callRpc<RawTodayLoadFeedItem[] | RawTodayLoadFeedItem | null
   >("rpc_today_load_feed", payload);
 
   console.log("DOMYLI status rpc_today_load_feed raw =>", rawResult);

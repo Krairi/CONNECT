@@ -36,7 +36,7 @@ export type ToolReleaseInput = {
 };
 
 export async function upsertTool(payload: ToolUpsertInput): Promise<ToolUpsertOutput> {
-  const rawResult = await callRpc<ToolUpsertInput, RawToolUpsertOutput>("rpc_tool_upsert", {
+  const rawResult = await callRpc<RawToolUpsertOutput>("rpc_tool_upsert", {
     p_tool_id: payload.p_tool_id ?? null,
     p_name: payload.p_name,
     p_category: payload.p_category ?? null,
@@ -59,7 +59,7 @@ export async function upsertTool(payload: ToolUpsertInput): Promise<ToolUpsertOu
 }
 
 export async function reserveTool(payload: ToolReserveInput): Promise<string> {
-  const rawResult = await callRpc<ToolReserveInput, string>("rpc_tool_reserve", {
+  const rawResult = await callRpc<string>("rpc_tool_reserve", {
     p_tool_asset_id: payload.p_tool_asset_id,
     p_starts_at: payload.p_starts_at,
     p_ends_at: payload.p_ends_at,
@@ -73,7 +73,7 @@ export async function reserveTool(payload: ToolReserveInput): Promise<string> {
 }
 
 export async function releaseTool(payload: ToolReleaseInput): Promise<string> {
-  const rawResult = await callRpc<ToolReleaseInput, string>("rpc_tool_release", {
+  const rawResult = await callRpc<string>("rpc_tool_release", {
     p_reservation_id: payload.p_reservation_id,
     p_status: payload.p_status ?? "RELEASED",
   });

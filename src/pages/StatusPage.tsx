@@ -2,15 +2,17 @@ import {
   AlertTriangle,
   ArrowLeft,
   Clock3,
+  ListTodo,
   Package,
   RefreshCw,
   ShieldCheck,
   Utensils,
-  ListTodo,
 } from "lucide-react";
-import { useDomyliConnection } from "../hooks/useDomyliConnection";
-import { useDashboard } from "../hooks/useDashboard";
-import { navigateTo } from "../lib/navigation";
+import { useNavigate } from "react-router-dom";
+
+import { useAuth } from "@/src/providers/AuthProvider";
+import { useDashboard } from "@/src/hooks/useDashboard";
+import { ROUTES } from "@/src/constants/routes";
 
 function computeGlobalStatus(input: {
   inventoryLowStock: number;
@@ -38,6 +40,8 @@ function computeGlobalStatus(input: {
 }
 
 export default function StatusPage() {
+  const navigate = useNavigate();
+
   const {
     sessionEmail,
     activeMembership,
@@ -45,16 +49,21 @@ export default function StatusPage() {
     isAuthenticated,
     hasHousehold,
     authLoading,
-  } = useDomyliConnection();
+    bootstrapLoading,
+  } = useAuth();
 
   const { loading, error, health, feed, refresh } = useDashboard();
 
-  if (authLoading) {
+  if (authLoading || bootstrapLoading) {
     return (
-      <div className="min-h-screen bg-obsidian text-alabaster flex items-center justify-center px-6">
-        <div className="text-center">
-          <p className="text-xs uppercase tracking-[0.3em] text-gold/80">DOMYLI</p>
-          <h1 className="mt-4 text-3xl font-serif italic">Chargement du statut...</h1>
+      <div className="min-h-screen bg-obsidian text-alabaster px-6 py-16">
+        <div className="mx-auto max-w-5xl">
+          <div className="text-xs uppercase tracking-[0.35em] text-gold">
+            DOMYLI
+          </div>
+          <h1 className="mt-4 text-4xl font-semibold">
+            Chargement du statut...
+          </h1>
         </div>
       </div>
     );
@@ -62,15 +71,19 @@ export default function StatusPage() {
 
   if (!isAuthenticated || !hasHousehold) {
     return (
-      <div className="min-h-screen bg-obsidian text-alabaster flex items-center justify-center px-6">
-        <div className="max-w-xl w-full border border-white/10 bg-white/5 p-8">
-          <p className="text-xs uppercase tracking-[0.3em] text-gold/80">DOMYLI</p>
-          <h1 className="mt-4 text-3xl font-serif italic">Foyer requis</h1>
-          <p className="mt-4 text-alabaster/70">
-            Il faut une session authentifiée et un foyer actif pour accéder au status.
+      <div className="min-h-screen bg-obsidian text-alabaster px-6 py-16">
+        <div className="mx-auto max-w-4xl">
+          <div className="text-xs uppercase tracking-[0.35em] text-gold">
+            DOMYLI
+          </div>
+          <h1 className="mt-4 text-4xl font-semibold">Foyer requis</h1>
+          <p className="mt-5 max-w-2xl text-alabaster/70 leading-8">
+            Il faut une session authentifiée et un foyer actif pour accéder au
+            status.
           </p>
           <button
-            onClick={() => navigateTo("/")}
+            type="button"
+            onClick={() => navigate(ROUTES.HOME)}
             className="mt-8 border border-gold/40 px-6 py-3 text-sm uppercase tracking-[0.25em] text-gold hover:bg-gold hover:text-obsidian transition-colors"
           >
             Retour à l’accueil
@@ -105,213 +118,294 @@ export default function StatusPage() {
   ].filter((item) => item.show);
 
   return (
-    <div className="min-h-screen bg-obsidian text-alabaster">
-      <header className="border-b border-white/5 glass">
-        <div className="max-w-7xl mx-auto px-6 h-20 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <button
-              onClick={() => navigateTo("/dashboard")}
-              className="w-10 h-10 border border-white/10 flex items-center justify-center hover:border-gold/40 transition-colors"
-              aria-label="Retour"
-            >
-              <ArrowLeft size={18} className="text-gold" />
-            </button>
-            <div>
-              <p className="text-[10px] uppercase tracking-[0.3em] text-gold/80">DOMYLI</p>
-              <h1 className="text-2xl font-serif italic">Status</h1>
+    <div className="min-h-screen bg-obsidian text-alabaster px-6 py-10">
+      <div className="mx-auto max-w-6xl">
+        <div className="flex items-start gap-4">
+          <button
+            type="button"
+            onClick={() => navigate(ROUTES.DASHBOARD)}
+            className="mt-1 h-10 w-10 border border-white/10 flex items-center justify-center hover:border-gold/40 transition-colors"
+            aria-label="Retour"
+          >
+            <ArrowLeft size={18} />
+          </button>
+
+          <div>
+            <div className="text-xs uppercase tracking-[0.35em] text-gold">
+              DOMYLI
             </div>
-          </div>
-
-          <div className="flex items-center gap-3">
-            <button
-              onClick={refresh}
-              className="border border-white/10 px-5 py-3 text-xs uppercase tracking-[0.25em] text-alabaster hover:border-gold/40 hover:text-gold transition-colors flex items-center gap-2"
-            >
-              <RefreshCw size={14} />
-              Rafraîchir
-            </button>
-
-            <button
-              onClick={() => navigateTo("/shopping")}
-              className="border border-white/10 px-5 py-3 text-xs uppercase tracking-[0.25em] text-alabaster hover:border-gold/40 hover:text-gold transition-colors"
-            >
-              Shopping
-            </button>
-
-            <button
-              onClick={() => navigateTo("/dashboard")}
-              className="border border-gold/40 px-5 py-3 text-xs uppercase tracking-[0.25em] text-gold hover:bg-gold hover:text-obsidian transition-colors"
-            >
-              Dashboard
-            </button>
+            <h1 className="mt-2 text-4xl font-semibold">Status</h1>
+            <p className="mt-3 max-w-2xl text-alabaster/70 leading-8">
+              Centre de pilotage transverse : stock, alertes, shopping, repas,
+              tâches et charge.
+            </p>
           </div>
         </div>
-      </header>
 
-      <main className="max-w-7xl mx-auto px-6 py-12">
-        <section className="grid lg:grid-cols-4 gap-6">
-          <div className="border border-white/10 bg-white/5 p-6">
-            <div className="w-12 h-12 border border-gold/20 flex items-center justify-center mb-4">
-              <Package className="text-gold" size={24} />
+        <div className="mt-8 flex flex-wrap gap-3">
+          <button
+            type="button"
+            onClick={() => void refresh()}
+            className="border border-gold/40 px-5 py-3 text-xs uppercase tracking-[0.25em] text-gold hover:bg-gold hover:text-obsidian transition-colors"
+          >
+            <span className="inline-flex items-center gap-2">
+              <RefreshCw size={14} className={loading ? "animate-spin" : ""} />
+              Rafraîchir
+            </span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => navigate(ROUTES.SHOPPING)}
+            className="border border-white/10 px-5 py-3 text-xs uppercase tracking-[0.25em] text-alabaster hover:border-gold/40 hover:text-gold transition-colors"
+          >
+            Shopping
+          </button>
+
+          <button
+            type="button"
+            onClick={() => navigate(ROUTES.DASHBOARD)}
+            className="border border-gold/40 px-5 py-3 text-xs uppercase tracking-[0.25em] text-gold hover:bg-gold hover:text-obsidian transition-colors"
+          >
+            Dashboard
+          </button>
+        </div>
+
+        <div className="mt-10 grid gap-6 md:grid-cols-4">
+          <article className="glass metallic-border rounded-[1.75rem] p-6">
+            <div className="inline-flex rounded-xl border border-gold/20 p-3 text-gold">
+              <Package size={18} />
             </div>
-            <div className="text-sm uppercase tracking-[0.25em] text-alabaster/50">Stock bas</div>
-            <div className="mt-3 text-3xl font-serif italic">{health?.inventory_low_stock_count ?? 0}</div>
-          </div>
-
-          <div className="border border-white/10 bg-white/5 p-6">
-            <div className="w-12 h-12 border border-gold/20 flex items-center justify-center mb-4">
-              <AlertTriangle className="text-gold" size={24} />
+            <div className="mt-4 text-xs uppercase tracking-[0.25em] text-gold/80">
+              Stock bas
             </div>
-            <div className="text-sm uppercase tracking-[0.25em] text-alabaster/50">Alertes ouvertes</div>
-            <div className="mt-3 text-3xl font-serif italic">{health?.open_alert_count ?? 0}</div>
-          </div>
-
-          <div className="border border-white/10 bg-white/5 p-6">
-            <div className="w-12 h-12 border border-gold/20 flex items-center justify-center mb-4">
-              <Utensils className="text-gold" size={24} />
+            <div className="mt-3 text-3xl font-semibold text-alabaster">
+              {health?.inventory_low_stock_count ?? 0}
             </div>
-            <div className="text-sm uppercase tracking-[0.25em] text-alabaster/50">Repas du jour</div>
-            <div className="mt-3 text-3xl font-serif italic">{health?.today_meal_count ?? 0}</div>
-          </div>
+          </article>
 
-          <div className="border border-white/10 bg-white/5 p-6">
-            <div className="w-12 h-12 border border-gold/20 flex items-center justify-center mb-4">
-              <ListTodo className="text-gold" size={24} />
+          <article className="glass metallic-border rounded-[1.75rem] p-6">
+            <div className="inline-flex rounded-xl border border-gold/20 p-3 text-gold">
+              <AlertTriangle size={18} />
             </div>
-            <div className="text-sm uppercase tracking-[0.25em] text-alabaster/50">Tâches du jour</div>
-            <div className="mt-3 text-3xl font-serif italic">{health?.today_task_count ?? 0}</div>
-          </div>
-        </section>
+            <div className="mt-4 text-xs uppercase tracking-[0.25em] text-gold/80">
+              Alertes ouvertes
+            </div>
+            <div className="mt-3 text-3xl font-semibold text-alabaster">
+              {health?.open_alert_count ?? 0}
+            </div>
+          </article>
 
-        <section className="grid lg:grid-cols-3 gap-8 mt-10">
-          <div className="lg:col-span-2 border border-white/10 bg-white/5 p-8">
-            <p className="text-xs uppercase tracking-[0.3em] text-gold/80">Charge opérationnelle</p>
-            <h2 className="mt-4 text-3xl font-serif italic">Charge par membre</h2>
+          <article className="glass metallic-border rounded-[1.75rem] p-6">
+            <div className="inline-flex rounded-xl border border-gold/20 p-3 text-gold">
+              <Utensils size={18} />
+            </div>
+            <div className="mt-4 text-xs uppercase tracking-[0.25em] text-gold/80">
+              Repas du jour
+            </div>
+            <div className="mt-3 text-3xl font-semibold text-alabaster">
+              {health?.today_meal_count ?? 0}
+            </div>
+          </article>
+
+          <article className="glass metallic-border rounded-[1.75rem] p-6">
+            <div className="inline-flex rounded-xl border border-gold/20 p-3 text-gold">
+              <ListTodo size={18} />
+            </div>
+            <div className="mt-4 text-xs uppercase tracking-[0.25em] text-gold/80">
+              Tâches du jour
+            </div>
+            <div className="mt-3 text-3xl font-semibold text-alabaster">
+              {health?.today_task_count ?? 0}
+            </div>
+          </article>
+        </div>
+
+        <div className="mt-10 grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
+          <section className="glass metallic-border rounded-[2rem] p-6">
+            <div className="inline-flex items-center gap-3 text-gold">
+              <Clock3 size={18} />
+              <span className="text-xs uppercase tracking-[0.3em]">
+                Charge opérationnelle
+              </span>
+            </div>
+
+            <h2 className="mt-5 text-2xl font-semibold text-alabaster">
+              Charge par membre
+            </h2>
 
             {loading && (
-              <div className="mt-6 border border-white/10 bg-black/20 p-4 text-sm text-alabaster/70">
+              <div className="mt-8 rounded-2xl border border-white/8 bg-black/20 px-4 py-4 text-sm text-alabaster/65">
                 Chargement du flux DOMYLI...
               </div>
             )}
 
             {error && (
-              <div className="mt-6 border border-white/10 bg-black/20 p-4 text-sm text-alabaster/70">
+              <div className="mt-8 border border-gold/20 bg-gold/5 px-4 py-4 text-sm text-gold">
                 {error.message}
               </div>
             )}
 
-            {!loading && !error && feed && feed.members.length === 0 && (
-              <div className="mt-6 border border-white/10 bg-black/20 p-4 text-sm text-alabaster/70">
+            {!loading && !error && feed.members.length === 0 && (
+              <div className="mt-8 rounded-2xl border border-white/8 bg-black/20 px-4 py-4 text-sm text-alabaster/65">
                 Aucun membre remonté pour la charge du jour.
               </div>
             )}
 
-            {!loading && !error && feed && feed.members.length > 0 && (
-              <div className="mt-6 grid gap-4">
+            {!loading && !error && feed.members.length > 0 && (
+              <div className="mt-8 space-y-4">
                 {feed.members.map((member) => (
-                  <div
+                  <article
                     key={member.user_id}
-                    className="border border-white/10 bg-black/20 p-4"
+                    className="rounded-2xl border border-white/8 bg-black/20 px-4 py-4"
                   >
-                    <div className="flex items-start justify-between gap-4">
+                    <div className="grid gap-4 md:grid-cols-4">
                       <div>
-                        <div className="text-xs uppercase tracking-[0.25em] text-gold/80">
-                          {member.role}
+                        <div className="text-xs uppercase tracking-[0.22em] text-gold/80">
+                          Rôle
                         </div>
-                        <div className="mt-2 text-lg font-serif italic">{member.user_id}</div>
-                        <div className="mt-2 text-sm text-alabaster/60">
-                          Capacité : {member.capacity_points_daily}
+                        <div className="mt-2 text-sm text-alabaster">
+                          {member.role}
                         </div>
                       </div>
 
-                      <div className="text-xs uppercase tracking-[0.25em] text-alabaster/50">
-                        Tâches : {member.assigned_task_count}
+                      <div>
+                        <div className="text-xs uppercase tracking-[0.22em] text-gold/80">
+                          User ID
+                        </div>
+                        <div className="mt-2 text-sm text-alabaster break-all">
+                          {member.user_id}
+                        </div>
+                      </div>
+
+                      <div>
+                        <div className="text-xs uppercase tracking-[0.22em] text-gold/80">
+                          Capacité
+                        </div>
+                        <div className="mt-2 text-sm text-alabaster">
+                          {member.capacity_points_daily}
+                        </div>
+                      </div>
+
+                      <div>
+                        <div className="text-xs uppercase tracking-[0.22em] text-gold/80">
+                          Tâches
+                        </div>
+                        <div className="mt-2 text-sm text-alabaster">
+                          {member.assigned_task_count}
+                        </div>
                       </div>
                     </div>
-                  </div>
+                  </article>
                 ))}
               </div>
             )}
-          </div>
+          </section>
 
-          <aside className="border border-white/10 bg-white/5 p-8">
-            <p className="text-xs uppercase tracking-[0.3em] text-gold/80">Pilotage</p>
+          <aside className="glass metallic-border rounded-[2rem] p-7">
+            <div className="inline-flex items-center gap-3 text-gold">
+              <ShieldCheck size={18} />
+              <span className="text-xs uppercase tracking-[0.3em]">
+                Pilotage
+              </span>
+            </div>
 
-            <div className="mt-6 border border-gold/20 bg-gold/5 p-4">
-              <div className="flex items-center gap-3">
-                <ShieldCheck size={18} className="text-gold" />
-                <div>
-                  <div className="text-sm uppercase tracking-[0.25em] text-gold/80">État global</div>
-                  <div className="mt-2 text-2xl font-serif italic">{globalStatus.label}</div>
-                  <div className="mt-2 text-sm text-alabaster/70">{globalStatus.description}</div>
+            <div className="mt-6 space-y-4">
+              <div className="rounded-2xl border border-white/8 bg-black/20 px-4 py-4">
+                <div className="text-xs uppercase tracking-[0.22em] text-gold/80">
+                  État global
+                </div>
+                <div className="mt-2 text-sm text-alabaster">
+                  {globalStatus.label}
+                </div>
+                <div className="mt-2 text-sm text-alabaster/60">
+                  {globalStatus.description}
+                </div>
+              </div>
+
+              <div className="rounded-2xl border border-white/8 bg-black/20 px-4 py-4">
+                <div className="text-xs uppercase tracking-[0.22em] text-gold/80">
+                  Foyer
+                </div>
+                <div className="mt-2 text-sm text-alabaster">
+                  {activeMembership?.household_name ?? "—"}
+                </div>
+              </div>
+
+              <div className="rounded-2xl border border-white/8 bg-black/20 px-4 py-4">
+                <div className="text-xs uppercase tracking-[0.22em] text-gold/80">
+                  Rôle
+                </div>
+                <div className="mt-2 text-sm text-alabaster">
+                  {activeMembership?.role ?? "—"}
+                </div>
+              </div>
+
+              <div className="rounded-2xl border border-white/8 bg-black/20 px-4 py-4">
+                <div className="text-xs uppercase tracking-[0.22em] text-gold/80">
+                  Jour observé
+                </div>
+                <div className="mt-2 text-sm text-alabaster">
+                  {health?.day ?? "—"}
+                </div>
+              </div>
+
+              <div className="rounded-2xl border border-white/8 bg-black/20 px-4 py-4">
+                <div className="text-xs uppercase tracking-[0.22em] text-gold/80">
+                  Super Admin
+                </div>
+                <div className="mt-2 text-sm text-alabaster">
+                  {bootstrap?.is_super_admin ? "Oui" : "Non"}
+                </div>
+              </div>
+
+              <div className="rounded-2xl border border-white/8 bg-black/20 px-4 py-4">
+                <div className="text-xs uppercase tracking-[0.22em] text-gold/80">
+                  Session
+                </div>
+                <div className="mt-2 text-sm text-alabaster">
+                  {sessionEmail ?? "—"}
                 </div>
               </div>
             </div>
 
-            <div className="mt-6 space-y-4 text-sm">
-              <div className="border border-white/10 bg-black/20 p-4">
-                <span className="text-alabaster/50">Foyer :</span>
-                <div className="mt-1 text-alabaster">{activeMembership?.household_name ?? "—"}</div>
-              </div>
-
-              <div className="border border-white/10 bg-black/20 p-4">
-                <span className="text-alabaster/50">Rôle :</span>
-                <div className="mt-1 text-alabaster">{activeMembership?.role ?? "—"}</div>
-              </div>
-
-              <div className="border border-white/10 bg-black/20 p-4">
-                <span className="text-alabaster/50">Jour observé :</span>
-                <div className="mt-1 text-alabaster">{health?.day ?? "—"}</div>
-              </div>
-
-              <div className="border border-white/10 bg-black/20 p-4">
-                <span className="text-alabaster/50">Super Admin :</span>
-                <div className="mt-1 text-alabaster">{bootstrap?.is_super_admin ? "Oui" : "Non"}</div>
-              </div>
-
-              <div className="border border-white/10 bg-black/20 p-4">
-                <span className="text-alabaster/50">Session :</span>
-                <div className="mt-1 text-alabaster">{sessionEmail ?? "—"}</div>
-              </div>
-            </div>
-
-            <div className="mt-8">
-              <div className="text-xs uppercase tracking-[0.3em] text-gold/80">Alertes prioritaires</div>
+            <div className="mt-8 border border-white/10 bg-black/20 p-6">
+              <h3 className="text-xl font-serif italic">Alertes prioritaires</h3>
 
               {alerts.length === 0 ? (
-                <div className="mt-4 border border-white/10 bg-black/20 p-4 text-sm text-alabaster/70">
+                <div className="mt-4 text-sm text-alabaster/70">
                   Aucune alerte prioritaire critique.
                 </div>
               ) : (
-                <div className="mt-4 grid gap-3">
+                <div className="mt-4 space-y-3">
                   {alerts.map((alert) => (
-                    <div key={alert.title} className="border border-white/10 bg-black/20 p-4">
-                      <div className="text-xs uppercase tracking-[0.25em] text-gold/80">
+                    <div
+                      key={alert.title}
+                      className="rounded-2xl border border-white/8 bg-black/20 px-4 py-4"
+                    >
+                      <div className="text-xs uppercase tracking-[0.22em] text-gold/80">
                         {alert.title}
                       </div>
-                      <div className="mt-2 text-2xl font-serif italic">{alert.value}</div>
+                      <div className="mt-2 text-sm text-alabaster">
+                        {alert.value}
+                      </div>
                     </div>
                   ))}
                 </div>
               )}
-            </div>
 
-            <div className="mt-8 border border-white/10 bg-black/20 p-4">
-              <div className="flex items-center gap-3">
-                <ShieldCheck size={18} className="text-gold" />
-                <span className="text-sm">RPC : app.rpc_today_health / app.rpc_today_load_feed</span>
+              <div className="mt-6 text-sm leading-8 text-alabaster/65">
+                RPC : <code>app.rpc_today_health</code> /{" "}
+                <code>app.rpc_today_load_feed</code>
               </div>
-            </div>
 
-            <div className="mt-4 border border-white/10 bg-black/20 p-4">
-              <div className="flex items-center gap-3">
-                <Clock3 size={18} className="text-gold" />
-                <span className="text-sm">Cette page sert de centre de pilotage transverse.</span>
+              <div className="mt-2 text-sm leading-8 text-alabaster/65">
+                Cette page sert de centre de pilotage transverse.
               </div>
             </div>
           </aside>
-        </section>
-      </main>
+        </div>
+      </div>
     </div>
   );
 }

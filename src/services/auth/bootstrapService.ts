@@ -34,7 +34,7 @@ type RawBootstrap = {
 };
 
 export async function userBootstrap(): Promise<RpcUserBootstrapOutput> {
-  const rawResult = await callRpc<Record<string, never>, RawBootstrap | RawBootstrap[]>(
+  const rawResult = await callRpc<RawBootstrap | RawBootstrap[]>(
     "rpc_user_bootstrap",
     {}
   );

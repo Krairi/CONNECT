@@ -1,91 +1,122 @@
-import { callRpc } from "../rpc";
+import { callRpc } from "@/src/services/rpc";
 
-export type MealType = "BREAKFAST" | "LUNCH" | "SNACK" | "DINNER" | string;
+export type MealType = "BREAKFAST" | "LUNCH" | "SNACK" | "DINNER";
 
-export type MealPlanCreateInput = {
-  p_planned_for: string;
-  p_meal_type: MealType;
-  p_profile_id?: string | null;
-  p_recipe_id?: string | null;
-  p_title?: string | null;
-  p_notes?: string | null;
-};
-
-export type MealSlotUpsertInput = {
-  p_meal_slot_id?: string | null;
-  p_planned_for: string;
-  p_meal_type: MealType;
-  p_profile_id?: string | null;
-  p_recipe_id?: string | null;
-  p_title?: string | null;
-  p_notes?: string | null;
-};
-
-export type MealConfirmInput = {
-  p_meal_slot_id: string;
-};
-
-export type MealConfirmOutput = {
-  household_id: string | null;
-  meal_slot_id: string | null;
+export type MealDraft = {
+  meal_slot_id: string;
+  planned_for: string;
+  meal_type: MealType;
+  profile_id: string | null;
+  recipe_id: string | null;
+  title: string | null;
+  notes: string | null;
   status: string | null;
-  mode: string | null;
 };
 
-type RawMealConfirmOutput = {
-  household_id?: string | null;
+type RawMealOutput = {
+  meal_slot_id?: string | null;
+  planned_for?: string | null;
+  meal_type?: MealType | null;
+  profile_id?: string | null;
+  recipe_id?: string | null;
+  title?: string | null;
+  notes?: string | null;
+  status?: string | null;
+};
+
+type RawConfirmOutput = {
   meal_slot_id?: string | null;
   status?: string | null;
-  mode?: string | null;
+  run_status?: string | null;
 };
 
-export async function createMealPlan(payload: MealPlanCreateInput): Promise<string> {
-  const rawResult = await callRpc<MealPlanCreateInput, string>("rpc_meal_plan_create", {
-    p_planned_for: payload.p_planned_for,
-    p_meal_type: payload.p_meal_type,
-    p_profile_id: payload.p_profile_id ?? null,
-    p_recipe_id: payload.p_recipe_id ?? null,
-    p_title: payload.p_title ?? null,
-    p_notes: payload.p_notes ?? null,
-  });
+export type MealConfirmResult = {
+  meal_slot_id: string | null;
+  status: string | null;
+};
 
-  console.log("DOMYLI rpc_meal_plan_create raw =>", rawResult);
+export type CreateMealInput = {
+  p_planned_for: string;
+  p_meal_type: MealType;
+  p_profile_id?: string | null;
+  p_recipe_id?: string | null;
+  p_title?: string | null;
+  p_notes?: string | null;
+};
 
-  return rawResult ?? "";
+export type UpdateMealInput = {
+  p_meal_slot_id: string;
+  p_planned_for: string;
+  p_meal_type: MealType;
+  p_profile_id?: string | null;
+  p_recipe_id?: string | null;
+  p_title?: string | null;
+  p_notes?: string | null;
+};
+
+function normalizeMeal(raw: RawMealOutput): MealDraft {
+  return {
+    meal_slot_id: raw.meal_slot_id ?? "",
+    planned_for: raw.planned_for ?? "",
+    meal_type: (raw.meal_type ?? "LUNCH") as MealType,
+    profile_id: raw.profile_id ?? null,
+    recipe_id: raw.recipe_id ?? null,
+    title: raw.title ?? null,
+    notes: raw.notes ?? null,
+    status: raw.status ?? null,
+  };
 }
 
-export async function upsertMealSlot(payload: MealSlotUpsertInput): Promise<string> {
-  const rawResult = await callRpc<MealSlotUpsertInput, string>("rpc_meal_slot_upsert", {
-    p_meal_slot_id: payload.p_meal_slot_id ?? null,
-    p_planned_for: payload.p_planned_for,
-    p_meal_type: payload.p_meal_type,
-    p_profile_id: payload.p_profile_id ?? null,
-    p_recipe_id: payload.p_recipe_id ?? null,
-    p_title: payload.p_title ?? null,
-    p_notes: payload.p_notes ?? null,
-  });
-
-  console.log("DOMYLI rpc_meal_slot_upsert raw =>", rawResult);
-
-  return rawResult ?? "";
-}
-
-export async function confirmMeal(payload: MealConfirmInput): Promise<MealConfirmOutput> {
-  const rawResult = await callRpc<MealConfirmInput, RawMealConfirmOutput>(
-    "rpc_meal_confirm_v3",
-    {
-      p_meal_slot_id: payload.p_meal_slot_id,
-    }
+export async function createMeal(
+  payload: CreateMealInput
+): Promise<string> {
+  const raw = await callRpc<RawMealOutput | null>(
+    "rpc_meal_slot_upsert",
+    payload,
+    { unwrap: true }
   );
 
-  console.log("DOMYLI rpc_meal_confirm_v3 raw =>", rawResult);
+  return raw?.meal_slot_id ?? "";
+}
 
-  const raw = rawResult ?? {};
+export async function updateMeal(
+  payload: UpdateMealInput
+): Promise<string> {
+  const raw = await callRpc<RawMealOutput | null>(
+    "rpc_meal_slot_upsert",
+    payload,
+    { unwrap: true }
+  );
+
+  return raw?.meal_slot_id ?? payload.p_meal_slot_id;
+}
+
+export async function confirmMealSlot(
+  mealSlotId: string
+): Promise<MealConfirmResult> {
+  const raw = await callRpc<RawConfirmOutput | null>(
+    "rpc_meal_confirm_v3",
+    { p_meal_slot_id: mealSlotId },
+    { unwrap: true }
+  );
 
   return {
-    household_id: raw.household_id ?? null,
-    meal_slot_id: raw.meal_slot_id ?? null,
-    status: raw.status ?? null,
-    mode: raw.mode ?? null,
+    meal_slot_id: raw?.meal_slot_id ?? mealSlotId,
+    status: raw?.status ?? raw?.run_status ?? "CONFIRMED",
   };
+}
+
+export function buildSessionMealDraft(
+  input: CreateMealInput & { meal_slot_id: string; status?: string | null }
+): MealDraft {
+  return normalizeMeal({
+    meal_slot_id: input.meal_slot_id,
+    planned_for: input.p_planned_for,
+    meal_type: input.p_meal_type,
+    profile_id: input.p_profile_id ?? null,
+    recipe_id: input.p_recipe_id ?? null,
+    title: input.p_title ?? null,
+    notes: input.p_notes ?? null,
+    status: input.status ?? "DRAFT",
+  });
 }

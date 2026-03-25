@@ -1,336 +1,218 @@
 import {
   ArrowLeft,
-  Activity,
-  Package,
-  Utensils,
-  RefreshCw,
-  CheckCircle2,
+  LayoutDashboard,
+  ShieldCheck,
+  Users,
+  House,
+  ChevronRight,
 } from "lucide-react";
-import DomyliPageGuard from "../components/DomyliPageGuard";
-import { useDomyliConnection } from "../hooks/useDomyliConnection";
-import { useDashboard } from "../hooks/useDashboard";
-import { navigateTo } from "../lib/navigation";
+import { useNavigate } from "react-router-dom";
+
+import { useAuth } from "@/src/providers/AuthProvider";
+import { ROUTES } from "@/src/constants/routes";
 
 export default function DashboardPage() {
-  return (
-    <DomyliPageGuard loadingTitle="Chargement du dashboard...">
-      <DashboardPageContent />
-    </DomyliPageGuard>
-  );
-}
+  const navigate = useNavigate();
 
-function DashboardPageContent() {
-  const { sessionEmail, activeMembership, bootstrap } = useDomyliConnection();
-  const { loading, error, health, feed, refresh } = useDashboard();
+  const {
+    sessionEmail,
+    bootstrap,
+    activeMembership,
+    isAuthenticated,
+    hasHousehold,
+    authLoading,
+    bootstrapLoading,
+  } = useAuth();
 
-  const cards = [
-    {
-      title: "Repas du jour",
-      value: String(health?.today_meal_count ?? 0),
-      icon: <Utensils className="text-gold" size={24} />,
-      text: "Nombre de repas planifiés aujourd’hui.",
-    },
-    {
-      title: "Tâches du jour",
-      value: String(health?.today_task_count ?? 0),
-      icon: <Activity className="text-gold" size={24} />,
-      text: "Nombre total de tâches prévues aujourd’hui.",
-    },
-    {
-      title: "Tâches terminées",
-      value: String(health?.today_task_done_count ?? 0),
-      icon: <CheckCircle2 className="text-gold" size={24} />,
-      text: "Tâches marquées DONE aujourd’hui.",
-    },
-    {
-      title: "Stock bas",
-      value: String(health?.inventory_low_stock_count ?? 0),
-      icon: <Package className="text-gold" size={24} />,
-      text: "Articles sous le seuil minimum.",
-    },
-  ];
+  if (authLoading || bootstrapLoading) {
+    return (
+      <div className="min-h-screen bg-obsidian text-alabaster px-6 py-16">
+        <div className="mx-auto max-w-5xl">
+          <div className="text-xs uppercase tracking-[0.35em] text-gold">
+            DOMYLI
+          </div>
+          <h1 className="mt-4 text-4xl font-semibold">
+            Chargement du dashboard...
+          </h1>
+          <p className="mt-4 max-w-2xl text-alabaster/70 leading-8">
+            Synchronisation du contexte foyer, session et gouvernance.
+          </p>
+        </div>
+      </div>
+    );
+  }
 
-  return (
-    <div className="min-h-screen bg-obsidian text-alabaster">
-      <header className="border-b border-white/5 glass">
-        <div className="max-w-7xl mx-auto px-6 h-20 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <button
-              onClick={() => navigateTo("/profiles")}
-              className="w-10 h-10 border border-white/10 flex items-center justify-center hover:border-gold/40 transition-colors"
-              aria-label="Retour"
-            >
-              <ArrowLeft size={18} className="text-gold" />
-            </button>
-
-            <div>
-              <p className="text-[10px] uppercase tracking-[0.3em] text-gold/80">
-                DOMYLI
-              </p>
-              <h1 className="text-2xl font-serif italic">Dashboard</h1>
-            </div>
+  if (!isAuthenticated || !hasHousehold) {
+    return (
+      <div className="min-h-screen bg-obsidian text-alabaster px-6 py-16">
+        <div className="mx-auto max-w-4xl">
+          <div className="text-xs uppercase tracking-[0.35em] text-gold">
+            DOMYLI
           </div>
 
-          <div className="flex items-center gap-3 flex-wrap justify-end">
-            <button
-              onClick={refresh}
-              className="border border-white/10 px-5 py-3 text-xs uppercase tracking-[0.25em] text-alabaster hover:border-gold/40 hover:text-gold transition-colors flex items-center gap-2"
-            >
-              <RefreshCw size={14} />
-              Rafraîchir
-            </button>
+          <h1 className="mt-4 text-4xl font-semibold">
+            Contexte insuffisant
+          </h1>
 
-            <button
-              onClick={() => navigateTo("/inventory")}
-              className="border border-white/10 px-5 py-3 text-xs uppercase tracking-[0.25em] text-alabaster hover:border-gold/40 hover:text-gold transition-colors"
-            >
-              Inventory
-            </button>
+          <p className="mt-5 max-w-2xl text-alabaster/70 leading-8">
+            Le dashboard minimum P0 nécessite une session authentifiée et un
+            foyer actif.
+          </p>
 
+          <div className="mt-8 flex flex-wrap gap-3">
             <button
-              onClick={() => navigateTo("/tasks")}
-              className="border border-white/10 px-5 py-3 text-xs uppercase tracking-[0.25em] text-alabaster hover:border-gold/40 hover:text-gold transition-colors"
+              type="button"
+              onClick={() => navigate(ROUTES.HOME)}
+              className="border border-gold/40 px-6 py-3 text-sm uppercase tracking-[0.25em] text-gold hover:bg-gold hover:text-obsidian transition-colors"
             >
-              Tasks
-            </button>
-
-            <button
-              onClick={() => navigateTo("/tools")}
-              className="border border-white/10 px-5 py-3 text-xs uppercase tracking-[0.25em] text-alabaster hover:border-gold/40 hover:text-gold transition-colors"
-            >
-              Tools
-            </button>
-
-            <button
-              onClick={() => navigateTo("/capacity")}
-              className="border border-white/10 px-5 py-3 text-xs uppercase tracking-[0.25em] text-alabaster hover:border-gold/40 hover:text-gold transition-colors"
-            >
-              Capacity
-            </button>
-
-            <button
-              onClick={() => navigateTo("/meals")}
-              className="border border-white/10 px-5 py-3 text-xs uppercase tracking-[0.25em] text-alabaster hover:border-gold/40 hover:text-gold transition-colors"
-            >
-              Meals
-            </button>
-
-            <button
-              onClick={() => navigateTo("/shopping")}
-              className="border border-white/10 px-5 py-3 text-xs uppercase tracking-[0.25em] text-alabaster hover:border-gold/40 hover:text-gold transition-colors"
-            >
-              Shopping
-            </button>
-
-            <button
-              onClick={() => navigateTo("/status")}
-              className="border border-white/10 px-5 py-3 text-xs uppercase tracking-[0.25em] text-alabaster hover:border-gold/40 hover:text-gold transition-colors"
-            >
-              Status
-            </button>
-
-            <button
-              onClick={() => navigateTo("/profiles")}
-              className="border border-gold/40 px-5 py-3 text-xs uppercase tracking-[0.25em] text-gold hover:bg-gold hover:text-obsidian transition-colors"
-            >
-              Profils
+              Retour à l’accueil
             </button>
           </div>
         </div>
-      </header>
+      </div>
+    );
+  }
 
-      <main className="max-w-7xl mx-auto px-6 py-12">
-        <section className="grid lg:grid-cols-4 gap-6">
-          {cards.map((card) => (
-            <div key={card.title} className="border border-white/10 bg-white/5 p-6">
-              <div className="w-12 h-12 border border-gold/20 flex items-center justify-center mb-4">
-                {card.icon}
-              </div>
+  return (
+    <div className="min-h-screen bg-obsidian text-alabaster px-6 py-10">
+      <div className="mx-auto max-w-6xl">
+        <div className="flex items-start gap-4">
+          <button
+            type="button"
+            onClick={() => navigate(ROUTES.HOME)}
+            className="mt-1 h-10 w-10 border border-white/10 flex items-center justify-center hover:border-gold/40 transition-colors"
+            aria-label="Retour"
+          >
+            <ArrowLeft size={18} />
+          </button>
 
-              <div className="text-sm uppercase tracking-[0.25em] text-alabaster/50">
-                {card.title}
-              </div>
-
-              <div className="mt-3 text-3xl font-serif italic">{card.value}</div>
-
-              <p className="mt-4 text-sm text-alabaster/65">{card.text}</p>
+          <div>
+            <div className="text-xs uppercase tracking-[0.35em] text-gold">
+              DOMYLI
             </div>
-          ))}
-        </section>
-
-        <section className="grid lg:grid-cols-2 gap-8 mt-10">
-          <div className="border border-white/10 bg-white/5 p-8">
-            <p className="text-xs uppercase tracking-[0.3em] text-gold/80">
-              Contexte réel
+            <h1 className="mt-2 text-4xl font-semibold">Dashboard</h1>
+            <p className="mt-3 max-w-2xl text-alabaster/70 leading-8">
+              Cockpit minimum P0 : identité de session, foyer actif, rôle et
+              navigation vers la prochaine étape métier.
             </p>
-            <h2 className="mt-4 text-3xl font-serif italic">État du foyer actif</h2>
+          </div>
+        </div>
 
-            <div className="mt-8 space-y-4 text-sm">
-              <div className="border border-white/10 bg-black/20 p-4">
-                <span className="text-alabaster/50">Email :</span>
-                <div className="mt-1 text-alabaster">{sessionEmail ?? "—"}</div>
-              </div>
-
-              <div className="border border-white/10 bg-black/20 p-4">
-                <span className="text-alabaster/50">Foyer actif :</span>
-                <div className="mt-1 text-alabaster">
-                  {activeMembership?.household_name ?? "—"}
-                </div>
-              </div>
-
-              <div className="border border-white/10 bg-black/20 p-4">
-                <span className="text-alabaster/50">Rôle :</span>
-                <div className="mt-1 text-alabaster">{activeMembership?.role ?? "—"}</div>
-              </div>
-
-              <div className="border border-white/10 bg-black/20 p-4">
-                <span className="text-alabaster/50">Super Admin :</span>
-                <div className="mt-1 text-alabaster">
-                  {bootstrap?.is_super_admin ? "Oui" : "Non"}
-                </div>
-              </div>
-
-              <div className="border border-white/10 bg-black/20 p-4">
-                <span className="text-alabaster/50">Jour observé :</span>
-                <div className="mt-1 text-alabaster">{health?.day ?? "—"}</div>
-              </div>
+        <div className="mt-10 grid gap-6 md:grid-cols-3">
+          <article className="glass metallic-border rounded-[1.75rem] p-6">
+            <div className="inline-flex rounded-xl border border-gold/20 p-3 text-gold">
+              <LayoutDashboard size={18} />
             </div>
-          </div>
 
-          <div className="border border-white/10 bg-white/5 p-8">
-            <p className="text-xs uppercase tracking-[0.3em] text-gold/80">
-              Charge du jour
-            </p>
-            <h2 className="mt-4 text-3xl font-serif italic">Répartition par membre</h2>
-
-            {loading && (
-              <div className="mt-6 border border-white/10 bg-black/20 p-4 text-sm text-alabaster/70">
-                Chargement du dashboard DOMYLI...
-              </div>
-            )}
-
-            {error && (
-              <div className="mt-6 border border-white/10 bg-black/20 p-4 text-sm text-alabaster/70">
-                {error.message}
-              </div>
-            )}
-
-            {!loading && !error && feed && feed.members.length === 0 && (
-              <div className="mt-6 border border-white/10 bg-black/20 p-4 text-sm text-alabaster/70">
-                Aucun membre remonté dans la charge du jour.
-              </div>
-            )}
-
-            {!loading && !error && feed && feed.members.length > 0 && (
-              <div className="mt-6 grid gap-4">
-                {feed.members.map((member) => (
-                  <div
-                    key={member.user_id}
-                    className="border border-white/10 bg-black/20 p-4"
-                  >
-                    <div className="flex items-start justify-between gap-4">
-                      <div>
-                        <div className="text-xs uppercase tracking-[0.25em] text-gold/80">
-                          {member.role}
-                        </div>
-
-                        <div className="mt-2 text-lg font-serif italic">
-                          {member.user_id}
-                        </div>
-
-                        <div className="mt-2 text-sm text-alabaster/60">
-                          Capacité : {member.capacity_points_daily} • Tâches :{" "}
-                          {member.assigned_task_count}
-                        </div>
-                      </div>
-
-                      <div className="text-xs uppercase tracking-[0.25em] text-alabaster/50">
-                        Effort : {member.assigned_effort_points}
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        </section>
-
-        <section className="grid lg:grid-cols-2 gap-8 mt-10">
-          <div className="border border-white/10 bg-white/5 p-8">
-            <p className="text-xs uppercase tracking-[0.3em] text-gold/80">
-              Santé opérationnelle
-            </p>
-            <h2 className="mt-4 text-3xl font-serif italic">Résumé métier</h2>
-
-            <div className="mt-8 grid sm:grid-cols-2 gap-4 text-sm">
-              <div className="border border-white/10 bg-black/20 p-4">
-                <span className="text-alabaster/50">Alertes ouvertes :</span>
-                <div className="mt-2 text-2xl font-serif italic">
-                  {health?.open_alert_count ?? 0}
-                </div>
-              </div>
-
-              <div className="border border-white/10 bg-black/20 p-4">
-                <span className="text-alabaster/50">Shopping ouverte :</span>
-                <div className="mt-2 text-2xl font-serif italic">
-                  {health?.open_shopping_count ?? 0}
-                </div>
-              </div>
-
-              <div className="border border-white/10 bg-black/20 p-4">
-                <span className="text-alabaster/50">Repas du jour :</span>
-                <div className="mt-2 text-2xl font-serif italic">
-                  {health?.today_meal_count ?? 0}
-                </div>
-              </div>
-
-              <div className="border border-white/10 bg-black/20 p-4">
-                <span className="text-alabaster/50">Tâches terminées :</span>
-                <div className="mt-2 text-2xl font-serif italic">
-                  {health?.today_task_done_count ?? 0}
-                </div>
-              </div>
+            <div className="mt-4 text-xs uppercase tracking-[0.25em] text-gold/80">
+              Compte
             </div>
-          </div>
 
-          <div className="border border-white/10 bg-white/5 p-8">
-            <p className="text-xs uppercase tracking-[0.3em] text-gold/80">
-              Suite logique
+            <div className="mt-3 text-base text-alabaster">
+              {sessionEmail ?? "—"}
+            </div>
+
+            <p className="mt-3 text-sm leading-7 text-alabaster/60">
+              Session active utilisée pour accéder au contrat RPC DOMYLI.
             </p>
-            <h2 className="mt-4 text-3xl font-serif italic">
-              Base prête, valeur métier visible
+          </article>
+
+          <article className="glass metallic-border rounded-[1.75rem] p-6">
+            <div className="inline-flex rounded-xl border border-gold/20 p-3 text-gold">
+              <House size={18} />
+            </div>
+
+            <div className="mt-4 text-xs uppercase tracking-[0.25em] text-gold/80">
+              Foyer actif
+            </div>
+
+            <div className="mt-3 text-base text-alabaster">
+              {activeMembership?.household_name ?? "—"}
+            </div>
+
+            <p className="mt-3 text-sm leading-7 text-alabaster/60">
+              Household ID : {bootstrap?.active_household_id ?? "—"}
+            </p>
+          </article>
+
+          <article className="glass metallic-border rounded-[1.75rem] p-6">
+            <div className="inline-flex rounded-xl border border-gold/20 p-3 text-gold">
+              <ShieldCheck size={18} />
+            </div>
+
+            <div className="mt-4 text-xs uppercase tracking-[0.25em] text-gold/80">
+              Gouvernance
+            </div>
+
+            <div className="mt-3 text-base text-alabaster">
+              Rôle : {activeMembership?.role ?? "—"}
+            </div>
+
+            <p className="mt-3 text-sm leading-7 text-alabaster/60">
+              Super Admin : {bootstrap?.is_super_admin ? "Oui" : "Non"}
+            </p>
+          </article>
+        </div>
+
+        <div className="mt-10 grid gap-6 xl:grid-cols-[1fr_0.9fr]">
+          <section className="glass metallic-border rounded-[2rem] p-7">
+            <div className="text-xs uppercase tracking-[0.3em] text-gold/80">
+              État P0
+            </div>
+
+            <h2 className="mt-4 text-2xl font-semibold text-alabaster">
+              Parcours minimum opérationnel
             </h2>
 
-            <p className="mt-6 text-alabaster/70 leading-relaxed">
-              Le dashboard lit maintenant les vrais JSON de ta base DOMYLI. Tu peux
-              naviguer vers les modules métiers pour enrichir l’exécution réelle du foyer.
+            <div className="mt-6 space-y-4">
+              {[
+                ["Landing premium", "Actif"],
+                ["Session Supabase", "Active"],
+                ["Foyer", activeMembership?.household_name ?? "Résolu"],
+                ["Profiles", "Étape suivante"],
+              ].map(([label, value]) => (
+                <div
+                  key={label}
+                  className="flex items-center justify-between rounded-2xl border border-white/8 bg-black/20 px-4 py-4"
+                >
+                  <div className="text-sm text-alabaster">{label}</div>
+                  <div className="text-xs uppercase tracking-[0.22em] text-gold/80">
+                    {value}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </section>
+
+          <aside className="glass metallic-border rounded-[2rem] p-7">
+            <div className="inline-flex items-center gap-3 text-gold">
+              <Users size={18} />
+              <span className="text-xs uppercase tracking-[0.3em]">
+                Action recommandée
+              </span>
+            </div>
+
+            <h3 className="mt-5 text-2xl font-semibold text-alabaster">
+              Continuer l’activation du foyer
+            </h3>
+
+            <p className="mt-4 text-sm leading-8 text-alabaster/65">
+              L’étape P0 suivante consiste à structurer le premier profil humain
+              du foyer pour rendre les repas, tâches et règles futures
+              exploitables.
             </p>
 
-            <div className="mt-8 grid gap-4">
-              <button
-                onClick={() => navigateTo("/profiles")}
-                className="border border-gold/40 px-5 py-4 text-sm uppercase tracking-[0.25em] text-gold hover:bg-gold hover:text-obsidian transition-colors text-left"
-              >
-                Revenir aux profils
-              </button>
-
-              <button
-                onClick={() => navigateTo("/status")}
-                className="border border-white/10 px-5 py-4 text-sm uppercase tracking-[0.25em] text-alabaster hover:border-gold/40 hover:text-gold transition-colors text-left"
-              >
-                Ouvrir le status
-              </button>
-
-              <button
-                onClick={() => navigateTo("/")}
-                className="border border-white/10 px-5 py-4 text-sm uppercase tracking-[0.25em] text-alabaster hover:border-gold/40 hover:text-gold transition-colors text-left"
-              >
-                Revenir à la landing
-              </button>
-            </div>
-          </div>
-        </section>
-      </main>
+            <button
+              type="button"
+              onClick={() => navigate(ROUTES.PROFILES)}
+              className="mt-8 inline-flex w-full items-center justify-center gap-3 border border-gold bg-gold px-5 py-4 text-sm uppercase tracking-[0.24em] text-obsidian gold-glow"
+            >
+              Ouvrir Profiles
+              <ChevronRight size={16} />
+            </button>
+          </aside>
+        </div>
+      </div>
     </div>
   );
 }

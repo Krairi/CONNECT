@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import React, { useMemo, useState } from "react";
 import { Check, LoaderCircle, X, LogOut } from "lucide-react";
 import { useDomyliConnection } from "../hooks/useDomyliConnection";
 import { navigateTo } from "../lib/navigation";

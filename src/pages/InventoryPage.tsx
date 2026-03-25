@@ -9,11 +9,15 @@ import {
   ShieldCheck,
   ArrowRight,
 } from "lucide-react";
-import { useDomyliConnection } from "../hooks/useDomyliConnection";
-import { useInventory } from "../hooks/useInventory";
-import { navigateTo } from "../lib/navigation";
+import { useNavigate } from "react-router-dom";
+
+import { useAuth } from "@/src/providers/AuthProvider";
+import { useInventory } from "@/src/hooks/useInventory";
+import { ROUTES } from "@/src/constants/routes";
 
 export default function InventoryPage() {
+  const navigate = useNavigate();
+
   const {
     sessionEmail,
     activeMembership,
@@ -21,7 +25,8 @@ export default function InventoryPage() {
     isAuthenticated,
     hasHousehold,
     authLoading,
-  } = useDomyliConnection();
+    bootstrapLoading,
+  } = useAuth();
 
   const {
     saveItem,
@@ -46,12 +51,16 @@ export default function InventoryPage() {
     return Boolean(householdId && name.trim() && qtyOnHand !== "");
   }, [householdId, name, qtyOnHand]);
 
-  if (authLoading) {
+  if (authLoading || bootstrapLoading) {
     return (
-      <div className="min-h-screen bg-obsidian text-alabaster flex items-center justify-center px-6">
-        <div className="text-center">
-          <p className="text-xs uppercase tracking-[0.3em] text-gold/80">DOMYLI</p>
-          <h1 className="mt-4 text-3xl font-serif italic">Chargement de l’inventaire...</h1>
+      <div className="min-h-screen bg-obsidian text-alabaster px-6 py-16">
+        <div className="mx-auto max-w-5xl">
+          <div className="text-xs uppercase tracking-[0.35em] text-gold">
+            DOMYLI
+          </div>
+          <h1 className="mt-4 text-4xl font-semibold">
+            Chargement de l’inventaire...
+          </h1>
         </div>
       </div>
     );
@@ -59,15 +68,22 @@ export default function InventoryPage() {
 
   if (!isAuthenticated || !hasHousehold || !householdId) {
     return (
-      <div className="min-h-screen bg-obsidian text-alabaster flex items-center justify-center px-6">
-        <div className="max-w-xl w-full border border-white/10 bg-white/5 p-8">
-          <p className="text-xs uppercase tracking-[0.3em] text-gold/80">DOMYLI</p>
-          <h1 className="mt-4 text-3xl font-serif italic">Foyer requis</h1>
-          <p className="mt-4 text-alabaster/70">
-            Il faut une session authentifiée et un foyer actif pour accéder à l’inventaire.
+      <div className="min-h-screen bg-obsidian text-alabaster px-6 py-16">
+        <div className="mx-auto max-w-4xl">
+          <div className="text-xs uppercase tracking-[0.35em] text-gold">
+            DOMYLI
+          </div>
+
+          <h1 className="mt-4 text-4xl font-semibold">Foyer requis</h1>
+
+          <p className="mt-5 max-w-2xl text-alabaster/70 leading-8">
+            Il faut une session authentifiée et un foyer actif pour accéder à
+            l’inventaire.
           </p>
+
           <button
-            onClick={() => navigateTo("/")}
+            type="button"
+            onClick={() => navigate(ROUTES.HOME)}
             className="mt-8 border border-gold/40 px-6 py-3 text-sm uppercase tracking-[0.25em] text-gold hover:bg-gold hover:text-obsidian transition-colors"
           >
             Retour à l’accueil
@@ -77,7 +93,7 @@ export default function InventoryPage() {
     );
   }
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: { preventDefault: () => void }) => {
     e.preventDefault();
     setLocalMessage(null);
 
@@ -91,14 +107,16 @@ export default function InventoryPage() {
         p_min_qty: minQty !== "" ? Number(minQty) : null,
       });
 
-      setLocalMessage(`Article enregistré : ${result.stock_key || name.trim()}`);
+      setLocalMessage(
+        `Article enregistré : ${result.stock_key ?? result.item_name}`
+      );
       setName("");
       setCategory("");
       setUnit("");
       setQtyOnHand("");
       setMinQty("");
     } catch {
-      //
+      // erreur déjà gérée par le hook
     }
   };
 
@@ -113,66 +131,63 @@ export default function InventoryPage() {
           : "Reconstruction terminée."
       );
     } catch {
-      //
+      // erreur déjà gérée par le hook
     }
   };
 
   return (
-    <div className="min-h-screen bg-obsidian text-alabaster">
-      <header className="border-b border-white/5 glass">
-        <div className="max-w-7xl mx-auto px-6 h-20 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <button
-              onClick={() => navigateTo("/dashboard")}
-              className="w-10 h-10 border border-white/10 flex items-center justify-center hover:border-gold/40 transition-colors"
-              aria-label="Retour"
-            >
-              <ArrowLeft size={18} className="text-gold" />
-            </button>
-            <div>
-              <p className="text-[10px] uppercase tracking-[0.3em] text-gold/80">DOMYLI</p>
-              <h1 className="text-2xl font-serif italic">Inventaire</h1>
+    <div className="min-h-screen bg-obsidian text-alabaster px-6 py-10">
+      <div className="mx-auto max-w-6xl">
+        <div className="flex items-start gap-4">
+          <button
+            type="button"
+            onClick={() => navigate(ROUTES.DASHBOARD)}
+            className="mt-1 h-10 w-10 border border-white/10 flex items-center justify-center hover:border-gold/40 transition-colors"
+            aria-label="Retour"
+          >
+            <ArrowLeft size={18} />
+          </button>
+
+          <div>
+            <div className="text-xs uppercase tracking-[0.35em] text-gold">
+              DOMYLI
             </div>
-          </div>
-
-          <div className="flex items-center gap-3">
-            <button
-              onClick={handleRebuildShopping}
-              disabled={rebuilding}
-              className="border border-white/10 px-5 py-3 text-xs uppercase tracking-[0.25em] text-alabaster hover:border-gold/40 hover:text-gold transition-colors flex items-center gap-2 disabled:opacity-50"
-            >
-              <RefreshCw size={14} />
-              {rebuilding ? "Reconstruction..." : "Rebuild shopping"}
-            </button>
-
-            <button
-              onClick={() => navigateTo("/dashboard")}
-              className="border border-gold/40 px-5 py-3 text-xs uppercase tracking-[0.25em] text-gold hover:bg-gold hover:text-obsidian transition-colors"
-            >
-              Dashboard
-            </button>
+            <h1 className="mt-2 text-4xl font-semibold">Inventory</h1>
+            <p className="mt-3 max-w-2xl text-alabaster/70 leading-8">
+              Le stock réel alimente ensuite les courses et les repas. Cette
+              étape ouvre le premier vrai chaînage métier P1.
+            </p>
           </div>
         </div>
-      </header>
 
-      <main className="max-w-7xl mx-auto px-6 py-12">
-        <section className="grid lg:grid-cols-3 gap-8">
-          <div className="lg:col-span-2 border border-white/10 bg-white/5 p-8">
-            <p className="text-xs uppercase tracking-[0.3em] text-gold/80">Stock réel</p>
-            <h2 className="mt-4 text-4xl font-serif italic">Ajouter un article à l’inventaire</h2>
-            <p className="mt-6 text-alabaster/70 leading-relaxed">
-              Cette page branche maintenant l’expérience DOMYLI au stock réel via
-              <span className="text-gold"> rpc_inventory_item_upsert</span> et à la reconstruction
-              shopping via <span className="text-gold">rpc_shopping_list_rebuild</span>.
+        <div className="mt-10 grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
+          <section className="glass metallic-border rounded-[2rem] p-6">
+            <div className="inline-flex items-center gap-3 text-gold">
+              <Boxes size={18} />
+              <span className="text-xs uppercase tracking-[0.3em]">
+                Stock réel
+              </span>
+            </div>
+
+            <h2 className="mt-5 text-2xl font-semibold text-alabaster">
+              Ajouter un article à l’inventaire
+            </h2>
+
+            <p className="mt-4 text-sm leading-8 text-alabaster/65">
+              Cette page branche l’expérience DOMYLI au stock réel via{" "}
+              <code>app.rpc_inventory_item_upsert</code> puis à la reconstruction
+              shopping via <code>app.rpc_shopping_list_rebuild</code>.
             </p>
 
-            <form onSubmit={handleSubmit} className="mt-10 grid md:grid-cols-2 gap-6">
+            <form
+              onSubmit={handleSubmit}
+              className="mt-8 grid gap-5 md:grid-cols-2"
+            >
               <div className="md:col-span-2">
-                <label className="mb-2 block text-xs uppercase tracking-[0.25em] text-alabaster/60">
+                <label className="mb-2 block text-xs uppercase tracking-[0.25em] text-gold/80">
                   Nom de l’article
                 </label>
                 <input
-                  type="text"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                   required
@@ -182,11 +197,10 @@ export default function InventoryPage() {
               </div>
 
               <div>
-                <label className="mb-2 block text-xs uppercase tracking-[0.25em] text-alabaster/60">
+                <label className="mb-2 block text-xs uppercase tracking-[0.25em] text-gold/80">
                   Catégorie
                 </label>
                 <input
-                  type="text"
                   value={category}
                   onChange={(e) => setCategory(e.target.value)}
                   placeholder="Épicerie"
@@ -195,11 +209,10 @@ export default function InventoryPage() {
               </div>
 
               <div>
-                <label className="mb-2 block text-xs uppercase tracking-[0.25em] text-alabaster/60">
+                <label className="mb-2 block text-xs uppercase tracking-[0.25em] text-gold/80">
                   Unité
                 </label>
                 <input
-                  type="text"
                   value={unit}
                   onChange={(e) => setUnit(e.target.value)}
                   placeholder="kg, pièce, litre..."
@@ -208,11 +221,10 @@ export default function InventoryPage() {
               </div>
 
               <div>
-                <label className="mb-2 block text-xs uppercase tracking-[0.25em] text-alabaster/60">
+                <label className="mb-2 block text-xs uppercase tracking-[0.25em] text-gold/80">
                   Quantité disponible
                 </label>
                 <input
-                  type="number"
                   value={qtyOnHand}
                   onChange={(e) => setQtyOnHand(e.target.value)}
                   required
@@ -222,11 +234,10 @@ export default function InventoryPage() {
               </div>
 
               <div>
-                <label className="mb-2 block text-xs uppercase tracking-[0.25em] text-alabaster/60">
+                <label className="mb-2 block text-xs uppercase tracking-[0.25em] text-gold/80">
                   Seuil minimum
                 </label>
                 <input
-                  type="number"
                   value={minQty}
                   onChange={(e) => setMinQty(e.target.value)}
                   placeholder="1"
@@ -234,13 +245,13 @@ export default function InventoryPage() {
                 />
               </div>
 
-              <div className="md:col-span-2 flex flex-col sm:flex-row gap-4">
+              <div className="md:col-span-2 flex flex-col gap-3 sm:flex-row">
                 <button
                   type="submit"
                   disabled={!canSubmit || saving}
-                  className="flex items-center justify-center gap-3 bg-gold px-6 py-4 text-sm font-medium uppercase tracking-[0.25em] text-obsidian transition hover:opacity-90 disabled:opacity-50"
+                  className="inline-flex flex-1 items-center justify-center gap-3 border border-gold bg-gold px-5 py-4 text-sm uppercase tracking-[0.24em] text-obsidian disabled:opacity-50 gold-glow"
                 >
-                  <Package size={18} />
+                  <Package size={16} />
                   {saving ? "Enregistrement..." : "Enregistrer l’article"}
                 </button>
 
@@ -248,89 +259,105 @@ export default function InventoryPage() {
                   type="button"
                   onClick={handleRebuildShopping}
                   disabled={rebuilding}
-                  className="flex items-center justify-center gap-3 border border-white/10 px-6 py-4 text-sm uppercase tracking-[0.25em] text-alabaster hover:border-gold/40 hover:text-gold transition-colors disabled:opacity-50"
+                  className="inline-flex flex-1 items-center justify-center gap-3 border border-gold/40 px-5 py-4 text-sm uppercase tracking-[0.24em] text-gold hover:bg-gold hover:text-obsidian transition-colors disabled:opacity-50"
                 >
-                  <ShoppingCart size={18} />
-                  {rebuilding ? "Reconstruction..." : "Reconstruire le shopping"}
+                  <RefreshCw size={16} className={rebuilding ? "animate-spin" : ""} />
+                  {rebuilding ? "Reconstruction..." : "Rebuild shopping"}
                 </button>
 
                 <button
                   type="button"
-                  onClick={() => navigateTo("/dashboard")}
-                  className="flex items-center justify-center gap-3 border border-white/10 px-6 py-4 text-sm uppercase tracking-[0.25em] text-alabaster hover:border-gold/40 hover:text-gold transition-colors"
+                  onClick={() => navigate(ROUTES.DASHBOARD)}
+                  className="inline-flex items-center justify-center gap-3 border border-white/10 px-6 py-4 text-sm uppercase tracking-[0.24em] text-alabaster hover:border-gold/40 hover:text-gold transition-colors"
                 >
-                  <ArrowRight size={18} />
-                  Aller au dashboard
+                  Dashboard
+                  <ArrowRight size={16} />
                 </button>
               </div>
             </form>
 
-            {(localMessage || error || lastSavedItem || lastRebuild) && (
-              <div className="mt-8 border border-white/10 bg-black/20 p-4 text-sm text-alabaster/75">
-                {localMessage ??
-                  error?.message ??
-                  (lastSavedItem
-                    ? `Article enregistré : ${lastSavedItem.stock_key || lastSavedItem.item_id}`
-                    : null) ??
-                  (lastRebuild
-                    ? `Liste de courses reconstruite : ${lastRebuild.items_count} élément(s)`
-                    : null)}
+            {(localMessage || error) && (
+              <div className="mt-6 border border-gold/20 bg-gold/5 px-4 py-4 text-sm text-gold">
+                {localMessage ?? error?.message}
               </div>
             )}
-          </div>
+          </section>
 
-          <aside className="border border-white/10 bg-white/5 p-8">
-            <p className="text-xs uppercase tracking-[0.3em] text-gold/80">Contexte actif</p>
+          <aside className="glass metallic-border rounded-[2rem] p-7">
+            <div className="inline-flex items-center gap-3 text-gold">
+              <ShoppingCart size={18} />
+              <span className="text-xs uppercase tracking-[0.3em]">
+                Contexte actif
+              </span>
+            </div>
 
-            <div className="mt-6 space-y-4 text-sm">
-              <div className="border border-white/10 bg-black/20 p-4">
-                <span className="text-alabaster/50">Email :</span>
-                <div className="mt-1 text-alabaster">{sessionEmail ?? "—"}</div>
+            <div className="mt-6 space-y-4">
+              <div className="rounded-2xl border border-white/8 bg-black/20 px-4 py-4">
+                <div className="text-xs uppercase tracking-[0.22em] text-gold/80">
+                  Email
+                </div>
+                <div className="mt-2 text-sm text-alabaster">
+                  {sessionEmail ?? "—"}
+                </div>
               </div>
 
-              <div className="border border-white/10 bg-black/20 p-4">
-                <span className="text-alabaster/50">Foyer :</span>
-                <div className="mt-1 text-alabaster">
+              <div className="rounded-2xl border border-white/8 bg-black/20 px-4 py-4">
+                <div className="text-xs uppercase tracking-[0.22em] text-gold/80">
+                  Foyer
+                </div>
+                <div className="mt-2 text-sm text-alabaster">
                   {activeMembership?.household_name ?? "—"}
                 </div>
               </div>
 
-              <div className="border border-white/10 bg-black/20 p-4">
-                <span className="text-alabaster/50">Rôle :</span>
-                <div className="mt-1 text-alabaster">{activeMembership?.role ?? "—"}</div>
+              <div className="rounded-2xl border border-white/8 bg-black/20 px-4 py-4">
+                <div className="text-xs uppercase tracking-[0.22em] text-gold/80">
+                  Rôle
+                </div>
+                <div className="mt-2 text-sm text-alabaster">
+                  {activeMembership?.role ?? "—"}
+                </div>
               </div>
 
-              <div className="border border-white/10 bg-black/20 p-4">
-                <span className="text-alabaster/50">Super Admin :</span>
-                <div className="mt-1 text-alabaster">{bootstrap?.is_super_admin ? "Oui" : "Non"}</div>
+              <div className="rounded-2xl border border-white/8 bg-black/20 px-4 py-4">
+                <div className="text-xs uppercase tracking-[0.22em] text-gold/80">
+                  Super Admin
+                </div>
+                <div className="mt-2 text-sm text-alabaster">
+                  {bootstrap?.is_super_admin ? "Oui" : "Non"}
+                </div>
               </div>
             </div>
 
-            <div className="mt-8 space-y-4">
-              <div className="border border-gold/20 bg-gold/5 p-4 text-sm text-alabaster/75">
-                <div className="flex items-center gap-3">
-                  <House size={18} className="text-gold" />
-                  <span>Le stock réel gouverne ensuite les courses et les repas.</span>
-                </div>
-              </div>
+            {(lastSavedItem || lastRebuild) && (
+              <div className="mt-8 space-y-4">
+                {lastSavedItem && (
+                  <div className="rounded-2xl border border-gold/15 bg-gold/5 px-4 py-4 text-sm text-gold">
+                    Dernier article :{" "}
+                    {lastSavedItem.stock_key ?? lastSavedItem.item_name}
+                  </div>
+                )}
 
-              <div className="border border-white/10 bg-black/20 p-4">
-                <div className="flex items-center gap-3">
-                  <Boxes size={18} className="text-gold" />
-                  <span className="text-sm">RPC branchée : app.rpc_inventory_item_upsert</span>
-                </div>
+                {lastRebuild && (
+                  <div className="rounded-2xl border border-gold/15 bg-gold/5 px-4 py-4 text-sm text-gold">
+                    Dernière reconstruction : {lastRebuild.items_count} élément(s)
+                  </div>
+                )}
               </div>
+            )}
 
-              <div className="border border-white/10 bg-black/20 p-4">
-                <div className="flex items-center gap-3">
-                  <ShieldCheck size={18} className="text-gold" />
-                  <span className="text-sm">RPC branchée : app.rpc_shopping_list_rebuild</span>
-                </div>
+            <div className="mt-8 rounded-2xl border border-white/8 bg-black/20 px-4 py-4 text-sm leading-8 text-alabaster/65">
+              Le stock réel gouverne ensuite les courses et les repas.
+              <div className="mt-3 text-gold/90">
+                RPC branchée : <code>app.rpc_inventory_item_upsert</code>
+              </div>
+              <div className="mt-2 text-gold/90">
+                RPC branchée : <code>app.rpc_shopping_list_rebuild</code>
               </div>
             </div>
           </aside>
-        </section>
-      </main>
+        </div>
+      </div>
     </div>
   );
 }

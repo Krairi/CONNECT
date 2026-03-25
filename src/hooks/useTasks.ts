@@ -1,442 +1,198 @@
-import { useCallback, useState } from "react";
-import { toDomyliError, type DomyliAppError } from "../lib/errors";
+import { useState } from "react";
+
+import { toDomyliError, type DomyliAppError } from "@/src/lib/errors";
 import {
   createTask,
   generateTaskInstances,
-  autoAssignDay,
-  assignTaskInstance,
-  startTask,
-  doneTaskV2,
-  setTaskRecurrence,
-  setTaskRequiredTools,
-  setTaskChecklist,
-  fixDayV2,
-  type TaskCreateInput,
-  type JsonResult,
-} from "../services/tasks/taskService";
-
-export type TaskDraft = {
-  task_id: string;
-  title: string;
-  description: string;
-  effort_points: number;
-  estimated_minutes: number | null;
-  start_on: string;
-  recurrence_rule: Record<string, unknown>;
-  required_tools: unknown[];
-  checklist: unknown[];
-  is_active: boolean;
-};
+  startTaskExecution,
+  completeTaskExecution,
+  type TaskDraft,
+  type TaskGenerateResult,
+  type TaskStartResult,
+  type TaskDoneResult,
+  type CreateTaskInput,
+  type GenerateTaskInstancesInput,
+  type TaskStartInput,
+  type TaskDoneInput,
+} from "@/src/services/tasks/taskService";
 
 type TasksState = {
-  saving: boolean;
-  running: boolean;
+  creating: boolean;
+  generating: boolean;
+  starting: boolean;
+  completing: boolean;
   error: DomyliAppError | null;
   tasks: TaskDraft[];
-  lastTaskId: string | null;
-  lastGenerateResult: JsonResult | null;
-  lastAutoAssignResult: JsonResult | null;
-  lastDoneResult: JsonResult | null;
-  lastFixDayResult: JsonResult | null;
+  lastCreatedTask: TaskDraft | null;
+  lastGenerated: TaskGenerateResult | null;
+  lastStarted: TaskStartResult | null;
+  lastCompleted: TaskDoneResult | null;
 };
 
 const initialState: TasksState = {
-  saving: false,
-  running: false,
+  creating: false,
+  generating: false,
+  starting: false,
+  completing: false,
   error: null,
   tasks: [],
-  lastTaskId: null,
-  lastGenerateResult: null,
-  lastAutoAssignResult: null,
-  lastDoneResult: null,
-  lastFixDayResult: null,
+  lastCreatedTask: null,
+  lastGenerated: null,
+  lastStarted: null,
+  lastCompleted: null,
 };
 
 export function useTasks() {
   const [state, setState] = useState<TasksState>(initialState);
 
-  const upsertTask = useCallback(async (payload: TaskCreateInput) => {
+  const saveTask = async (payload: CreateTaskInput) => {
     setState((prev) => ({
       ...prev,
-      saving: true,
+      creating: true,
       error: null,
-      lastTaskId: null,
+      lastCreatedTask: null,
     }));
 
     try {
-      const taskId = await createTask(payload);
-
-      const task: TaskDraft = {
-        task_id: taskId,
-        title: payload.p_title,
-        description: payload.p_description ?? "",
-        effort_points: payload.p_effort_points,
-        estimated_minutes: payload.p_estimated_minutes ?? null,
-        start_on: payload.p_start_on,
-        recurrence_rule: (payload.p_recurrence_rule ?? {}) as Record<string, unknown>,
-        required_tools: payload.p_required_tools ?? [],
-        checklist: payload.p_checklist ?? [],
-        is_active: payload.p_is_active ?? true,
-      };
-
-      setState((prev) => {
-        const exists = prev.tasks.some((item) => item.task_id === taskId);
-
-        return {
-          ...prev,
-          saving: false,
-          lastTaskId: taskId,
-          tasks: exists
-            ? prev.tasks.map((item) => (item.task_id === taskId ? task : item))
-            : [task, ...prev.tasks],
-        };
-      });
-
-      return taskId;
-    } catch (error) {
-      const normalized = toDomyliError(error);
+      const result = await createTask(payload);
 
       setState((prev) => ({
         ...prev,
-        saving: false,
-        error: normalized,
-      }));
-
-      throw normalized;
-    }
-  }, []);
-
-  const runGenerateInstances = useCallback(
-    async (taskId: string | null, dateFrom: string, dateTo: string) => {
-      setState((prev) => ({
-        ...prev,
-        running: true,
-        error: null,
-        lastGenerateResult: null,
-      }));
-
-      try {
-        const result = await generateTaskInstances({
-          p_task_id: taskId,
-          p_date_from: dateFrom,
-          p_date_to: dateTo,
-        });
-
-        setState((prev) => ({
-          ...prev,
-          running: false,
-          lastGenerateResult: result,
-        }));
-
-        return result;
-      } catch (error) {
-        const normalized = toDomyliError(error);
-
-        setState((prev) => ({
-          ...prev,
-          running: false,
-          error: normalized,
-        }));
-
-        throw normalized;
-      }
-    },
-    []
-  );
-
-  const runAutoAssignDay = useCallback(async (day: string) => {
-    setState((prev) => ({
-      ...prev,
-      running: true,
-      error: null,
-      lastAutoAssignResult: null,
-    }));
-
-    try {
-      const result = await autoAssignDay({ p_day: day });
-
-      setState((prev) => ({
-        ...prev,
-        running: false,
-        lastAutoAssignResult: result,
+        creating: false,
+        lastCreatedTask: result,
+        tasks: [result, ...prev.tasks.filter((t) => t.task_id !== result.task_id)],
       }));
 
       return result;
     } catch (error) {
       const normalized = toDomyliError(error);
-
       setState((prev) => ({
         ...prev,
-        running: false,
+        creating: false,
         error: normalized,
       }));
-
       throw normalized;
     }
-  }, []);
+  };
 
-  const runAssignTaskInstance = useCallback(
-    async (taskInstanceId: string, userId: string) => {
-      setState((prev) => ({
-        ...prev,
-        running: true,
-        error: null,
-      }));
-
-      try {
-        const result = await assignTaskInstance({
-          p_task_instance_id: taskInstanceId,
-          p_user_id: userId,
-        });
-
-        setState((prev) => ({
-          ...prev,
-          running: false,
-        }));
-
-        return result;
-      } catch (error) {
-        const normalized = toDomyliError(error);
-
-        setState((prev) => ({
-          ...prev,
-          running: false,
-          error: normalized,
-        }));
-
-        throw normalized;
-      }
-    },
-    []
-  );
-
-  const runStartTask = useCallback(async (taskInstanceId: string) => {
+  const generateInstances = async (payload: GenerateTaskInstancesInput) => {
     setState((prev) => ({
       ...prev,
-      running: true,
+      generating: true,
       error: null,
+      lastGenerated: null,
     }));
 
     try {
-      const result = await startTask({
-        p_task_instance_id: taskInstanceId,
-        p_idempotency_key: `task-start-${taskInstanceId}-${Date.now()}`,
-      });
+      const result = await generateTaskInstances(payload);
 
       setState((prev) => ({
         ...prev,
-        running: false,
-      }));
-
-      return result;
-    } catch (error) {
-      const normalized = toDomyliError(error);
-
-      setState((prev) => ({
-        ...prev,
-        running: false,
-        error: normalized,
-      }));
-
-      throw normalized;
-    }
-  }, []);
-
-  const runDoneTask = useCallback(
-    async (taskInstanceId: string, notes?: string) => {
-      setState((prev) => ({
-        ...prev,
-        running: true,
-        error: null,
-        lastDoneResult: null,
-      }));
-
-      try {
-        const result = await doneTaskV2({
-          p_task_instance_id: taskInstanceId,
-          p_notes: notes ?? null,
-          p_proof_payload: {},
-          p_idempotency_key: `task-done-${taskInstanceId}-${Date.now()}`,
-        });
-
-        setState((prev) => ({
-          ...prev,
-          running: false,
-          lastDoneResult: result,
-        }));
-
-        return result;
-      } catch (error) {
-        const normalized = toDomyliError(error);
-
-        setState((prev) => ({
-          ...prev,
-          running: false,
-          error: normalized,
-        }));
-
-        throw normalized;
-      }
-    },
-    []
-  );
-
-  const runSetRecurrence = useCallback(
-    async (taskId: string, startOn: string, recurrenceRule: Record<string, unknown>) => {
-      setState((prev) => ({
-        ...prev,
-        running: true,
-        error: null,
-      }));
-
-      try {
-        const result = await setTaskRecurrence({
-          p_task_id: taskId,
-          p_start_on: startOn,
-          p_recurrence_rule: recurrenceRule,
-        });
-
-        setState((prev) => ({
-          ...prev,
-          running: false,
-          tasks: prev.tasks.map((item) =>
-            item.task_id === taskId
-              ? { ...item, start_on: startOn, recurrence_rule: recurrenceRule }
-              : item
-          ),
-        }));
-
-        return result;
-      } catch (error) {
-        const normalized = toDomyliError(error);
-
-        setState((prev) => ({
-          ...prev,
-          running: false,
-          error: normalized,
-        }));
-
-        throw normalized;
-      }
-    },
-    []
-  );
-
-  const runSetRequiredTools = useCallback(async (taskId: string, requiredTools: unknown[]) => {
-    setState((prev) => ({
-      ...prev,
-      running: true,
-      error: null,
-    }));
-
-    try {
-      const result = await setTaskRequiredTools({
-        p_task_id: taskId,
-        p_required_tools: requiredTools,
-      });
-
-      setState((prev) => ({
-        ...prev,
-        running: false,
-        tasks: prev.tasks.map((item) =>
-          item.task_id === taskId ? { ...item, required_tools: requiredTools } : item
+        generating: false,
+        lastGenerated: result,
+        tasks: prev.tasks.map((task) =>
+          task.task_id === payload.p_task_id
+            ? {
+                ...task,
+                task_instance_id: result.first_instance_id,
+                status: result.generated_count > 0 ? "INSTANCES_GENERATED" : task.status,
+              }
+            : task
         ),
       }));
 
       return result;
     } catch (error) {
       const normalized = toDomyliError(error);
-
       setState((prev) => ({
         ...prev,
-        running: false,
+        generating: false,
         error: normalized,
       }));
-
       throw normalized;
     }
-  }, []);
+  };
 
-  const runSetChecklist = useCallback(async (taskId: string, checklist: unknown[]) => {
+  const startTask = async (payload: TaskStartInput) => {
     setState((prev) => ({
       ...prev,
-      running: true,
+      starting: true,
       error: null,
+      lastStarted: null,
     }));
 
     try {
-      const result = await setTaskChecklist({
-        p_task_id: taskId,
-        p_checklist: checklist,
-      });
+      const result = await startTaskExecution(payload);
 
       setState((prev) => ({
         ...prev,
-        running: false,
-        tasks: prev.tasks.map((item) =>
-          item.task_id === taskId ? { ...item, checklist } : item
+        starting: false,
+        lastStarted: result,
+        tasks: prev.tasks.map((task) =>
+          task.task_instance_id === result.task_instance_id
+            ? {
+                ...task,
+                task_execution_id: result.task_execution_id,
+                status: result.status,
+              }
+            : task
         ),
       }));
 
       return result;
     } catch (error) {
       const normalized = toDomyliError(error);
-
       setState((prev) => ({
         ...prev,
-        running: false,
+        starting: false,
         error: normalized,
       }));
-
       throw normalized;
     }
-  }, []);
+  };
 
-  const runFixDay = useCallback(async (day: string) => {
+  const completeTask = async (payload: TaskDoneInput) => {
     setState((prev) => ({
       ...prev,
-      running: true,
+      completing: true,
       error: null,
-      lastFixDayResult: null,
+      lastCompleted: null,
     }));
 
     try {
-      const result = await fixDayV2({
-        p_day: day,
-        p_idempotency_key: `fix-day-${day}-${Date.now()}`,
-      });
+      const result = await completeTaskExecution(payload);
 
       setState((prev) => ({
         ...prev,
-        running: false,
-        lastFixDayResult: result,
+        completing: false,
+        lastCompleted: result,
+        tasks: prev.tasks.map((task) =>
+          task.task_execution_id === result.task_execution_id
+            ? {
+                ...task,
+                status: result.status,
+              }
+            : task
+        ),
       }));
 
       return result;
     } catch (error) {
       const normalized = toDomyliError(error);
-
       setState((prev) => ({
         ...prev,
-        running: false,
+        completing: false,
         error: normalized,
       }));
-
       throw normalized;
     }
-  }, []);
+  };
 
   return {
     ...state,
-    upsertTask,
-    runGenerateInstances,
-    runAutoAssignDay,
-    runAssignTaskInstance,
-    runStartTask,
-    runDoneTask,
-    runSetRecurrence,
-    runSetRequiredTools,
-    runSetChecklist,
-    runFixDay,
+    saveTask,
+    generateInstances,
+    startTaskExecution: startTask,
+    completeTaskExecution: completeTask,
   };
 }

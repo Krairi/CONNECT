@@ -20,7 +20,7 @@ type RawActiveHousehold = {
 };
 
 export async function userActiveHousehold(): Promise<RpcUserActiveHouseholdOutput> {
-  const rawResult = await callRpc<Record<string, never>, RawActiveHousehold | RawActiveHousehold[]>(
+  const rawResult = await callRpc<RawActiveHousehold | RawActiveHousehold[]>(
     "rpc_user_active_household",
     {}
   );

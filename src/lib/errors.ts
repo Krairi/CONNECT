@@ -4,6 +4,14 @@ export type DomyliAppError = Error & {
   hint?: string | null;
 };
 
+export function createDomyliError(params: { message: string; code?: string; details?: string | null; hint?: string | null }): DomyliAppError {
+  const error = new Error(params.message) as DomyliAppError;
+  if (params.code) error.code = params.code;
+  if (params.details !== undefined) error.details = params.details;
+  if (params.hint !== undefined) error.hint = params.hint;
+  return error;
+}
+
 export function toDomyliError(error: unknown): DomyliAppError {
   if (error instanceof Error) {
     return error as DomyliAppError;
@@ -25,8 +33,8 @@ export function toDomyliError(error: unknown): DomyliAppError {
         : "Une erreur DOMYLI est survenue.";
 
     if (typeof maybe.code === "string") fallback.code = maybe.code;
-    if (typeof maybe.details === "string" || maybe.details === null) fallback.details = maybe.details;
-    if (typeof maybe.hint === "string" || maybe.hint === null) fallback.hint = maybe.hint;
+    if (typeof maybe.details === "string" || maybe.details === null) fallback.details = maybe.details as string | null;
+    if (typeof maybe.hint === "string" || maybe.hint === null) fallback.hint = maybe.hint as string | null;
   }
 
   return fallback;

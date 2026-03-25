@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useState } from "react";
-import { toDomyliError, type DomyliAppError } from "../lib/errors";
+
+import { toDomyliError, type DomyliAppError } from "@/src/lib/errors";
 import {
-  rebuildShoppingList,
   readShoppingList,
+  rebuildShoppingList,
   type ShoppingListItem,
   type ShoppingListRebuildOutput,
-} from "../services/shopping/shoppingService";
+} from "@/src/services/shopping/shoppingService";
 
 type ShoppingState = {
   loading: boolean;
@@ -23,10 +24,19 @@ const initialState: ShoppingState = {
   lastRebuild: null,
 };
 
-export function useShopping() {
+export function useShopping(householdId: string | null) {
   const [state, setState] = useState<ShoppingState>(initialState);
 
   const refresh = useCallback(async () => {
+    if (!householdId) {
+      setState((prev) => ({
+        ...prev,
+        loading: false,
+        items: [],
+      }));
+      return [];
+    }
+
     setState((prev) => ({
       ...prev,
       loading: true,
@@ -34,7 +44,7 @@ export function useShopping() {
     }));
 
     try {
-      const items = await readShoppingList();
+      const items = await readShoppingList(householdId);
 
       setState((prev) => ({
         ...prev,
@@ -54,13 +64,17 @@ export function useShopping() {
 
       throw normalized;
     }
-  }, []);
+  }, [householdId]);
 
   useEffect(() => {
-    refresh();
+    void refresh();
   }, [refresh]);
 
   const rebuild = useCallback(async () => {
+    if (!householdId) {
+      return null;
+    }
+
     setState((prev) => ({
       ...prev,
       rebuilding: true,
@@ -68,8 +82,8 @@ export function useShopping() {
     }));
 
     try {
-      const rebuilt = await rebuildShoppingList();
-      const items = await readShoppingList();
+      const rebuilt = await rebuildShoppingList(householdId);
+      const items = await readShoppingList(householdId);
 
       setState((prev) => ({
         ...prev,
@@ -90,7 +104,7 @@ export function useShopping() {
 
       throw normalized;
     }
-  }, []);
+  }, [householdId]);
 
   return {
     ...state,

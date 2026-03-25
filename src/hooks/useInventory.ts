@@ -1,19 +1,20 @@
 import { useCallback, useState } from "react";
-import { toDomyliError, type DomyliAppError } from "../lib/errors";
+
+import { toDomyliError, type DomyliAppError } from "@/src/lib/errors";
 import {
   upsertInventoryItem,
-  rebuildShoppingList,
+  rebuildShoppingListForHousehold,
   type InventoryItemUpsertInput,
   type InventoryItemUpsertOutput,
-  type ShoppingListRebuildOutput,
-} from "../services/inventory/inventoryService";
+  type ShoppingListRebuildForHouseholdOutput,
+} from "@/src/services/inventory/inventoryService";
 
 type InventoryState = {
   saving: boolean;
   rebuilding: boolean;
   error: DomyliAppError | null;
   lastSavedItem: InventoryItemUpsertOutput | null;
-  lastRebuild: ShoppingListRebuildOutput | null;
+  lastRebuild: ShoppingListRebuildForHouseholdOutput | null;
 };
 
 const initialState: InventoryState = {
@@ -40,7 +41,6 @@ export function useInventory() {
       setState((prev) => ({
         ...prev,
         saving: false,
-        error: null,
         lastSavedItem: result,
       }));
 
@@ -66,14 +66,11 @@ export function useInventory() {
     }));
 
     try {
-      const result = await rebuildShoppingList({
-        p_household_id: householdId,
-      });
+      const result = await rebuildShoppingListForHousehold(householdId);
 
       setState((prev) => ({
         ...prev,
         rebuilding: false,
-        error: null,
         lastRebuild: result,
       }));
 

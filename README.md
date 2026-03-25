@@ -1,20 +1,46 @@
-<div align="center">
-<img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
-</div>
+# DOMYLI CONNECT
 
-# Run and deploy your AI Studio app
+Front-end DOMYLI connecté à Supabase via RPC sur le schéma `app`.
 
-This contains everything you need to run your app locally.
+## Positionnement
 
-View your app in AI Studio: https://ai.studio/apps/4a7593cd-3681-4dd1-894e-638be680fc6b
+DOMYLI est un système d’exploitation du foyer / ERP domestique intelligent.
+Ce dépôt contient le front-end de mise en œuvre et d’exploitation des capacités DOMYLI.
 
-## Run Locally
+## Parcours actuellement livré
 
-**Prerequisites:**  Node.js
+- Landing premium
+- Authentification Supabase
+- Création du premier foyer
+- Création du premier profil
+- Dashboard minimum
+- Inventory
+- Shopping
+- Meals
+- Status
+- Tasks
+- Capacity
 
+## Architecture
 
-1. Install dependencies:
-   `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
-3. Run the app:
-   `npm run dev`
+- React
+- TypeScript
+- Vite
+- Tailwind CSS v4
+- Supabase
+- RPC front via `supabase.schema("app").rpc(...)`
+
+## Variables d’environnement
+
+Créer `.env.local` à partir de `.env.example` :
+
+- `VITE_SUPABASE_URL`
+- `VITE_SUPABASE_ANON_KEY`
+- `VITE_APP_NAME`
+- `VITE_APP_ENV`
+- `VITE_ENABLE_MONITORING`
+
+## Installation
+
+```bash
+npm install

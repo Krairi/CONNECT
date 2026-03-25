@@ -13,5 +13,5 @@ export type RpcHouseholdCreateOutput = {
 export async function createHousehold(
   payload: RpcHouseholdCreateInput
 ): Promise<RpcHouseholdCreateOutput> {
-  return callRpc<RpcHouseholdCreateInput, RpcHouseholdCreateOutput>("rpc_household_create", payload);
+  return callRpc<RpcHouseholdCreateOutput>("rpc_household_create", payload);
 }

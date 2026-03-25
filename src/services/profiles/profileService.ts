@@ -35,9 +35,7 @@ type RawHumanProfileUpsertOutput = {
 export async function upsertHumanProfile(
   payload: HumanProfileUpsertInput
 ): Promise<HumanProfileUpsertOutput> {
-  const rawResult = await callRpc<
-    HumanProfileUpsertInput,
-    RawHumanProfileUpsertOutput | RawHumanProfileUpsertOutput[]
+  const rawResult = await callRpc<RawHumanProfileUpsertOutput | RawHumanProfileUpsertOutput[]
   >("rpc_human_profile_upsert", payload);
 
   const raw = unwrapRpcRow(rawResult);

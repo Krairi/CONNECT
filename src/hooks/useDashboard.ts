@@ -1,24 +1,25 @@
 import { useCallback, useEffect, useState } from "react";
-import { toDomyliError, type DomyliAppError } from "../lib/errors";
+
+import { toDomyliError, type DomyliAppError } from "@/src/lib/errors";
 import {
   getTodayHealth,
   getTodayLoadFeed,
-  type TodayHealthOutput,
-  type TodayLoadFeedOutput,
-} from "../services/dashboard/dashboardService";
+  type TodayHealth,
+  type TodayLoadFeed,
+} from "@/src/services/dashboard/dashboardService";
 
 type DashboardState = {
   loading: boolean;
   error: DomyliAppError | null;
-  health: TodayHealthOutput | null;
-  feed: TodayLoadFeedOutput | null;
+  health: TodayHealth | null;
+  feed: TodayLoadFeed;
 };
 
 const initialState: DashboardState = {
   loading: false,
   error: null,
   health: null,
-  feed: null,
+  feed: { members: [] },
 };
 
 export function useDashboard() {
@@ -46,17 +47,16 @@ export function useDashboard() {
     } catch (error) {
       const normalized = toDomyliError(error);
 
-      setState({
+      setState((prev) => ({
+        ...prev,
         loading: false,
         error: normalized,
-        health: null,
-        feed: null,
-      });
+      }));
     }
   }, []);
 
   useEffect(() => {
-    refresh();
+    void refresh();
   }, [refresh]);
 
   return {
