@@ -1,0 +1,3 @@
+import { Link } from "react-router-dom";
+import { ROUTES } from "@/src/constants/routes";
+export default function NotFoundPage() { return <div className="min-h-screen bg-obsidian text-alabaster flex items-center justify-center px-6"><div className="glass metallic-border rounded-3xl p-8 max-w-xl w-full text-center"><p className="text-gold uppercase tracking-[0.2em] text-sm mb-3">DOMYLI</p><h1 className="text-3xl font-semibold mb-3">Page introuvable</h1><p className="text-alabaster/80 mb-6">Cette route n’existe pas ou n’est plus disponible.</p><Link to={ROUTES.landing} className="inline-flex items-center justify-center rounded-2xl px-5 py-3 border border-gold/40 text-gold hover:bg-gold/10 transition">Revenir à l’accueil</Link></div></div>; }

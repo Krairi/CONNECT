@@ -1,15 +1,14 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import {
   ArrowLeft,
-  CalendarDays,
-  CheckCircle2,
-  ListTodo,
+  ArrowRight,
+  ClipboardCheck,
+  House,
   Play,
-  RefreshCw,
   Save,
-  Settings2,
+  ShieldCheck,
   Sparkles,
-  Wrench,
+  CheckCircle2,
 } from "lucide-react";
 import { useDomyliConnection } from "../hooks/useDomyliConnection";
 import { useTasks } from "../hooks/useTasks";
@@ -30,45 +29,36 @@ export default function TasksPage() {
   } = useDomyliConnection();
 
   const {
-    saving,
-    running,
+    saveTask,
+    generateInstances,
+    startTaskExecution,
+    completeTaskExecution,
+    creating,
+    generating,
+    starting,
+    completing,
     error,
-    tasks,
-    lastTaskId,
-    lastGenerateResult,
-    lastAutoAssignResult,
-    lastDoneResult,
-    lastFixDayResult,
-    upsertTask,
-    runGenerateInstances,
-    runAutoAssignDay,
-    runAssignTaskInstance,
-    runStartTask,
-    runDoneTask,
-    runSetRecurrence,
-    runSetRequiredTools,
-    runSetChecklist,
-    runFixDay,
+    lastCreatedTask,
+    lastGenerated,
+    lastStarted,
+    lastCompleted,
   } = useTasks();
 
-  const [taskId, setTaskId] = useState("");
+  const householdId = bootstrap?.active_household_id ?? null;
+
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
-  const [effortPoints, setEffortPoints] = useState("1");
-  const [estimatedMinutes, setEstimatedMinutes] = useState("");
-  const [startOn, setStartOn] = useState(todayIsoDate());
-  const [recurrenceFreq, setRecurrenceFreq] = useState("DAILY");
-  const [recurrenceInterval, setRecurrenceInterval] = useState("1");
-  const [requiredToolsText, setRequiredToolsText] = useState("[]");
-  const [checklistText, setChecklistText] = useState("[]");
-  const [instanceTaskId, setInstanceTaskId] = useState("");
-  const [generateFrom, setGenerateFrom] = useState(todayIsoDate());
-  const [generateTo, setGenerateTo] = useState(todayIsoDate());
-  const [assignTaskInstanceId, setAssignTaskInstanceId] = useState("");
-  const [assignUserId, setAssignUserId] = useState("");
-  const [actionTaskInstanceId, setActionTaskInstanceId] = useState("");
-  const [doneNotes, setDoneNotes] = useState("");
+  const [effortPoints, setEffortPoints] = useState("");
+  const [durationMin, setDurationMin] = useState("");
+  const [dateFrom, setDateFrom] = useState(todayIsoDate());
+  const [dateTo, setDateTo] = useState(todayIsoDate());
+  const [taskInstanceId, setTaskInstanceId] = useState("");
+  const [proofNote, setProofNote] = useState("");
   const [localMessage, setLocalMessage] = useState<string | null>(null);
+
+  const canCreate = useMemo(() => {
+    return Boolean(householdId && title.trim());
+  }, [householdId, title]);
 
   if (authLoading) {
     return (
@@ -81,7 +71,7 @@ export default function TasksPage() {
     );
   }
 
-  if (!isAuthenticated || !hasHousehold) {
+  if (!isAuthenticated || !hasHousehold || !householdId) {
     return (
       <div className="min-h-screen bg-obsidian text-alabaster flex items-center justify-center px-6">
         <div className="max-w-xl w-full border border-white/10 bg-white/5 p-8">
@@ -101,45 +91,21 @@ export default function TasksPage() {
     );
   }
 
-  const parseJsonArray = (text: string): unknown[] => {
-    try {
-      const parsed = JSON.parse(text || "[]");
-      return Array.isArray(parsed) ? parsed : [];
-    } catch {
-      return [];
-    }
-  };
-
-  const recurrenceRule = {
-    freq: recurrenceFreq,
-    interval: Number(recurrenceInterval || "1"),
-  };
-
-  const handleUpsertTask = async () => {
+  const handleCreateTask = async (e: React.FormEvent) => {
+    e.preventDefault();
     setLocalMessage(null);
 
-    if (!title.trim()) {
-      setLocalMessage("Le titre de tâche est obligatoire.");
-      return;
-    }
-
     try {
-      const createdTaskId = await upsertTask({
-        p_task_id: taskId.trim() || null,
+      const result = await saveTask({
+        p_household_id: householdId,
         p_title: title.trim(),
         p_description: description.trim() || null,
-        p_effort_points: Number(effortPoints || "1"),
-        p_estimated_minutes: estimatedMinutes ? Number(estimatedMinutes) : null,
-        p_start_on: startOn,
-        p_recurrence_rule: recurrenceRule,
-        p_required_tools: parseJsonArray(requiredToolsText),
-        p_checklist: parseJsonArray(checklistText),
-        p_is_active: true,
+        p_effort_points: effortPoints !== "" ? Number(effortPoints) : null,
+        p_default_duration_min: durationMin !== "" ? Number(durationMin) : null,
+        p_required_tools: null,
       });
 
-      setTaskId(createdTaskId);
-      setInstanceTaskId(createdTaskId);
-      setLocalMessage(`Tâche enregistrée : ${createdTaskId}`);
+      setLocalMessage(`Tâche créée : ${result.title}`);
     } catch {
       //
     }
@@ -148,43 +114,20 @@ export default function TasksPage() {
   const handleGenerateInstances = async () => {
     setLocalMessage(null);
 
-    try {
-      const result = await runGenerateInstances(
-        instanceTaskId.trim() || null,
-        generateFrom,
-        generateTo
-      );
-      setLocalMessage(`Instances générées : ${JSON.stringify(result)}`);
-    } catch {
-      //
-    }
-  };
-
-  const handleAutoAssign = async () => {
-    setLocalMessage(null);
-
-    try {
-      const result = await runAutoAssignDay(generateFrom);
-      setLocalMessage(`Auto-assign exécuté : ${JSON.stringify(result)}`);
-    } catch {
-      //
-    }
-  };
-
-  const handleAssignTaskInstance = async () => {
-    setLocalMessage(null);
-
-    if (!assignTaskInstanceId.trim() || !assignUserId.trim()) {
-      setLocalMessage("Task instance ID et User ID sont obligatoires.");
+    if (!lastCreatedTask?.task_id) {
+      setLocalMessage("Créez d’abord une tâche.");
       return;
     }
 
     try {
-      const result = await runAssignTaskInstance(
-        assignTaskInstanceId.trim(),
-        assignUserId.trim()
-      );
-      setLocalMessage(`Assignation créée : ${result}`);
+      const result = await generateInstances({
+        householdId,
+        taskId: lastCreatedTask.task_id,
+        dateFrom,
+        dateTo,
+      });
+
+      setLocalMessage(`Instances générées : ${result.generated_count}`);
     } catch {
       //
     }
@@ -193,89 +136,43 @@ export default function TasksPage() {
   const handleStartTask = async () => {
     setLocalMessage(null);
 
-    if (!actionTaskInstanceId.trim()) {
-      setLocalMessage("Task instance ID requis pour démarrer.");
+    if (!taskInstanceId.trim()) {
+      setLocalMessage("Renseignez un task_instance_id pour démarrer.");
       return;
     }
 
     try {
-      const result = await runStartTask(actionTaskInstanceId.trim());
-      setLocalMessage(`Tâche démarrée : ${result}`);
+      const result = await startTaskExecution({
+        householdId,
+        taskInstanceId: taskInstanceId.trim(),
+      });
+
+      setLocalMessage(`Tâche démarrée : ${result.execution_id}`);
     } catch {
       //
     }
   };
 
-  const handleDoneTask = async () => {
+  const handleCompleteTask = async () => {
     setLocalMessage(null);
 
-    if (!actionTaskInstanceId.trim()) {
-      setLocalMessage("Task instance ID requis pour terminer.");
+    if (!taskInstanceId.trim()) {
+      setLocalMessage("Renseignez un task_instance_id pour clôturer.");
       return;
     }
 
     try {
-      const result = await runDoneTask(actionTaskInstanceId.trim(), doneNotes.trim() || undefined);
-      setLocalMessage(`Tâche terminée : ${JSON.stringify(result)}`);
-    } catch {
-      //
-    }
-  };
+      const result = await completeTaskExecution({
+        householdId,
+        taskInstanceId: taskInstanceId.trim(),
+        proofNote: proofNote.trim() || null,
+      });
 
-  const handleSetRecurrence = async () => {
-    setLocalMessage(null);
-
-    if (!taskId.trim()) {
-      setLocalMessage("Task ID requis.");
-      return;
-    }
-
-    try {
-      const result = await runSetRecurrence(taskId.trim(), startOn, recurrenceRule);
-      setLocalMessage(`Récurrence mise à jour : ${result}`);
-    } catch {
-      //
-    }
-  };
-
-  const handleSetTools = async () => {
-    setLocalMessage(null);
-
-    if (!taskId.trim()) {
-      setLocalMessage("Task ID requis.");
-      return;
-    }
-
-    try {
-      const result = await runSetRequiredTools(taskId.trim(), parseJsonArray(requiredToolsText));
-      setLocalMessage(`Required tools mis à jour : ${result}`);
-    } catch {
-      //
-    }
-  };
-
-  const handleSetChecklist = async () => {
-    setLocalMessage(null);
-
-    if (!taskId.trim()) {
-      setLocalMessage("Task ID requis.");
-      return;
-    }
-
-    try {
-      const result = await runSetChecklist(taskId.trim(), parseJsonArray(checklistText));
-      setLocalMessage(`Checklist mise à jour : ${result}`);
-    } catch {
-      //
-    }
-  };
-
-  const handleFixDay = async () => {
-    setLocalMessage(null);
-
-    try {
-      const result = await runFixDay(generateFrom);
-      setLocalMessage(`Fix day exécuté : ${JSON.stringify(result)}`);
+      setLocalMessage(
+        result.run_status === "NOOP"
+          ? "Exécution déjà traitée (NOOP)."
+          : `Tâche terminée : ${result.execution_id ?? "OK"}`
+      );
     } catch {
       //
     }
@@ -302,9 +199,16 @@ export default function TasksPage() {
           <div className="flex items-center gap-3">
             <button
               onClick={() => navigateTo("/dashboard")}
-              className="border border-gold/40 px-5 py-3 text-xs uppercase tracking-[0.25em] text-gold hover:bg-gold hover:text-obsidian transition-colors"
+              className="border border-white/10 px-5 py-3 text-xs uppercase tracking-[0.25em] text-alabaster hover:border-gold/40 hover:text-gold transition-colors"
             >
               Dashboard
+            </button>
+
+            <button
+              onClick={() => navigateTo("/inventory")}
+              className="border border-gold/40 px-5 py-3 text-xs uppercase tracking-[0.25em] text-gold hover:bg-gold hover:text-obsidian transition-colors"
+            >
+              Inventory
             </button>
           </div>
         </div>
@@ -313,23 +217,17 @@ export default function TasksPage() {
       <main className="max-w-7xl mx-auto px-6 py-12">
         <section className="grid lg:grid-cols-3 gap-8">
           <div className="lg:col-span-2 border border-white/10 bg-white/5 p-8">
-            <p className="text-xs uppercase tracking-[0.3em] text-gold/80">Orchestration des tâches</p>
-            <h2 className="mt-4 text-4xl font-serif italic">Créer et exécuter le flux de tâches</h2>
+            <p className="text-xs uppercase tracking-[0.3em] text-gold/80">Exécution opérationnelle</p>
+            <h2 className="mt-4 text-4xl font-serif italic">Créer et exécuter une tâche</h2>
+            <p className="mt-6 text-alabaster/70 leading-relaxed">
+              Cette page branche l’expérience DOMYLI sur
+              <span className="text-gold"> rpc_task_create</span>,
+              <span className="text-gold"> rpc_task_generate_instances</span>,
+              <span className="text-gold"> rpc_task_start</span> et
+              <span className="text-gold"> rpc_task_done_v2</span>.
+            </p>
 
-            <div className="mt-10 grid md:grid-cols-2 gap-6">
-              <div className="md:col-span-2">
-                <label className="mb-2 block text-xs uppercase tracking-[0.25em] text-alabaster/60">
-                  Task ID
-                </label>
-                <input
-                  type="text"
-                  value={taskId}
-                  onChange={(e) => setTaskId(e.target.value)}
-                  placeholder="uuid optionnel pour update"
-                  className="w-full border border-white/10 bg-obsidian px-4 py-3 text-sm outline-none focus:border-gold/50"
-                />
-              </div>
-
+            <form onSubmit={handleCreateTask} className="mt-10 grid md:grid-cols-2 gap-6">
               <div className="md:col-span-2">
                 <label className="mb-2 block text-xs uppercase tracking-[0.25em] text-alabaster/60">
                   Titre
@@ -338,8 +236,9 @@ export default function TasksPage() {
                   type="text"
                   value={title}
                   onChange={(e) => setTitle(e.target.value)}
-                  placeholder="Ex: Préparer la cuisine"
-                  className="w-full border border-white/10 bg-obsidian px-4 py-3 text-sm outline-none focus:border-gold/50"
+                  required
+                  placeholder="Nettoyer la cuisine"
+                  className="w-full border border-white/10 bg-black/20 px-4 py-4 text-sm outline-none focus:border-gold/50"
                 />
               </div>
 
@@ -350,340 +249,161 @@ export default function TasksPage() {
                 <textarea
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
-                  rows={3}
-                  className="w-full border border-white/10 bg-obsidian px-4 py-3 text-sm outline-none focus:border-gold/50 resize-none"
+                  placeholder="Checklist courte de l’action à réaliser"
+                  className="w-full min-h-[120px] border border-white/10 bg-black/20 px-4 py-4 text-sm outline-none focus:border-gold/50"
                 />
               </div>
 
               <div>
                 <label className="mb-2 block text-xs uppercase tracking-[0.25em] text-alabaster/60">
-                  Effort points
+                  Effort (points)
                 </label>
                 <input
                   type="number"
                   value={effortPoints}
                   onChange={(e) => setEffortPoints(e.target.value)}
-                  className="w-full border border-white/10 bg-obsidian px-4 py-3 text-sm outline-none focus:border-gold/50"
+                  placeholder="3"
+                  className="w-full border border-white/10 bg-black/20 px-4 py-4 text-sm outline-none focus:border-gold/50"
                 />
               </div>
 
               <div>
                 <label className="mb-2 block text-xs uppercase tracking-[0.25em] text-alabaster/60">
-                  Estimated minutes
+                  Durée (min)
                 </label>
                 <input
                   type="number"
-                  value={estimatedMinutes}
-                  onChange={(e) => setEstimatedMinutes(e.target.value)}
-                  className="w-full border border-white/10 bg-obsidian px-4 py-3 text-sm outline-none focus:border-gold/50"
-                />
-              </div>
-
-              <div>
-                <label className="mb-2 block text-xs uppercase tracking-[0.25em] text-alabaster/60">
-                  Start on
-                </label>
-                <input
-                  type="date"
-                  value={startOn}
-                  onChange={(e) => setStartOn(e.target.value)}
-                  className="w-full border border-white/10 bg-obsidian px-4 py-3 text-sm outline-none focus:border-gold/50"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="mb-2 block text-xs uppercase tracking-[0.25em] text-alabaster/60">
-                    Recurrence freq
-                  </label>
-                  <select
-                    value={recurrenceFreq}
-                    onChange={(e) => setRecurrenceFreq(e.target.value)}
-                    className="w-full border border-white/10 bg-obsidian px-4 py-3 text-sm outline-none focus:border-gold/50"
-                  >
-                    <option value="ONCE">ONCE</option>
-                    <option value="DAILY">DAILY</option>
-                    <option value="WEEKLY">WEEKLY</option>
-                    <option value="MONTHLY">MONTHLY</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="mb-2 block text-xs uppercase tracking-[0.25em] text-alabaster/60">
-                    Interval
-                  </label>
-                  <input
-                    type="number"
-                    value={recurrenceInterval}
-                    onChange={(e) => setRecurrenceInterval(e.target.value)}
-                    className="w-full border border-white/10 bg-obsidian px-4 py-3 text-sm outline-none focus:border-gold/50"
-                  />
-                </div>
-              </div>
-
-              <div className="md:col-span-2">
-                <label className="mb-2 block text-xs uppercase tracking-[0.25em] text-alabaster/60">
-                  Required tools JSON
-                </label>
-                <textarea
-                  value={requiredToolsText}
-                  onChange={(e) => setRequiredToolsText(e.target.value)}
-                  rows={3}
-                  className="w-full border border-white/10 bg-obsidian px-4 py-3 text-sm outline-none focus:border-gold/50 resize-none"
+                  value={durationMin}
+                  onChange={(e) => setDurationMin(e.target.value)}
+                  placeholder="20"
+                  className="w-full border border-white/10 bg-black/20 px-4 py-4 text-sm outline-none focus:border-gold/50"
                 />
               </div>
 
               <div className="md:col-span-2">
-                <label className="mb-2 block text-xs uppercase tracking-[0.25em] text-alabaster/60">
-                  Checklist JSON
-                </label>
-                <textarea
-                  value={checklistText}
-                  onChange={(e) => setChecklistText(e.target.value)}
-                  rows={3}
-                  className="w-full border border-white/10 bg-obsidian px-4 py-3 text-sm outline-none focus:border-gold/50 resize-none"
-                />
+                <button
+                  type="submit"
+                  disabled={!canCreate || creating}
+                  className="flex items-center justify-center gap-3 bg-gold px-6 py-4 text-sm font-medium uppercase tracking-[0.25em] text-obsidian transition hover:opacity-90 disabled:opacity-50"
+                >
+                  <Save size={18} />
+                  {creating ? "Création..." : "Créer la tâche"}
+                </button>
               </div>
-            </div>
+            </form>
 
-            <div className="mt-8 flex flex-wrap gap-4">
-              <button
-                type="button"
-                onClick={handleUpsertTask}
-                disabled={saving}
-                className="flex items-center justify-center gap-3 bg-gold px-6 py-4 text-sm font-medium uppercase tracking-[0.25em] text-obsidian transition hover:opacity-90 disabled:opacity-50"
-              >
-                <Save size={18} />
-                {saving ? "Enregistrement..." : "Créer / mettre à jour"}
-              </button>
-
-              <button
-                type="button"
-                onClick={handleSetRecurrence}
-                disabled={running}
-                className="border border-white/10 px-6 py-4 text-sm uppercase tracking-[0.25em] text-alabaster hover:border-gold/40 hover:text-gold transition-colors"
-              >
-                <CalendarDays size={16} className="inline mr-2" />
-                Set recurrence
-              </button>
-
-              <button
-                type="button"
-                onClick={handleSetTools}
-                disabled={running}
-                className="border border-white/10 px-6 py-4 text-sm uppercase tracking-[0.25em] text-alabaster hover:border-gold/40 hover:text-gold transition-colors"
-              >
-                <Wrench size={16} className="inline mr-2" />
-                Set tools
-              </button>
-
-              <button
-                type="button"
-                onClick={handleSetChecklist}
-                disabled={running}
-                className="border border-white/10 px-6 py-4 text-sm uppercase tracking-[0.25em] text-alabaster hover:border-gold/40 hover:text-gold transition-colors"
-              >
-                <Settings2 size={16} className="inline mr-2" />
-                Set checklist
-              </button>
-            </div>
-
-            <div className="mt-10 border border-white/10 bg-black/20 p-6">
-              <h3 className="text-xl font-serif italic mb-4">Instances / exécution</h3>
-
-              <div className="grid md:grid-cols-2 gap-6">
-                <div>
-                  <label className="mb-2 block text-xs uppercase tracking-[0.25em] text-alabaster/60">
-                    Task ID pour générer
-                  </label>
-                  <input
-                    type="text"
-                    value={instanceTaskId}
-                    onChange={(e) => setInstanceTaskId(e.target.value)}
-                    className="w-full border border-white/10 bg-obsidian px-4 py-3 text-sm outline-none focus:border-gold/50"
-                  />
+            <div className="mt-10 grid md:grid-cols-2 gap-6">
+              <div className="border border-white/10 bg-black/20 p-6">
+                <div className="flex items-center gap-3 mb-4">
+                  <Sparkles size={18} className="text-gold" />
+                  <h3 className="text-xl font-serif italic">Générer les instances</h3>
                 </div>
 
-                <div className="grid grid-cols-2 gap-4">
-                  <input
-                    type="date"
-                    value={generateFrom}
-                    onChange={(e) => setGenerateFrom(e.target.value)}
-                    className="border border-white/10 bg-obsidian px-4 py-3 text-sm outline-none focus:border-gold/50"
-                  />
-                  <input
-                    type="date"
-                    value={generateTo}
-                    onChange={(e) => setGenerateTo(e.target.value)}
-                    className="border border-white/10 bg-obsidian px-4 py-3 text-sm outline-none focus:border-gold/50"
-                  />
-                </div>
-              </div>
+                <div className="grid gap-4">
+                  <div>
+                    <label className="mb-2 block text-xs uppercase tracking-[0.25em] text-alabaster/60">
+                      Date début
+                    </label>
+                    <input
+                      type="date"
+                      value={dateFrom}
+                      onChange={(e) => setDateFrom(e.target.value)}
+                      className="w-full border border-white/10 bg-obsidian px-4 py-3 text-sm outline-none focus:border-gold/50"
+                    />
+                  </div>
 
-              <div className="mt-6 flex flex-wrap gap-4">
-                <button
-                  type="button"
-                  onClick={handleGenerateInstances}
-                  disabled={running}
-                  className="border border-white/10 px-6 py-4 text-sm uppercase tracking-[0.25em] text-alabaster hover:border-gold/40 hover:text-gold transition-colors"
-                >
-                  <ListTodo size={16} className="inline mr-2" />
-                  Generate instances
-                </button>
+                  <div>
+                    <label className="mb-2 block text-xs uppercase tracking-[0.25em] text-alabaster/60">
+                      Date fin
+                    </label>
+                    <input
+                      type="date"
+                      value={dateTo}
+                      onChange={(e) => setDateTo(e.target.value)}
+                      className="w-full border border-white/10 bg-obsidian px-4 py-3 text-sm outline-none focus:border-gold/50"
+                    />
+                  </div>
 
-                <button
-                  type="button"
-                  onClick={handleAutoAssign}
-                  disabled={running}
-                  className="border border-white/10 px-6 py-4 text-sm uppercase tracking-[0.25em] text-alabaster hover:border-gold/40 hover:text-gold transition-colors"
-                >
-                  <Sparkles size={16} className="inline mr-2" />
-                  Auto assign day
-                </button>
-
-                <button
-                  type="button"
-                  onClick={handleFixDay}
-                  disabled={running}
-                  className="border border-gold/30 px-6 py-4 text-sm uppercase tracking-[0.25em] text-gold hover:bg-gold hover:text-obsidian transition-colors"
-                >
-                  <RefreshCw size={16} className="inline mr-2" />
-                  Fix day
-                </button>
-              </div>
-            </div>
-
-            <div className="mt-10 border border-white/10 bg-black/20 p-6">
-              <h3 className="text-xl font-serif italic mb-4">Assign / Start / Done</h3>
-
-              <div className="grid md:grid-cols-2 gap-6">
-                <div className="space-y-4">
-                  <input
-                    type="text"
-                    value={assignTaskInstanceId}
-                    onChange={(e) => setAssignTaskInstanceId(e.target.value)}
-                    placeholder="Task instance ID"
-                    className="w-full border border-white/10 bg-obsidian px-4 py-3 text-sm outline-none focus:border-gold/50"
-                  />
-                  <input
-                    type="text"
-                    value={assignUserId}
-                    onChange={(e) => setAssignUserId(e.target.value)}
-                    placeholder="User ID"
-                    className="w-full border border-white/10 bg-obsidian px-4 py-3 text-sm outline-none focus:border-gold/50"
-                  />
                   <button
                     type="button"
-                    onClick={handleAssignTaskInstance}
-                    disabled={running}
-                    className="w-full border border-white/10 px-6 py-4 text-sm uppercase tracking-[0.25em] text-alabaster hover:border-gold/40 hover:text-gold transition-colors"
+                    onClick={handleGenerateInstances}
+                    disabled={generating || !lastCreatedTask?.task_id}
+                    className="flex items-center justify-center gap-3 border border-white/10 px-5 py-3 text-sm uppercase tracking-[0.25em] text-alabaster hover:border-gold/40 hover:text-gold transition-colors disabled:opacity-50"
                   >
-                    Assign task instance
+                    <ClipboardCheck size={18} />
+                    {generating ? "Génération..." : "Générer les instances"}
                   </button>
                 </div>
+              </div>
 
-                <div className="space-y-4">
-                  <input
-                    type="text"
-                    value={actionTaskInstanceId}
-                    onChange={(e) => setActionTaskInstanceId(e.target.value)}
-                    placeholder="Task instance ID"
-                    className="w-full border border-white/10 bg-obsidian px-4 py-3 text-sm outline-none focus:border-gold/50"
-                  />
-                  <textarea
-                    value={doneNotes}
-                    onChange={(e) => setDoneNotes(e.target.value)}
-                    rows={3}
-                    placeholder="Notes de clôture"
-                    className="w-full border border-white/10 bg-obsidian px-4 py-3 text-sm outline-none focus:border-gold/50 resize-none"
-                  />
-                  <div className="flex gap-4">
+              <div className="border border-white/10 bg-black/20 p-6">
+                <div className="flex items-center gap-3 mb-4">
+                  <Play size={18} className="text-gold" />
+                  <h3 className="text-xl font-serif italic">Exécution</h3>
+                </div>
+
+                <div className="grid gap-4">
+                  <div>
+                    <label className="mb-2 block text-xs uppercase tracking-[0.25em] text-alabaster/60">
+                      Task instance ID
+                    </label>
+                    <input
+                      type="text"
+                      value={taskInstanceId}
+                      onChange={(e) => setTaskInstanceId(e.target.value)}
+                      placeholder="UUID d'instance"
+                      className="w-full border border-white/10 bg-obsidian px-4 py-3 text-sm outline-none focus:border-gold/50"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="mb-2 block text-xs uppercase tracking-[0.25em] text-alabaster/60">
+                      Note de preuve
+                    </label>
+                    <input
+                      type="text"
+                      value={proofNote}
+                      onChange={(e) => setProofNote(e.target.value)}
+                      placeholder="Cuisine nettoyée, surfaces faites"
+                      className="w-full border border-white/10 bg-obsidian px-4 py-3 text-sm outline-none focus:border-gold/50"
+                    />
+                  </div>
+
+                  <div className="grid sm:grid-cols-2 gap-3">
                     <button
                       type="button"
                       onClick={handleStartTask}
-                      disabled={running}
-                      className="flex-1 border border-white/10 px-6 py-4 text-sm uppercase tracking-[0.25em] text-alabaster hover:border-gold/40 hover:text-gold transition-colors"
+                      disabled={starting || !taskInstanceId.trim()}
+                      className="flex items-center justify-center gap-3 border border-white/10 px-5 py-3 text-sm uppercase tracking-[0.25em] text-alabaster hover:border-gold/40 hover:text-gold transition-colors disabled:opacity-50"
                     >
-                      <Play size={16} className="inline mr-2" />
-                      Start
+                      <Play size={18} />
+                      {starting ? "Démarrage..." : "Démarrer"}
                     </button>
+
                     <button
                       type="button"
-                      onClick={handleDoneTask}
-                      disabled={running}
-                      className="flex-1 border border-gold/30 px-6 py-4 text-sm uppercase tracking-[0.25em] text-gold hover:bg-gold hover:text-obsidian transition-colors"
+                      onClick={handleCompleteTask}
+                      disabled={completing || !taskInstanceId.trim()}
+                      className="flex items-center justify-center gap-3 bg-gold px-5 py-3 text-sm font-medium uppercase tracking-[0.25em] text-obsidian transition hover:opacity-90 disabled:opacity-50"
                     >
-                      <CheckCircle2 size={16} className="inline mr-2" />
-                      Done v2
+                      <CheckCircle2 size={18} />
+                      {completing ? "Clôture..." : "Terminer"}
                     </button>
                   </div>
                 </div>
               </div>
             </div>
 
-            {(localMessage ||
-              error ||
-              lastTaskId ||
-              lastGenerateResult ||
-              lastAutoAssignResult ||
-              lastDoneResult ||
-              lastFixDayResult) && (
+            {(localMessage || error || lastCreatedTask || lastGenerated || lastStarted || lastCompleted) && (
               <div className="mt-8 border border-white/10 bg-black/20 p-4 text-sm text-alabaster/75">
                 {localMessage ??
                   error?.message ??
-                  (lastTaskId
-                    ? `Tâche enregistrée : ${lastTaskId}`
-                    : lastGenerateResult
-                      ? `Generate instances : ${JSON.stringify(lastGenerateResult)}`
-                      : lastAutoAssignResult
-                        ? `Auto assign : ${JSON.stringify(lastAutoAssignResult)}`
-                        : lastDoneResult
-                          ? `Done v2 : ${JSON.stringify(lastDoneResult)}`
-                          : lastFixDayResult
-                            ? `Fix day : ${JSON.stringify(lastFixDayResult)}`
-                            : null)}
+                  (lastCreatedTask ? `Tâche créée : ${lastCreatedTask.title}` : null) ??
+                  (lastGenerated ? `Instances générées : ${lastGenerated.generated_count}` : null) ??
+                  (lastStarted ? `Tâche démarrée : ${lastStarted.execution_id}` : null) ??
+                  (lastCompleted ? `Tâche terminée : ${lastCompleted.run_status}` : null)}
               </div>
             )}
-
-            <div className="mt-10 border border-white/10 bg-black/20 p-6">
-              <h3 className="text-xl font-serif italic mb-4">Tâches manipulées dans cette session</h3>
-
-              {tasks.length === 0 ? (
-                <div className="text-sm text-alabaster/70">
-                  Aucune tâche créée ou modifiée dans cette session.
-                </div>
-              ) : (
-                <div className="grid gap-4">
-                  {tasks.map((task) => (
-                    <div
-                      key={task.task_id}
-                      className="border border-white/10 bg-obsidian p-4 grid md:grid-cols-5 gap-4 text-sm"
-                    >
-                      <div>
-                        <div className="text-alabaster/50">Task ID</div>
-                        <div className="mt-1 text-alabaster break-all">{task.task_id}</div>
-                      </div>
-                      <div>
-                        <div className="text-alabaster/50">Titre</div>
-                        <div className="mt-1 text-alabaster">{task.title}</div>
-                      </div>
-                      <div>
-                        <div className="text-alabaster/50">Effort</div>
-                        <div className="mt-1 text-alabaster">{task.effort_points}</div>
-                      </div>
-                      <div>
-                        <div className="text-alabaster/50">Start on</div>
-                        <div className="mt-1 text-alabaster">{task.start_on}</div>
-                      </div>
-                      <div>
-                        <div className="text-alabaster/50">Active</div>
-                        <div className="mt-1 text-alabaster">{task.is_active ? "Oui" : "Non"}</div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
           </div>
 
           <aside className="border border-white/10 bg-white/5 p-8">
@@ -713,19 +433,31 @@ export default function TasksPage() {
 
             <div className="mt-8 space-y-4">
               <div className="border border-gold/20 bg-gold/5 p-4 text-sm text-alabaster/75">
-                Les tâches sont désormais branchées sur les RPC réelles d’orchestration DOMYLI.
+                <div className="flex items-center gap-3">
+                  <House size={18} className="text-gold" />
+                  <span>Les tâches structurent l’exécution concrète du foyer.</span>
+                </div>
               </div>
 
-              <div className="border border-white/10 bg-black/20 p-4 text-sm">
-                RPC : `rpc_task_create`, `rpc_task_generate_instances`, `rpc_task_auto_assign_day`
+              <div className="border border-white/10 bg-black/20 p-4">
+                <div className="flex items-center gap-3">
+                  <ShieldCheck size={18} className="text-gold" />
+                  <span className="text-sm">RPC : app.rpc_task_create</span>
+                </div>
               </div>
 
-              <div className="border border-white/10 bg-black/20 p-4 text-sm">
-                RPC : `rpc_task_instance_assign`, `rpc_task_start`, `rpc_task_done_v2`
+              <div className="border border-white/10 bg-black/20 p-4">
+                <div className="flex items-center gap-3">
+                  <ShieldCheck size={18} className="text-gold" />
+                  <span className="text-sm">RPC : app.rpc_task_generate_instances</span>
+                </div>
               </div>
 
-              <div className="border border-white/10 bg-black/20 p-4 text-sm">
-                RPC : `rpc_task_set_recurrence`, `rpc_task_required_tools_set`, `rpc_task_checklist_set`, `rpc_fix_day_v2`
+              <div className="border border-white/10 bg-black/20 p-4">
+                <div className="flex items-center gap-3">
+                  <ShieldCheck size={18} className="text-gold" />
+                  <span className="text-sm">RPC : app.rpc_task_start / rpc_task_done_v2</span>
+                </div>
               </div>
             </div>
           </aside>

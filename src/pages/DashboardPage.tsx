@@ -5,14 +5,38 @@ import {
   Users,
   Utensils,
   ShieldAlert,
+  Wrench,
   RefreshCw,
-  ShoppingCart,
-  AlertTriangle,
-  CheckCircle2,
 } from "lucide-react";
 import { useDomyliConnection } from "../hooks/useDomyliConnection";
 import { useDashboard } from "../hooks/useDashboard";
 import { navigateTo } from "../lib/navigation";
+
+function formatScheduledAt(value?: string | null): string {
+  if (!value) return "Sans horaire";
+
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) return value;
+
+  return date.toLocaleString("fr-FR", {
+    dateStyle: "short",
+    timeStyle: "short",
+  });
+}
+
+function feedIcon(type: string) {
+  switch (type) {
+    case "TASK":
+      return <Users className="text-gold" size={18} />;
+    case "MEAL":
+      return <Utensils className="text-gold" size={18} />;
+    case "TOOL":
+      return <Wrench className="text-gold" size={18} />;
+    default:
+      return <ShieldAlert className="text-gold" size={18} />;
+  }
+}
 
 export default function DashboardPage() {
   const {
@@ -24,7 +48,8 @@ export default function DashboardPage() {
     authLoading,
   } = useDomyliConnection();
 
-  const { loading, error, health, feed, refresh } = useDashboard();
+  const householdId = bootstrap?.active_household_id ?? null;
+  const { loading, error, health, feed, refresh } = useDashboard(householdId);
 
   if (authLoading) {
     return (
@@ -59,28 +84,28 @@ export default function DashboardPage() {
 
   const cards = [
     {
-      title: "Repas du jour",
-      value: String(health?.today_meal_count ?? 0),
+      title: "Repas planifiés",
+      value: String(health?.planned_meals_count ?? 0),
       icon: <Utensils className="text-gold" size={24} />,
-      text: "Nombre de repas planifiés aujourd’hui.",
+      text: "Nombre de repas planifiés pour aujourd’hui.",
     },
     {
-      title: "Tâches du jour",
-      value: String(health?.today_task_count ?? 0),
+      title: "Repas confirmés",
+      value: String(health?.confirmed_meals_count ?? 0),
       icon: <Activity className="text-gold" size={24} />,
-      text: "Nombre total de tâches prévues aujourd’hui.",
+      text: "Repas réellement confirmés côté exécution.",
     },
     {
-      title: "Tâches terminées",
-      value: String(health?.today_task_done_count ?? 0),
-      icon: <CheckCircle2 className="text-gold" size={24} />,
-      text: "Tâches marquées DONE aujourd’hui.",
+      title: "Tâches en retard",
+      value: String(health?.overdue_tasks_count ?? 0),
+      icon: <Users className="text-gold" size={24} />,
+      text: "Nombre de tâches en dépassement aujourd’hui.",
     },
     {
-      title: "Stock bas",
-      value: String(health?.inventory_low_stock_count ?? 0),
+      title: "Stock manquant",
+      value: String(health?.missing_stock_count ?? 0),
       icon: <Package className="text-gold" size={24} />,
-      text: "Articles sous le seuil minimum.",
+      text: "Articles en dessous du seuil ou manquants.",
     },
   ];
 
@@ -220,8 +245,8 @@ export default function DashboardPage() {
           </div>
 
           <div className="border border-white/10 bg-white/5 p-8">
-            <p className="text-xs uppercase tracking-[0.3em] text-gold/80">Charge du jour</p>
-            <h2 className="mt-4 text-3xl font-serif italic">Répartition par membre</h2>
+            <p className="text-xs uppercase tracking-[0.3em] text-gold/80">Flux du jour</p>
+            <h2 className="mt-4 text-3xl font-serif italic">Timeline opérationnelle</h2>
 
             {loading && (
               <div className="mt-6 border border-white/10 bg-black/20 p-4 text-sm text-alabaster/70">
@@ -235,34 +260,37 @@ export default function DashboardPage() {
               </div>
             )}
 
-            {!loading && !error && feed && feed.members.length === 0 && (
+            {!loading && !error && feed.length === 0 && (
               <div className="mt-6 border border-white/10 bg-black/20 p-4 text-sm text-alabaster/70">
-                Aucun membre remonté dans la charge du jour.
+                Aucun élément opérationnel remonté pour l’instant.
               </div>
             )}
 
-            {!loading && !error && feed && feed.members.length > 0 && (
+            {!loading && !error && feed.length > 0 && (
               <div className="mt-6 grid gap-4">
-                {feed.members.map((member) => (
+                {feed.map((item) => (
                   <div
-                    key={member.user_id}
+                    key={`${item.item_type}-${item.item_id}-${item.title}`}
                     className="border border-white/10 bg-black/20 p-4"
                   >
                     <div className="flex items-start justify-between gap-4">
-                      <div>
-                        <div className="text-xs uppercase tracking-[0.25em] text-gold/80">
-                          {member.role}
+                      <div className="flex items-start gap-3">
+                        <div className="w-10 h-10 border border-gold/20 flex items-center justify-center">
+                          {feedIcon(item.item_type)}
                         </div>
-                        <div className="mt-2 text-lg font-serif italic">
-                          {member.user_id}
-                        </div>
-                        <div className="mt-2 text-sm text-alabaster/60">
-                          Capacité : {member.capacity_points_daily} • Tâches : {member.assigned_task_count}
+                        <div>
+                          <div className="text-xs uppercase tracking-[0.25em] text-gold/80">
+                            {item.item_type}
+                          </div>
+                          <div className="mt-2 text-lg font-serif italic">{item.title}</div>
+                          <div className="mt-2 text-sm text-alabaster/60">
+                            {formatScheduledAt(item.scheduled_at)}
+                          </div>
                         </div>
                       </div>
 
                       <div className="text-xs uppercase tracking-[0.25em] text-alabaster/50">
-                        Effort : {member.assigned_effort_points}
+                        {item.status}
                       </div>
                     </div>
                   </div>
@@ -279,30 +307,30 @@ export default function DashboardPage() {
 
             <div className="mt-8 grid sm:grid-cols-2 gap-4 text-sm">
               <div className="border border-white/10 bg-black/20 p-4">
-                <span className="text-alabaster/50">Alertes ouvertes :</span>
+                <span className="text-alabaster/50">Outils bloqués :</span>
                 <div className="mt-2 text-2xl font-serif italic">
-                  {health?.open_alert_count ?? 0}
+                  {health?.blocked_tools_count ?? 0}
                 </div>
               </div>
 
               <div className="border border-white/10 bg-black/20 p-4">
-                <span className="text-alabaster/50">Shopping ouverte :</span>
+                <span className="text-alabaster/50">Stock manquant :</span>
                 <div className="mt-2 text-2xl font-serif italic">
-                  {health?.open_shopping_count ?? 0}
+                  {health?.missing_stock_count ?? 0}
                 </div>
               </div>
 
               <div className="border border-white/10 bg-black/20 p-4">
-                <span className="text-alabaster/50">Repas du jour :</span>
+                <span className="text-alabaster/50">Repas planifiés :</span>
                 <div className="mt-2 text-2xl font-serif italic">
-                  {health?.today_meal_count ?? 0}
+                  {health?.planned_meals_count ?? 0}
                 </div>
               </div>
 
               <div className="border border-white/10 bg-black/20 p-4">
-                <span className="text-alabaster/50">Tâches terminées :</span>
+                <span className="text-alabaster/50">Repas confirmés :</span>
                 <div className="mt-2 text-2xl font-serif italic">
-                  {health?.today_task_done_count ?? 0}
+                  {health?.confirmed_meals_count ?? 0}
                 </div>
               </div>
             </div>
@@ -312,8 +340,8 @@ export default function DashboardPage() {
             <p className="text-xs uppercase tracking-[0.3em] text-gold/80">Suite logique</p>
             <h2 className="mt-4 text-3xl font-serif italic">Base prête, valeur métier visible</h2>
             <p className="mt-6 text-alabaster/70 leading-relaxed">
-              Le dashboard lit maintenant les vrais JSON de ta base DOMYLI. Tu peux naviguer vers les
-              modules métiers pour enrichir l’exécution réelle du foyer.
+              Le dashboard lit maintenant de vraies données DOMYLI. Tu peux naviguer vers les modules
+              métiers pour enrichir l’exécution réelle du foyer.
             </p>
 
             <div className="mt-8 grid gap-4">

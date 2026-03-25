@@ -1,0 +1,1 @@
+export function isSessionExpiredError(error: unknown): boolean { if (!(error instanceof Error)) return false; const m = error.message.toLowerCase(); return m.includes("jwt") || m.includes("session") || m.includes("domyli_rpc_unauthenticated"); }

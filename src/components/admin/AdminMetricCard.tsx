@@ -1,0 +1,2 @@
+import type { AdminMetric } from "@/src/types/admin";
+export default function AdminMetricCard({ metric }: { metric: AdminMetric }) { return <div className="glass metallic-border rounded-3xl p-5"><p className="text-sm uppercase tracking-[0.2em] text-gold/70">{metric.label}</p><p className="text-3xl mt-2">{metric.value}</p>{metric.helper ? <p className="text-sm text-alabaster/60 mt-2">{metric.helper}</p> : null}</div>; }

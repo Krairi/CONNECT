@@ -1,0 +1,1 @@
+export const logger = { info: (...a: unknown[]) => { if (import.meta.env.DEV) console.info("[DOMYLI]", ...a); }, warn: (...a: unknown[]) => { if (import.meta.env.DEV) console.warn("[DOMYLI]", ...a); }, error: (...a: unknown[]) => console.error("[DOMYLI]", ...a) };

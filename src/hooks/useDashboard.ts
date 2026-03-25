@@ -4,24 +4,24 @@ import {
   getTodayHealth,
   getTodayLoadFeed,
   type TodayHealthOutput,
-  type TodayLoadFeedOutput,
+  type TodayLoadFeedItem,
 } from "../services/dashboard/dashboardService";
 
 type DashboardState = {
   loading: boolean;
   error: DomyliAppError | null;
   health: TodayHealthOutput | null;
-  feed: TodayLoadFeedOutput | null;
+  feed: TodayLoadFeedItem[];
 };
 
 const initialState: DashboardState = {
   loading: false,
   error: null,
   health: null,
-  feed: null,
+  feed: [],
 };
 
-export function useDashboard() {
+export function useDashboard(householdId: string | null) {
   const [state, setState] = useState<DashboardState>(initialState);
 
   const refresh = useCallback(async () => {
@@ -34,7 +34,7 @@ export function useDashboard() {
     try {
       const [health, feed] = await Promise.all([
         getTodayHealth(),
-        getTodayLoadFeed(),
+        householdId ? getTodayLoadFeed({ p_household_id: householdId }) : Promise.resolve([]),
       ]);
 
       setState({
@@ -50,10 +50,10 @@ export function useDashboard() {
         loading: false,
         error: normalized,
         health: null,
-        feed: null,
+        feed: [],
       });
     }
-  }, []);
+  }, [householdId]);
 
   useEffect(() => {
     refresh();

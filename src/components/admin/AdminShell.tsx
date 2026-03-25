@@ -1,0 +1,3 @@
+import type { PropsWithChildren } from "react";
+import AdminSidebar from "@/src/components/admin/AdminSidebar";
+export default function AdminShell({ title, subtitle, children }: PropsWithChildren<{ title: string; subtitle?: string }>) { return <div className="min-h-screen bg-obsidian text-alabaster px-6 py-8"><div className="max-w-7xl mx-auto grid lg:grid-cols-[280px_1fr] gap-6"><AdminSidebar /><main className="space-y-6"><header className="glass metallic-border rounded-3xl p-6"><p className="text-gold uppercase tracking-[0.2em] text-sm">DOMYLI ADMIN</p><h1 className="text-4xl mt-2">{title}</h1>{subtitle ? <p className="text-alabaster/70 mt-2">{subtitle}</p> : null}</header>{children}</main></div></div>; }

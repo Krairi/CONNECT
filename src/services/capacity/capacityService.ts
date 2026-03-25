@@ -7,42 +7,41 @@ export type TeamCapacityInput = {
 
 export type TeamCapacityMember = {
   member_user_id: string;
-  role: string;
-  base_capacity_points: number;
-  effective_capacity_points: number;
-  assigned_effort_points: number;
-  remaining_capacity_points: number;
+  display_name: string;
+  capacity_points_daily: number;
+  assigned_points: number;
+  remaining_points: number;
 };
 
 export type TeamCapacityOutput = {
   household_id: string | null;
   day: string;
-  total_base_capacity_points: number;
-  total_effective_capacity_points: number;
-  total_assigned_effort_points: number;
-  total_remaining_capacity_points: number;
+  total_capacity_points: number;
+  assigned_points: number;
+  remaining_points: number;
   members: TeamCapacityMember[];
 };
 
 type RawTeamCapacityMember = {
+  member_user_id?: string | null;
   user_id?: string | null;
-  role?: string | null;
-  base_capacity_points?: number | null;
-  effective_capacity_points?: number | null;
-  assigned_effort_points?: number | null;
-  remaining_capacity_points?: number | null;
+  display_name?: string | null;
+  full_name?: string | null;
+  capacity_points_daily?: number | null;
+  capacity_points?: number | null;
+  assigned_points?: number | null;
+  remaining_points?: number | null;
 };
 
 type RawTeamCapacityJson = {
   household_id?: string | null;
+  day?: string | null;
   capacity_date?: string | null;
+  total_capacity_points?: number | null;
+  total_points?: number | null;
+  assigned_points?: number | null;
+  remaining_points?: number | null;
   members?: RawTeamCapacityMember[] | null;
-  totals?: {
-    base_capacity_points?: number | null;
-    effective_capacity_points?: number | null;
-    assigned_effort_points?: number | null;
-    remaining_capacity_points?: number | null;
-  } | null;
 };
 
 export type CapacitySetMemberDailyInput = {
@@ -68,23 +67,22 @@ export async function getTeamCapacity(
     console.log("DOMYLI rpc_team_capacity raw =>", rawResult);
 
     const raw = rawResult ?? {};
-    const totals = raw.totals ?? {};
 
     return {
       household_id: raw.household_id ?? null,
-      day: raw.capacity_date ?? payload.p_capacity_date,
-      total_base_capacity_points: Number(totals.base_capacity_points ?? 0),
-      total_effective_capacity_points: Number(totals.effective_capacity_points ?? 0),
-      total_assigned_effort_points: Number(totals.assigned_effort_points ?? 0),
-      total_remaining_capacity_points: Number(totals.remaining_capacity_points ?? 0),
+      day: raw.day ?? raw.capacity_date ?? payload.p_capacity_date,
+      total_capacity_points: Number(raw.total_capacity_points ?? raw.total_points ?? 0),
+      assigned_points: Number(raw.assigned_points ?? 0),
+      remaining_points: Number(raw.remaining_points ?? 0),
       members: Array.isArray(raw.members)
         ? raw.members.map((member) => ({
-            member_user_id: member.user_id ?? "",
-            role: member.role ?? "MEMBRE",
-            base_capacity_points: Number(member.base_capacity_points ?? 0),
-            effective_capacity_points: Number(member.effective_capacity_points ?? 0),
-            assigned_effort_points: Number(member.assigned_effort_points ?? 0),
-            remaining_capacity_points: Number(member.remaining_capacity_points ?? 0),
+            member_user_id: member.member_user_id ?? member.user_id ?? "",
+            display_name: member.display_name ?? member.full_name ?? "Membre DOMYLI",
+            capacity_points_daily: Number(
+              member.capacity_points_daily ?? member.capacity_points ?? 0
+            ),
+            assigned_points: Number(member.assigned_points ?? 0),
+            remaining_points: Number(member.remaining_points ?? 0),
           }))
         : [],
     };
@@ -93,10 +91,9 @@ export async function getTeamCapacity(
       return {
         household_id: null,
         day: payload.p_capacity_date,
-        total_base_capacity_points: 0,
-        total_effective_capacity_points: 0,
-        total_assigned_effort_points: 0,
-        total_remaining_capacity_points: 0,
+        total_capacity_points: 0,
+        assigned_points: 0,
+        remaining_points: 0,
         members: [],
       };
     }

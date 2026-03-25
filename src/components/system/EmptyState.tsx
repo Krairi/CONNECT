@@ -1,0 +1,2 @@
+import type { ReactNode } from "react";
+export default function EmptyState({ title, description, action }: { title: string; description: string; action?: ReactNode }) { return <div className="glass metallic-border rounded-3xl p-8 text-center"><h2 className="text-2xl text-alabaster">{title}</h2><p className="text-alabaster/70 mt-3">{description}</p>{action ? <div className="mt-5">{action}</div> : null}</div>; }

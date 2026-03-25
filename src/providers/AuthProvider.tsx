@@ -1,0 +1,9 @@
+import { createContext, useCallback, useContext, useMemo, useState, type PropsWithChildren } from "react";
+import { useDomyliConnection } from "@/src/hooks/useDomyliConnection";
+import { reportMonitoringEvent } from "@/src/lib/monitoring";
+import SessionExpiredModal from "@/src/components/system/SessionExpiredModal";
+type DomyliConnectionValue = ReturnType<typeof useDomyliConnection>;
+type AuthContextValue = DomyliConnectionValue & { refreshAuthState: () => Promise<void>; sessionExpired: boolean; openSessionExpiredModal: () => void; closeSessionExpiredModal: () => void; };
+const AuthContext = createContext<AuthContextValue | null>(null);
+export function AuthProvider({ children }: PropsWithChildren) { const connection = useDomyliConnection(); const [sessionExpired, setSessionExpired] = useState(false); const refreshAuthState = useCallback(async () => { await connection.refreshBootstrap(); }, [connection]); const openSessionExpiredModal = useCallback(() => { setSessionExpired(true); reportMonitoringEvent({ level: "warn", event: "session_expired_modal_open", message: "Session expirée détectée côté front" }); }, []); const closeSessionExpiredModal = useCallback(() => setSessionExpired(false), []); const handleReconnect = useCallback(async () => { setSessionExpired(false); await connection.signOut(); window.location.href = "/"; }, [connection]); const value = useMemo<AuthContextValue>(() => ({ ...connection, refreshAuthState, sessionExpired, openSessionExpiredModal, closeSessionExpiredModal }), [connection, refreshAuthState, sessionExpired, openSessionExpiredModal, closeSessionExpiredModal]); return <AuthContext.Provider value={value}>{children}<SessionExpiredModal open={sessionExpired} onReconnect={() => { void handleReconnect(); }} /></AuthContext.Provider>; }
+export function useAuth(): AuthContextValue { const context = useContext(AuthContext); if (!context) throw new Error("useAuth must be used within <AuthProvider>"); return context; }

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import {
   ArrowLeft,
   ArrowRight,
@@ -35,6 +35,10 @@ export default function CapacityPage() {
 
   const { loading, saving, error, capacity, lastSaved, refresh, saveMemberCapacity } =
     useCapacity(day);
+
+  const selectedMember = useMemo(() => {
+    return capacity?.members.find((m) => m.member_user_id === selectedMemberUserId) ?? null;
+  }, [capacity?.members, selectedMemberUserId]);
 
   if (authLoading) {
     return (
@@ -155,28 +159,19 @@ export default function CapacityPage() {
             <div className="mt-10 grid md:grid-cols-4 gap-4">
               <div className="border border-white/10 bg-black/20 p-4">
                 <div className="text-xs uppercase tracking-[0.25em] text-alabaster/50">
-                  Capacité de base
+                  Capacité totale
                 </div>
                 <div className="mt-2 text-3xl font-serif italic">
-                  {capacity?.total_base_capacity_points ?? 0}
+                  {capacity?.total_capacity_points ?? 0}
                 </div>
               </div>
 
               <div className="border border-white/10 bg-black/20 p-4">
                 <div className="text-xs uppercase tracking-[0.25em] text-alabaster/50">
-                  Capacité effective
+                  Assigné
                 </div>
                 <div className="mt-2 text-3xl font-serif italic">
-                  {capacity?.total_effective_capacity_points ?? 0}
-                </div>
-              </div>
-
-              <div className="border border-white/10 bg-black/20 p-4">
-                <div className="text-xs uppercase tracking-[0.25em] text-alabaster/50">
-                  Effort assigné
-                </div>
-                <div className="mt-2 text-3xl font-serif italic">
-                  {capacity?.total_assigned_effort_points ?? 0}
+                  {capacity?.assigned_points ?? 0}
                 </div>
               </div>
 
@@ -185,7 +180,16 @@ export default function CapacityPage() {
                   Restant
                 </div>
                 <div className="mt-2 text-3xl font-serif italic">
-                  {capacity?.total_remaining_capacity_points ?? 0}
+                  {capacity?.remaining_points ?? 0}
+                </div>
+              </div>
+
+              <div className="border border-white/10 bg-black/20 p-4">
+                <div className="text-xs uppercase tracking-[0.25em] text-alabaster/50">
+                  Jour
+                </div>
+                <div className="mt-2 text-lg font-serif italic">
+                  {capacity?.day ?? day}
                 </div>
               </div>
             </div>
@@ -216,7 +220,7 @@ export default function CapacityPage() {
                         (m) => m.member_user_id === e.target.value
                       );
                       setCapacityPointsDaily(
-                        member ? String(member.effective_capacity_points) : ""
+                        member ? String(member.capacity_points_daily) : ""
                       );
                     }}
                     className="w-full border border-white/10 bg-obsidian px-4 py-3 text-sm outline-none focus:border-gold/50"
@@ -224,7 +228,7 @@ export default function CapacityPage() {
                     <option value="">Sélectionner</option>
                     {capacity?.members.map((member) => (
                       <option key={member.member_user_id} value={member.member_user_id}>
-                        {member.member_user_id}
+                        {member.display_name}
                       </option>
                     ))}
                   </select>
@@ -298,31 +302,35 @@ export default function CapacityPage() {
                   {capacity.members.map((member) => (
                     <div
                       key={member.member_user_id}
-                      className="border border-white/10 bg-obsidian p-4 grid md:grid-cols-6 gap-4 text-sm"
+                      className="border border-white/10 bg-obsidian p-4 grid md:grid-cols-5 gap-4 text-sm"
                     >
                       <div>
                         <div className="text-alabaster/50">Membre</div>
-                        <div className="mt-1 text-alabaster">{member.member_user_id}</div>
+                        <div className="mt-1 text-alabaster">{member.display_name}</div>
                       </div>
                       <div>
-                        <div className="text-alabaster/50">Rôle</div>
-                        <div className="mt-1 text-alabaster">{member.role}</div>
-                      </div>
-                      <div>
-                        <div className="text-alabaster/50">Base</div>
-                        <div className="mt-1 text-alabaster">{member.base_capacity_points}</div>
-                      </div>
-                      <div>
-                        <div className="text-alabaster/50">Effective</div>
-                        <div className="mt-1 text-alabaster">{member.effective_capacity_points}</div>
+                        <div className="text-alabaster/50">Capacité</div>
+                        <div className="mt-1 text-alabaster">{member.capacity_points_daily}</div>
                       </div>
                       <div>
                         <div className="text-alabaster/50">Assigné</div>
-                        <div className="mt-1 text-alabaster">{member.assigned_effort_points}</div>
+                        <div className="mt-1 text-alabaster">{member.assigned_points}</div>
                       </div>
                       <div>
                         <div className="text-alabaster/50">Restant</div>
-                        <div className="mt-1 text-alabaster">{member.remaining_capacity_points}</div>
+                        <div className="mt-1 text-alabaster">{member.remaining_points}</div>
+                      </div>
+                      <div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSelectedMemberUserId(member.member_user_id);
+                            setCapacityPointsDaily(String(member.capacity_points_daily));
+                          }}
+                          className="w-full border border-white/10 px-4 py-3 text-xs uppercase tracking-[0.25em] text-alabaster hover:border-gold/40 hover:text-gold transition-colors"
+                        >
+                          Modifier
+                        </button>
                       </div>
                     </div>
                   ))}

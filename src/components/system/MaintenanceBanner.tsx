@@ -1,0 +1,1 @@
+export default function MaintenanceBanner() { const active = import.meta.env.VITE_MAINTENANCE_MODE === "true"; if (!active) return null; return <div className="rounded-2xl border border-gold/20 bg-gold/10 px-4 py-3 text-gold">DOMYLI est actuellement en mode maintenance contrôlée.</div>; }

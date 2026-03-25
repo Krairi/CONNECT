@@ -1,0 +1,2 @@
+import { useCallback, useState } from "react";
+export function useAsync<T>() { const [data, setData] = useState<T | null>(null); const [loading, setLoading] = useState(false); const [error, setError] = useState<unknown>(null); const execute = useCallback(async (fn: () => Promise<T>) => { try { setLoading(true); setError(null); const result = await fn(); setData(result); return result; } catch (err) { setError(err); throw err; } finally { setLoading(false); } }, []); return { data, loading, error, execute, setData }; }

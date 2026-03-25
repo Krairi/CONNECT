@@ -1,30 +1,22 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import {
   ArrowLeft,
-  RefreshCw,
-  Save,
+  ArrowRight,
+  Hammer,
+  House,
+  ShieldCheck,
   Wrench,
   CalendarClock,
   CheckCircle2,
-  ShieldCheck,
 } from "lucide-react";
 import { useDomyliConnection } from "../hooks/useDomyliConnection";
 import { useTools } from "../hooks/useTools";
 import { navigateTo } from "../lib/navigation";
 
-function toIsoDateTimeLocal(value: string) {
-  return value ? value.slice(0, 16) : "";
-}
-
-function fromDateTimeLocalToIso(value: string) {
-  if (!value) return "";
-  return new Date(value).toISOString();
-}
-
-function nowLocalPlus(hours: number) {
-  const d = new Date();
-  d.setHours(d.getHours() + hours);
-  return toIsoDateTimeLocal(d.toISOString());
+function toDatetimeLocalValue(date: Date) {
+  const offset = date.getTimezoneOffset();
+  const adjusted = new Date(date.getTime() - offset * 60000);
+  return adjusted.toISOString().slice(0, 16);
 }
 
 export default function ToolsPage() {
@@ -38,40 +30,33 @@ export default function ToolsPage() {
   } = useDomyliConnection();
 
   const {
+    saveTool,
+    reserveToolSlot,
+    releaseToolSlot,
     saving,
     reserving,
     releasing,
     error,
-    tools,
-    lastUpsertResult,
-    lastReservationId,
-    lastReleaseId,
-    saveTool,
-    reserveToolAsset,
-    releaseToolReservation,
+    lastSavedTool,
+    lastReservation,
+    lastRelease,
   } = useTools();
 
-  const [toolId, setToolId] = useState("");
+  const householdId = bootstrap?.active_household_id ?? null;
+
   const [toolName, setToolName] = useState("");
   const [toolCategory, setToolCategory] = useState("");
-  const [toolDescription, setToolDescription] = useState("");
-  const [toolIsActive, setToolIsActive] = useState(true);
-
-  const [assetId, setAssetId] = useState("");
-  const [assetName, setAssetName] = useState("");
-  const [assetStatus, setAssetStatus] = useState("AVAILABLE");
-  const [assetNotes, setAssetNotes] = useState("");
-
-  const [reserveAssetId, setReserveAssetId] = useState("");
-  const [reserveStartsAt, setReserveStartsAt] = useState(nowLocalPlus(1));
-  const [reserveEndsAt, setReserveEndsAt] = useState(nowLocalPlus(2));
-  const [reserveTaskInstanceId, setReserveTaskInstanceId] = useState("");
-  const [reserveNotes, setReserveNotes] = useState("");
-
-  const [releaseReservationId, setReleaseReservationId] = useState("");
-  const [releaseStatus, setReleaseStatus] = useState("RELEASED");
-
+  const [toolAssetId, setToolAssetId] = useState("");
+  const [startAt, setStartAt] = useState(toDatetimeLocalValue(new Date()));
+  const [endAt, setEndAt] = useState(
+    toDatetimeLocalValue(new Date(Date.now() + 60 * 60 * 1000))
+  );
+  const [reservationId, setReservationId] = useState("");
   const [localMessage, setLocalMessage] = useState<string | null>(null);
+
+  const canSave = useMemo(() => {
+    return Boolean(householdId && toolName.trim());
+  }, [householdId, toolName]);
 
   if (authLoading) {
     return (
@@ -84,7 +69,7 @@ export default function ToolsPage() {
     );
   }
 
-  if (!isAuthenticated || !hasHousehold) {
+  if (!isAuthenticated || !hasHousehold || !householdId) {
     return (
       <div className="min-h-screen bg-obsidian text-alabaster flex items-center justify-center px-6">
         <div className="max-w-xl w-full border border-white/10 bg-white/5 p-8">
@@ -104,38 +89,20 @@ export default function ToolsPage() {
     );
   }
 
-  const handleSaveTool = async () => {
+  const handleSaveTool = async (e: React.FormEvent) => {
+    e.preventDefault();
     setLocalMessage(null);
-
-    if (!toolName.trim()) {
-      setLocalMessage("Le nom de l’outil est obligatoire.");
-      return;
-    }
 
     try {
       const result = await saveTool({
-        p_tool_id: toolId.trim() || null,
+        p_household_id: householdId,
         p_name: toolName.trim(),
         p_category: toolCategory.trim() || null,
-        p_description: toolDescription.trim() || null,
-        p_is_active: toolIsActive,
-        p_asset_id: assetId.trim() || null,
-        p_asset_name: assetName.trim() || null,
-        p_asset_status: assetStatus,
-        p_asset_notes: assetNotes.trim() || null,
       });
 
-      if (result.tool_id) {
-        setToolId(result.tool_id);
-      }
-      if (result.asset_id) {
-        setAssetId(result.asset_id);
-        setReserveAssetId(result.asset_id);
-      }
-
-      setLocalMessage(
-        `Outil enregistré : ${result.tool_id ?? "—"} / Asset : ${result.asset_id ?? "—"}`
-      );
+      setLocalMessage(`Outil enregistré : ${result.tool_key || toolName.trim()}`);
+      setToolName("");
+      setToolCategory("");
     } catch {
       //
     }
@@ -144,27 +111,20 @@ export default function ToolsPage() {
   const handleReserve = async () => {
     setLocalMessage(null);
 
-    if (!reserveAssetId.trim()) {
-      setLocalMessage("Tool asset ID requis pour réserver.");
-      return;
-    }
-
-    if (!reserveStartsAt || !reserveEndsAt) {
-      setLocalMessage("Fenêtre de réservation obligatoire.");
+    if (!toolAssetId.trim()) {
+      setLocalMessage("Renseignez un tool_asset_id pour réserver.");
       return;
     }
 
     try {
-      const reservationId = await reserveToolAsset(
-        reserveAssetId.trim(),
-        fromDateTimeLocalToIso(reserveStartsAt),
-        fromDateTimeLocalToIso(reserveEndsAt),
-        reserveTaskInstanceId.trim() || null,
-        reserveNotes.trim() || null
-      );
+      const result = await reserveToolSlot({
+        householdId,
+        toolAssetId: toolAssetId.trim(),
+        startAt: new Date(startAt).toISOString(),
+        endAt: new Date(endAt).toISOString(),
+      });
 
-      setReleaseReservationId(reservationId);
-      setLocalMessage(`Réservation créée : ${reservationId}`);
+      setLocalMessage(`Réservation créée : ${result.reservation_id}`);
     } catch {
       //
     }
@@ -173,46 +133,21 @@ export default function ToolsPage() {
   const handleRelease = async () => {
     setLocalMessage(null);
 
-    if (!releaseReservationId.trim()) {
-      setLocalMessage("Reservation ID requis.");
+    if (!reservationId.trim()) {
+      setLocalMessage("Renseignez un reservation_id pour libérer.");
       return;
     }
 
     try {
-      const reservationId = await releaseToolReservation(
-        releaseReservationId.trim(),
-        releaseStatus
-      );
-      setLocalMessage(`Réservation libérée : ${reservationId}`);
+      const result = await releaseToolSlot({
+        householdId,
+        reservationId: reservationId.trim(),
+      });
+
+      setLocalMessage(`Réservation libérée : ${result.reservation_id}`);
     } catch {
       //
     }
-  };
-
-  const preloadTool = (
-    nextToolId: string,
-    nextName: string,
-    nextCategory: string,
-    nextDescription: string,
-    nextIsActive: boolean,
-    nextAssetId: string | null,
-    nextAssetName: string,
-    nextAssetStatus: string,
-    nextAssetNotes: string
-  ) => {
-    setToolId(nextToolId);
-    setToolName(nextName);
-    setToolCategory(nextCategory);
-    setToolDescription(nextDescription);
-    setToolIsActive(nextIsActive);
-    setAssetId(nextAssetId ?? "");
-    setAssetName(nextAssetName);
-    setAssetStatus(nextAssetStatus);
-    setAssetNotes(nextAssetNotes);
-    if (nextAssetId) {
-      setReserveAssetId(nextAssetId);
-    }
-    setLocalMessage(`Édition outil : ${nextToolId}`);
   };
 
   return (
@@ -236,9 +171,16 @@ export default function ToolsPage() {
           <div className="flex items-center gap-3">
             <button
               onClick={() => navigateTo("/dashboard")}
-              className="border border-gold/40 px-5 py-3 text-xs uppercase tracking-[0.25em] text-gold hover:bg-gold hover:text-obsidian transition-colors"
+              className="border border-white/10 px-5 py-3 text-xs uppercase tracking-[0.25em] text-alabaster hover:border-gold/40 hover:text-gold transition-colors"
             >
               Dashboard
+            </button>
+
+            <button
+              onClick={() => navigateTo("/tasks")}
+              className="border border-gold/40 px-5 py-3 text-xs uppercase tracking-[0.25em] text-gold hover:bg-gold hover:text-obsidian transition-colors"
+            >
+              Tasks
             </button>
           </div>
         </div>
@@ -247,37 +189,31 @@ export default function ToolsPage() {
       <main className="max-w-7xl mx-auto px-6 py-12">
         <section className="grid lg:grid-cols-3 gap-8">
           <div className="lg:col-span-2 border border-white/10 bg-white/5 p-8">
-            <p className="text-xs uppercase tracking-[0.3em] text-gold/80">Gouvernance matériel</p>
-            <h2 className="mt-4 text-4xl font-serif italic">Créer, réserver et libérer un outil</h2>
+            <p className="text-xs uppercase tracking-[0.3em] text-gold/80">Matériel & réservations</p>
+            <h2 className="mt-4 text-4xl font-serif italic">Créer et réserver un outil</h2>
+            <p className="mt-6 text-alabaster/70 leading-relaxed">
+              Cette page branche l’expérience DOMYLI sur
+              <span className="text-gold"> rpc_tool_upsert</span>,
+              <span className="text-gold"> rpc_tool_reserve</span> et
+              <span className="text-gold"> rpc_tool_release</span>.
+            </p>
 
-            <div className="mt-10 grid md:grid-cols-2 gap-6">
-              <div>
+            <form onSubmit={handleSaveTool} className="mt-10 grid md:grid-cols-2 gap-6">
+              <div className="md:col-span-2">
                 <label className="mb-2 block text-xs uppercase tracking-[0.25em] text-alabaster/60">
-                  Tool ID
-                </label>
-                <input
-                  type="text"
-                  value={toolId}
-                  onChange={(e) => setToolId(e.target.value)}
-                  placeholder="uuid optionnel"
-                  className="w-full border border-white/10 bg-obsidian px-4 py-3 text-sm outline-none focus:border-gold/50"
-                />
-              </div>
-
-              <div>
-                <label className="mb-2 block text-xs uppercase tracking-[0.25em] text-alabaster/60">
-                  Nom outil
+                  Nom de l’outil
                 </label>
                 <input
                   type="text"
                   value={toolName}
                   onChange={(e) => setToolName(e.target.value)}
-                  placeholder="Ex: Aspirateur"
-                  className="w-full border border-white/10 bg-obsidian px-4 py-3 text-sm outline-none focus:border-gold/50"
+                  required
+                  placeholder="Aspirateur"
+                  className="w-full border border-white/10 bg-black/20 px-4 py-4 text-sm outline-none focus:border-gold/50"
                 />
               </div>
 
-              <div>
+              <div className="md:col-span-2">
                 <label className="mb-2 block text-xs uppercase tracking-[0.25em] text-alabaster/60">
                   Catégorie
                 </label>
@@ -285,325 +221,131 @@ export default function ToolsPage() {
                   type="text"
                   value={toolCategory}
                   onChange={(e) => setToolCategory(e.target.value)}
-                  placeholder="Ex: Nettoyage"
-                  className="w-full border border-white/10 bg-obsidian px-4 py-3 text-sm outline-none focus:border-gold/50"
+                  placeholder="Nettoyage, cuisine, entretien..."
+                  className="w-full border border-white/10 bg-black/20 px-4 py-4 text-sm outline-none focus:border-gold/50"
                 />
-              </div>
-
-              <div>
-                <label className="mb-2 block text-xs uppercase tracking-[0.25em] text-alabaster/60">
-                  Actif
-                </label>
-                <select
-                  value={toolIsActive ? "true" : "false"}
-                  onChange={(e) => setToolIsActive(e.target.value === "true")}
-                  className="w-full border border-white/10 bg-obsidian px-4 py-3 text-sm outline-none focus:border-gold/50"
-                >
-                  <option value="true">true</option>
-                  <option value="false">false</option>
-                </select>
               </div>
 
               <div className="md:col-span-2">
-                <label className="mb-2 block text-xs uppercase tracking-[0.25em] text-alabaster/60">
-                  Description
-                </label>
-                <textarea
-                  value={toolDescription}
-                  onChange={(e) => setToolDescription(e.target.value)}
-                  rows={3}
-                  className="w-full border border-white/10 bg-obsidian px-4 py-3 text-sm outline-none focus:border-gold/50 resize-none"
-                />
-              </div>
-            </div>
-
-            <div className="mt-10 border border-white/10 bg-black/20 p-6">
-              <h3 className="text-xl font-serif italic mb-4">Asset lié</h3>
-
-              <div className="grid md:grid-cols-2 gap-6">
-                <div>
-                  <label className="mb-2 block text-xs uppercase tracking-[0.25em] text-alabaster/60">
-                    Asset ID
-                  </label>
-                  <input
-                    type="text"
-                    value={assetId}
-                    onChange={(e) => setAssetId(e.target.value)}
-                    placeholder="uuid optionnel"
-                    className="w-full border border-white/10 bg-obsidian px-4 py-3 text-sm outline-none focus:border-gold/50"
-                  />
-                </div>
-
-                <div>
-                  <label className="mb-2 block text-xs uppercase tracking-[0.25em] text-alabaster/60">
-                    Asset name
-                  </label>
-                  <input
-                    type="text"
-                    value={assetName}
-                    onChange={(e) => setAssetName(e.target.value)}
-                    placeholder="Ex: Aspirateur #1"
-                    className="w-full border border-white/10 bg-obsidian px-4 py-3 text-sm outline-none focus:border-gold/50"
-                  />
-                </div>
-
-                <div>
-                  <label className="mb-2 block text-xs uppercase tracking-[0.25em] text-alabaster/60">
-                    Asset status
-                  </label>
-                  <select
-                    value={assetStatus}
-                    onChange={(e) => setAssetStatus(e.target.value)}
-                    className="w-full border border-white/10 bg-obsidian px-4 py-3 text-sm outline-none focus:border-gold/50"
-                  >
-                    <option value="AVAILABLE">AVAILABLE</option>
-                    <option value="UNAVAILABLE">UNAVAILABLE</option>
-                    <option value="MAINTENANCE">MAINTENANCE</option>
-                    <option value="RETIRED">RETIRED</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="mb-2 block text-xs uppercase tracking-[0.25em] text-alabaster/60">
-                    Asset notes
-                  </label>
-                  <input
-                    type="text"
-                    value={assetNotes}
-                    onChange={(e) => setAssetNotes(e.target.value)}
-                    placeholder="Notes"
-                    className="w-full border border-white/10 bg-obsidian px-4 py-3 text-sm outline-none focus:border-gold/50"
-                  />
-                </div>
-              </div>
-
-              <div className="mt-6">
                 <button
-                  type="button"
-                  onClick={handleSaveTool}
-                  disabled={saving}
+                  type="submit"
+                  disabled={!canSave || saving}
                   className="flex items-center justify-center gap-3 bg-gold px-6 py-4 text-sm font-medium uppercase tracking-[0.25em] text-obsidian transition hover:opacity-90 disabled:opacity-50"
                 >
-                  <Save size={18} />
-                  {saving ? "Enregistrement..." : "Créer / mettre à jour l’outil"}
+                  <Hammer size={18} />
+                  {saving ? "Enregistrement..." : "Enregistrer l’outil"}
                 </button>
               </div>
-            </div>
+            </form>
 
-            <div className="mt-10 border border-white/10 bg-black/20 p-6">
-              <h3 className="text-xl font-serif italic mb-4">Réservation d’un asset</h3>
-
-              <div className="grid md:grid-cols-2 gap-6">
-                <div>
-                  <label className="mb-2 block text-xs uppercase tracking-[0.25em] text-alabaster/60">
-                    Tool Asset ID
-                  </label>
-                  <input
-                    type="text"
-                    value={reserveAssetId}
-                    onChange={(e) => setReserveAssetId(e.target.value)}
-                    className="w-full border border-white/10 bg-obsidian px-4 py-3 text-sm outline-none focus:border-gold/50"
-                  />
+            <div className="mt-10 grid md:grid-cols-2 gap-6">
+              <div className="border border-white/10 bg-black/20 p-6">
+                <div className="flex items-center gap-3 mb-4">
+                  <CalendarClock size={18} className="text-gold" />
+                  <h3 className="text-xl font-serif italic">Réserver un outil</h3>
                 </div>
 
-                <div>
-                  <label className="mb-2 block text-xs uppercase tracking-[0.25em] text-alabaster/60">
-                    Task Instance ID
-                  </label>
-                  <input
-                    type="text"
-                    value={reserveTaskInstanceId}
-                    onChange={(e) => setReserveTaskInstanceId(e.target.value)}
-                    placeholder="uuid optionnel"
-                    className="w-full border border-white/10 bg-obsidian px-4 py-3 text-sm outline-none focus:border-gold/50"
-                  />
-                </div>
+                <div className="grid gap-4">
+                  <div>
+                    <label className="mb-2 block text-xs uppercase tracking-[0.25em] text-alabaster/60">
+                      Tool asset ID
+                    </label>
+                    <input
+                      type="text"
+                      value={toolAssetId}
+                      onChange={(e) => setToolAssetId(e.target.value)}
+                      placeholder="UUID d’asset"
+                      className="w-full border border-white/10 bg-obsidian px-4 py-3 text-sm outline-none focus:border-gold/50"
+                    />
+                  </div>
 
-                <div>
-                  <label className="mb-2 block text-xs uppercase tracking-[0.25em] text-alabaster/60">
-                    Starts at
-                  </label>
-                  <input
-                    type="datetime-local"
-                    value={reserveStartsAt}
-                    onChange={(e) => setReserveStartsAt(e.target.value)}
-                    className="w-full border border-white/10 bg-obsidian px-4 py-3 text-sm outline-none focus:border-gold/50"
-                  />
-                </div>
+                  <div>
+                    <label className="mb-2 block text-xs uppercase tracking-[0.25em] text-alabaster/60">
+                      Début
+                    </label>
+                    <input
+                      type="datetime-local"
+                      value={startAt}
+                      onChange={(e) => setStartAt(e.target.value)}
+                      className="w-full border border-white/10 bg-obsidian px-4 py-3 text-sm outline-none focus:border-gold/50"
+                    />
+                  </div>
 
-                <div>
-                  <label className="mb-2 block text-xs uppercase tracking-[0.25em] text-alabaster/60">
-                    Ends at
-                  </label>
-                  <input
-                    type="datetime-local"
-                    value={reserveEndsAt}
-                    onChange={(e) => setReserveEndsAt(e.target.value)}
-                    className="w-full border border-white/10 bg-obsidian px-4 py-3 text-sm outline-none focus:border-gold/50"
-                  />
-                </div>
+                  <div>
+                    <label className="mb-2 block text-xs uppercase tracking-[0.25em] text-alabaster/60">
+                      Fin
+                    </label>
+                    <input
+                      type="datetime-local"
+                      value={endAt}
+                      onChange={(e) => setEndAt(e.target.value)}
+                      className="w-full border border-white/10 bg-obsidian px-4 py-3 text-sm outline-none focus:border-gold/50"
+                    />
+                  </div>
 
-                <div className="md:col-span-2">
-                  <label className="mb-2 block text-xs uppercase tracking-[0.25em] text-alabaster/60">
-                    Notes
-                  </label>
-                  <textarea
-                    value={reserveNotes}
-                    onChange={(e) => setReserveNotes(e.target.value)}
-                    rows={3}
-                    className="w-full border border-white/10 bg-obsidian px-4 py-3 text-sm outline-none focus:border-gold/50 resize-none"
-                  />
-                </div>
-              </div>
-
-              <div className="mt-6">
-                <button
-                  type="button"
-                  onClick={handleReserve}
-                  disabled={reserving}
-                  className="border border-white/10 px-6 py-4 text-sm uppercase tracking-[0.25em] text-alabaster hover:border-gold/40 hover:text-gold transition-colors disabled:opacity-50"
-                >
-                  <CalendarClock size={16} className="inline mr-2" />
-                  {reserving ? "Réservation..." : "Réserver l’asset"}
-                </button>
-              </div>
-            </div>
-
-            <div className="mt-10 border border-white/10 bg-black/20 p-6">
-              <h3 className="text-xl font-serif italic mb-4">Libération d’une réservation</h3>
-
-              <div className="grid md:grid-cols-2 gap-6">
-                <div>
-                  <label className="mb-2 block text-xs uppercase tracking-[0.25em] text-alabaster/60">
-                    Reservation ID
-                  </label>
-                  <input
-                    type="text"
-                    value={releaseReservationId}
-                    onChange={(e) => setReleaseReservationId(e.target.value)}
-                    className="w-full border border-white/10 bg-obsidian px-4 py-3 text-sm outline-none focus:border-gold/50"
-                  />
-                </div>
-
-                <div>
-                  <label className="mb-2 block text-xs uppercase tracking-[0.25em] text-alabaster/60">
-                    Status
-                  </label>
-                  <select
-                    value={releaseStatus}
-                    onChange={(e) => setReleaseStatus(e.target.value)}
-                    className="w-full border border-white/10 bg-obsidian px-4 py-3 text-sm outline-none focus:border-gold/50"
+                  <button
+                    type="button"
+                    onClick={handleReserve}
+                    disabled={reserving || !toolAssetId.trim()}
+                    className="flex items-center justify-center gap-3 border border-white/10 px-5 py-3 text-sm uppercase tracking-[0.25em] text-alabaster hover:border-gold/40 hover:text-gold transition-colors disabled:opacity-50"
                   >
-                    <option value="RELEASED">RELEASED</option>
-                    <option value="CANCELLED">CANCELLED</option>
-                  </select>
+                    <Wrench size={18} />
+                    {reserving ? "Réservation..." : "Réserver"}
+                  </button>
                 </div>
               </div>
 
-              <div className="mt-6">
-                <button
-                  type="button"
-                  onClick={handleRelease}
-                  disabled={releasing}
-                  className="border border-gold/30 px-6 py-4 text-sm uppercase tracking-[0.25em] text-gold hover:bg-gold hover:text-obsidian transition-colors disabled:opacity-50"
-                >
-                  <CheckCircle2 size={16} className="inline mr-2" />
-                  {releasing ? "Libération..." : "Libérer la réservation"}
-                </button>
+              <div className="border border-white/10 bg-black/20 p-6">
+                <div className="flex items-center gap-3 mb-4">
+                  <CheckCircle2 size={18} className="text-gold" />
+                  <h3 className="text-xl font-serif italic">Libérer une réservation</h3>
+                </div>
+
+                <div className="grid gap-4">
+                  <div>
+                    <label className="mb-2 block text-xs uppercase tracking-[0.25em] text-alabaster/60">
+                      Reservation ID
+                    </label>
+                    <input
+                      type="text"
+                      value={reservationId}
+                      onChange={(e) => setReservationId(e.target.value)}
+                      placeholder="UUID de réservation"
+                      className="w-full border border-white/10 bg-obsidian px-4 py-3 text-sm outline-none focus:border-gold/50"
+                    />
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={handleRelease}
+                    disabled={releasing || !reservationId.trim()}
+                    className="flex items-center justify-center gap-3 bg-gold px-5 py-3 text-sm font-medium uppercase tracking-[0.25em] text-obsidian transition hover:opacity-90 disabled:opacity-50"
+                  >
+                    <CheckCircle2 size={18} />
+                    {releasing ? "Libération..." : "Libérer"}
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => navigateTo("/dashboard")}
+                    className="flex items-center justify-center gap-3 border border-white/10 px-5 py-3 text-sm uppercase tracking-[0.25em] text-alabaster hover:border-gold/40 hover:text-gold transition-colors"
+                  >
+                    <ArrowRight size={18} />
+                    Retour dashboard
+                  </button>
+                </div>
               </div>
             </div>
 
-            {(localMessage ||
-              error ||
-              lastUpsertResult ||
-              lastReservationId ||
-              lastReleaseId) && (
+            {(localMessage || error || lastSavedTool || lastReservation || lastRelease) && (
               <div className="mt-8 border border-white/10 bg-black/20 p-4 text-sm text-alabaster/75">
                 {localMessage ??
                   error?.message ??
-                  (lastUpsertResult
-                    ? `Outil enregistré : ${lastUpsertResult.tool_id ?? "—"} / Asset : ${lastUpsertResult.asset_id ?? "—"}`
-                    : lastReservationId
-                      ? `Réservation créée : ${lastReservationId}`
-                      : lastReleaseId
-                        ? `Réservation libérée : ${lastReleaseId}`
-                        : null)}
+                  (lastSavedTool ? `Outil enregistré : ${lastSavedTool.tool_key}` : null) ??
+                  (lastReservation ? `Réservation : ${lastReservation.reservation_id}` : null) ??
+                  (lastRelease ? `Réservation libérée : ${lastRelease.reservation_id}` : null)}
               </div>
             )}
-
-            <div className="mt-10 border border-white/10 bg-black/20 p-6">
-              <h3 className="text-xl font-serif italic mb-4">Outils manipulés dans cette session</h3>
-
-              {tools.length === 0 ? (
-                <div className="text-sm text-alabaster/70">
-                  Aucun outil créé ou modifié dans cette session.
-                </div>
-              ) : (
-                <div className="grid gap-4">
-                  {tools.map((tool) => (
-                    <div
-                      key={tool.tool_id}
-                      className="border border-white/10 bg-obsidian p-4 grid md:grid-cols-6 gap-4 text-sm"
-                    >
-                      <div>
-                        <div className="text-alabaster/50">Tool ID</div>
-                        <div className="mt-1 text-alabaster break-all">{tool.tool_id}</div>
-                      </div>
-                      <div>
-                        <div className="text-alabaster/50">Nom</div>
-                        <div className="mt-1 text-alabaster">{tool.name}</div>
-                      </div>
-                      <div>
-                        <div className="text-alabaster/50">Catégorie</div>
-                        <div className="mt-1 text-alabaster">{tool.category || "—"}</div>
-                      </div>
-                      <div>
-                        <div className="text-alabaster/50">Asset ID</div>
-                        <div className="mt-1 text-alabaster break-all">{tool.asset_id ?? "—"}</div>
-                      </div>
-                      <div>
-                        <div className="text-alabaster/50">Asset status</div>
-                        <div className="mt-1 text-alabaster">{tool.asset_status}</div>
-                      </div>
-                      <div className="flex flex-col gap-2">
-                        <button
-                          type="button"
-                          onClick={() =>
-                            preloadTool(
-                              tool.tool_id,
-                              tool.name,
-                              tool.category,
-                              tool.description,
-                              tool.is_active,
-                              tool.asset_id,
-                              tool.asset_name,
-                              tool.asset_status,
-                              tool.asset_notes
-                            )
-                          }
-                          className="border border-white/10 px-4 py-2 text-xs uppercase tracking-[0.25em] text-alabaster hover:border-gold/40 hover:text-gold transition-colors"
-                        >
-                          Éditer
-                        </button>
-
-                        {tool.asset_id && (
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setReserveAssetId(tool.asset_id ?? "");
-                              setLocalMessage(`Asset chargé pour réservation : ${tool.asset_id}`);
-                            }}
-                            className="border border-gold/30 px-4 py-2 text-xs uppercase tracking-[0.25em] text-gold hover:bg-gold hover:text-obsidian transition-colors"
-                          >
-                            Charger asset
-                          </button>
-                        )}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
           </div>
 
           <aside className="border border-white/10 bg-white/5 p-8">
@@ -633,27 +375,30 @@ export default function ToolsPage() {
 
             <div className="mt-8 space-y-4">
               <div className="border border-gold/20 bg-gold/5 p-4 text-sm text-alabaster/75">
-                Les outils sont maintenant branchés sur les RPC réelles de réservation DOMYLI.
-              </div>
-
-              <div className="border border-white/10 bg-black/20 p-4">
-                <div className="flex items-center gap-3 text-sm">
-                  <Wrench size={18} className="text-gold" />
-                  <span>RPC : app.rpc_tool_upsert</span>
+                <div className="flex items-center gap-3">
+                  <House size={18} className="text-gold" />
+                  <span>Les outils structurent l’exécution et les conflits d’usage du foyer.</span>
                 </div>
               </div>
 
               <div className="border border-white/10 bg-black/20 p-4">
-                <div className="flex items-center gap-3 text-sm">
-                  <CalendarClock size={18} className="text-gold" />
-                  <span>RPC : app.rpc_tool_reserve</span>
-                </div>
-              </div>
-
-              <div className="border border-white/10 bg-black/20 p-4">
-                <div className="flex items-center gap-3 text-sm">
+                <div className="flex items-center gap-3">
                   <ShieldCheck size={18} className="text-gold" />
-                  <span>RPC : app.rpc_tool_release</span>
+                  <span className="text-sm">RPC : app.rpc_tool_upsert</span>
+                </div>
+              </div>
+
+              <div className="border border-white/10 bg-black/20 p-4">
+                <div className="flex items-center gap-3">
+                  <ShieldCheck size={18} className="text-gold" />
+                  <span className="text-sm">RPC : app.rpc_tool_reserve</span>
+                </div>
+              </div>
+
+              <div className="border border-white/10 bg-black/20 p-4">
+                <div className="flex items-center gap-3">
+                  <ShieldCheck size={18} className="text-gold" />
+                  <span className="text-sm">RPC : app.rpc_tool_release</span>
                 </div>
               </div>
             </div>

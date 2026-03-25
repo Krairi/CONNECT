@@ -6,28 +6,56 @@ import {
   RefreshCw,
   ShieldCheck,
   Utensils,
+  Wrench,
+  CheckCircle2,
   ListTodo,
 } from "lucide-react";
 import { useDomyliConnection } from "../hooks/useDomyliConnection";
 import { useDashboard } from "../hooks/useDashboard";
 import { navigateTo } from "../lib/navigation";
 
+function formatScheduledAt(value?: string | null): string {
+  if (!value) return "Sans horaire";
+
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) return value;
+
+  return date.toLocaleString("fr-FR", {
+    dateStyle: "short",
+    timeStyle: "short",
+  });
+}
+
+function feedIcon(type: string) {
+  switch (type) {
+    case "TASK":
+      return <ListTodo className="text-gold" size={18} />;
+    case "MEAL":
+      return <Utensils className="text-gold" size={18} />;
+    case "TOOL":
+      return <Wrench className="text-gold" size={18} />;
+    default:
+      return <AlertTriangle className="text-gold" size={18} />;
+  }
+}
+
 function computeGlobalStatus(input: {
-  inventoryLowStock: number;
-  openAlerts: number;
-  openShopping: number;
+  missingStock: number;
+  overdueTasks: number;
+  blockedTools: number;
 }) {
-  if (input.openAlerts > 0) {
+  if (input.overdueTasks > 0 || input.blockedTools > 0) {
     return {
       label: "Attention requise",
-      description: "Des alertes ouvertes doivent être traitées.",
+      description: "Des blocages ou retards doivent être traités.",
     };
   }
 
-  if (input.inventoryLowStock > 0 || input.openShopping > 0) {
+  if (input.missingStock > 0) {
     return {
       label: "Sous contrôle",
-      description: "Le foyer fonctionne, mais des approvisionnements sont à prévoir.",
+      description: "Le foyer fonctionne, mais des achats sont à prévoir.",
     };
   }
 
@@ -47,7 +75,8 @@ export default function StatusPage() {
     authLoading,
   } = useDomyliConnection();
 
-  const { loading, error, health, feed, refresh } = useDashboard();
+  const householdId = bootstrap?.active_household_id ?? null;
+  const { loading, error, health, feed, refresh } = useDashboard(householdId);
 
   if (authLoading) {
     return (
@@ -81,26 +110,26 @@ export default function StatusPage() {
   }
 
   const globalStatus = computeGlobalStatus({
-    inventoryLowStock: health?.inventory_low_stock_count ?? 0,
-    openAlerts: health?.open_alert_count ?? 0,
-    openShopping: health?.open_shopping_count ?? 0,
+    missingStock: health?.missing_stock_count ?? 0,
+    overdueTasks: health?.overdue_tasks_count ?? 0,
+    blockedTools: health?.blocked_tools_count ?? 0,
   });
 
   const alerts = [
     {
-      title: "Stock bas",
-      value: health?.inventory_low_stock_count ?? 0,
-      show: (health?.inventory_low_stock_count ?? 0) > 0,
+      title: "Stock manquant",
+      value: health?.missing_stock_count ?? 0,
+      show: (health?.missing_stock_count ?? 0) > 0,
     },
     {
-      title: "Alertes ouvertes",
-      value: health?.open_alert_count ?? 0,
-      show: (health?.open_alert_count ?? 0) > 0,
+      title: "Tâches en retard",
+      value: health?.overdue_tasks_count ?? 0,
+      show: (health?.overdue_tasks_count ?? 0) > 0,
     },
     {
-      title: "Shopping ouverte",
-      value: health?.open_shopping_count ?? 0,
-      show: (health?.open_shopping_count ?? 0) > 0,
+      title: "Outils bloqués",
+      value: health?.blocked_tools_count ?? 0,
+      show: (health?.blocked_tools_count ?? 0) > 0,
     },
   ].filter((item) => item.show);
 
@@ -154,39 +183,39 @@ export default function StatusPage() {
             <div className="w-12 h-12 border border-gold/20 flex items-center justify-center mb-4">
               <Package className="text-gold" size={24} />
             </div>
-            <div className="text-sm uppercase tracking-[0.25em] text-alabaster/50">Stock bas</div>
-            <div className="mt-3 text-3xl font-serif italic">{health?.inventory_low_stock_count ?? 0}</div>
-          </div>
-
-          <div className="border border-white/10 bg-white/5 p-6">
-            <div className="w-12 h-12 border border-gold/20 flex items-center justify-center mb-4">
-              <AlertTriangle className="text-gold" size={24} />
-            </div>
-            <div className="text-sm uppercase tracking-[0.25em] text-alabaster/50">Alertes ouvertes</div>
-            <div className="mt-3 text-3xl font-serif italic">{health?.open_alert_count ?? 0}</div>
-          </div>
-
-          <div className="border border-white/10 bg-white/5 p-6">
-            <div className="w-12 h-12 border border-gold/20 flex items-center justify-center mb-4">
-              <Utensils className="text-gold" size={24} />
-            </div>
-            <div className="text-sm uppercase tracking-[0.25em] text-alabaster/50">Repas du jour</div>
-            <div className="mt-3 text-3xl font-serif italic">{health?.today_meal_count ?? 0}</div>
+            <div className="text-sm uppercase tracking-[0.25em] text-alabaster/50">Stock manquant</div>
+            <div className="mt-3 text-3xl font-serif italic">{health?.missing_stock_count ?? 0}</div>
           </div>
 
           <div className="border border-white/10 bg-white/5 p-6">
             <div className="w-12 h-12 border border-gold/20 flex items-center justify-center mb-4">
               <ListTodo className="text-gold" size={24} />
             </div>
-            <div className="text-sm uppercase tracking-[0.25em] text-alabaster/50">Tâches du jour</div>
-            <div className="mt-3 text-3xl font-serif italic">{health?.today_task_count ?? 0}</div>
+            <div className="text-sm uppercase tracking-[0.25em] text-alabaster/50">Tâches en retard</div>
+            <div className="mt-3 text-3xl font-serif italic">{health?.overdue_tasks_count ?? 0}</div>
+          </div>
+
+          <div className="border border-white/10 bg-white/5 p-6">
+            <div className="w-12 h-12 border border-gold/20 flex items-center justify-center mb-4">
+              <Utensils className="text-gold" size={24} />
+            </div>
+            <div className="text-sm uppercase tracking-[0.25em] text-alabaster/50">Repas confirmés</div>
+            <div className="mt-3 text-3xl font-serif italic">{health?.confirmed_meals_count ?? 0}</div>
+          </div>
+
+          <div className="border border-white/10 bg-white/5 p-6">
+            <div className="w-12 h-12 border border-gold/20 flex items-center justify-center mb-4">
+              <Wrench className="text-gold" size={24} />
+            </div>
+            <div className="text-sm uppercase tracking-[0.25em] text-alabaster/50">Outils bloqués</div>
+            <div className="mt-3 text-3xl font-serif italic">{health?.blocked_tools_count ?? 0}</div>
           </div>
         </section>
 
         <section className="grid lg:grid-cols-3 gap-8 mt-10">
           <div className="lg:col-span-2 border border-white/10 bg-white/5 p-8">
-            <p className="text-xs uppercase tracking-[0.3em] text-gold/80">Charge opérationnelle</p>
-            <h2 className="mt-4 text-3xl font-serif italic">Charge par membre</h2>
+            <p className="text-xs uppercase tracking-[0.3em] text-gold/80">Timeline opérationnelle</p>
+            <h2 className="mt-4 text-3xl font-serif italic">Flux du jour</h2>
 
             {loading && (
               <div className="mt-6 border border-white/10 bg-black/20 p-4 text-sm text-alabaster/70">
@@ -200,32 +229,37 @@ export default function StatusPage() {
               </div>
             )}
 
-            {!loading && !error && feed && feed.members.length === 0 && (
+            {!loading && !error && feed.length === 0 && (
               <div className="mt-6 border border-white/10 bg-black/20 p-4 text-sm text-alabaster/70">
-                Aucun membre remonté pour la charge du jour.
+                Aucun événement métier remonté pour l’instant.
               </div>
             )}
 
-            {!loading && !error && feed && feed.members.length > 0 && (
+            {!loading && !error && feed.length > 0 && (
               <div className="mt-6 grid gap-4">
-                {feed.members.map((member) => (
+                {feed.map((item) => (
                   <div
-                    key={member.user_id}
+                    key={`${item.item_type}-${item.item_id}-${item.title}`}
                     className="border border-white/10 bg-black/20 p-4"
                   >
                     <div className="flex items-start justify-between gap-4">
-                      <div>
-                        <div className="text-xs uppercase tracking-[0.25em] text-gold/80">
-                          {member.role}
+                      <div className="flex items-start gap-3">
+                        <div className="w-10 h-10 border border-gold/20 flex items-center justify-center">
+                          {feedIcon(item.item_type)}
                         </div>
-                        <div className="mt-2 text-lg font-serif italic">{member.user_id}</div>
-                        <div className="mt-2 text-sm text-alabaster/60">
-                          Capacité : {member.capacity_points_daily}
+                        <div>
+                          <div className="text-xs uppercase tracking-[0.25em] text-gold/80">
+                            {item.item_type}
+                          </div>
+                          <div className="mt-2 text-lg font-serif italic">{item.title}</div>
+                          <div className="mt-2 text-sm text-alabaster/60">
+                            {formatScheduledAt(item.scheduled_at)}
+                          </div>
                         </div>
                       </div>
 
                       <div className="text-xs uppercase tracking-[0.25em] text-alabaster/50">
-                        Tâches : {member.assigned_task_count}
+                        {item.status}
                       </div>
                     </div>
                   </div>
@@ -239,7 +273,7 @@ export default function StatusPage() {
 
             <div className="mt-6 border border-gold/20 bg-gold/5 p-4">
               <div className="flex items-center gap-3">
-                <ShieldCheck size={18} className="text-gold" />
+                <CheckCircle2 size={18} className="text-gold" />
                 <div>
                   <div className="text-sm uppercase tracking-[0.25em] text-gold/80">État global</div>
                   <div className="mt-2 text-2xl font-serif italic">{globalStatus.label}</div>

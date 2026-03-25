@@ -1,0 +1,1 @@
+export default function SectionSkeleton() { return <div className="glass metallic-border rounded-3xl p-6 animate-pulse"><div className="h-4 w-32 bg-white/10 rounded mb-4" /><div className="h-8 w-2/3 bg-white/10 rounded mb-3" /><div className="h-4 w-full bg-white/10 rounded mb-2" /><div className="h-4 w-5/6 bg-white/10 rounded" /></div>; }
