@@ -1,26 +1,21 @@
 import { useCallback, useState } from "react";
+import { upsertHumanProfile, type HumanProfileUpsertInput, type HumanProfileUpsertOutput } from "../services/profiles/profileService";
+import { toDomyliError, type DomyliAppError } from "../lib/errors";
 
-import { toDomyliError, type DomyliAppError } from "@/src/lib/errors";
-import {
-  upsertHumanProfile,
-  type HumanProfileUpsertInput,
-  type HumanProfileUpsertOutput,
-} from "@/src/services/profiles/profileService";
-
-type ProfilesState = {
+type UseProfilesState = {
   saving: boolean;
   error: DomyliAppError | null;
   lastSavedProfile: HumanProfileUpsertOutput | null;
 };
 
-const initialState: ProfilesState = {
+const initialState: UseProfilesState = {
   saving: false,
   error: null,
   lastSavedProfile: null,
 };
 
 export function useProfiles() {
-  const [state, setState] = useState<ProfilesState>(initialState);
+  const [state, setState] = useState<UseProfilesState>(initialState);
 
   const saveProfile = useCallback(async (payload: HumanProfileUpsertInput) => {
     setState((prev) => ({
@@ -32,11 +27,11 @@ export function useProfiles() {
     try {
       const result = await upsertHumanProfile(payload);
 
-      setState((prev) => ({
-        ...prev,
+      setState({
         saving: false,
+        error: null,
         lastSavedProfile: result,
-      }));
+      });
 
       return result;
     } catch (error) {

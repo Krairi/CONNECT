@@ -1,93 +1,60 @@
 import {
-  Activity,
   AlertTriangle,
   ArrowLeft,
-  CheckCircle2,
+  Clock3,
   Package,
   RefreshCw,
   ShieldCheck,
   Utensils,
-  Wrench,
+  ListTodo,
 } from "lucide-react";
-import { useNavigate } from "react-router-dom";
-
-import { useAuth } from "@/src/contexts/AuthContext";
-import { useDashboard } from "@/src/hooks/useDashboard";
-import { ROUTES } from "@/src/constants/routes";
-
-function formatScheduledAt(value?: string | null): string {
-  if (!value) return "Sans horaire";
-
-  const date = new Date(value);
-
-  if (Number.isNaN(date.getTime())) return value;
-
-  return date.toLocaleString("fr-FR", {
-    dateStyle: "short",
-    timeStyle: "short",
-  });
-}
-
-function feedIcon(type: string) {
-  switch (type) {
-    case "TASK":
-      return <Wrench size={16} />;
-    case "MEAL":
-      return <Utensils size={16} />;
-    case "TOOL":
-      return <Package size={16} />;
-    default:
-      return <Activity size={16} />;
-  }
-}
+import { useDomyliConnection } from "../hooks/useDomyliConnection";
+import { useDashboard } from "../hooks/useDashboard";
+import { navigateTo } from "../lib/navigation";
 
 function computeGlobalStatus(input: {
-  missingStock: number;
-  overdueTasks: number;
-  blockedTools: number;
+  inventoryLowStock: number;
+  openAlerts: number;
+  openShopping: number;
 }) {
-  if (input.overdueTasks > 0 || input.blockedTools > 0) {
+  if (input.openAlerts > 0) {
     return {
       label: "Attention requise",
-      icon: <AlertTriangle size={18} />,
-      description: "Des blocages ou retards doivent être traités.",
+      description: "Des alertes ouvertes doivent être traitées.",
     };
   }
 
-  if (input.missingStock > 0) {
+  if (input.inventoryLowStock > 0 || input.openShopping > 0) {
     return {
       label: "Sous contrôle",
-      icon: <ShieldCheck size={18} />,
-      description: "Le foyer fonctionne, mais des achats sont à prévoir.",
+      description: "Le foyer fonctionne, mais des approvisionnements sont à prévoir.",
     };
   }
 
   return {
     label: "Stable",
-    icon: <CheckCircle2 size={18} />,
     description: "Aucun signal bloquant critique détecté pour le moment.",
   };
 }
 
 export default function StatusPage() {
-  const navigate = useNavigate();
-  const { isAuthenticated, hasHousehold, authLoading, bootstrapLoading, bootstrap } =
-    useAuth();
+  const {
+    sessionEmail,
+    activeMembership,
+    bootstrap,
+    isAuthenticated,
+    hasHousehold,
+    authLoading,
+  } = useDomyliConnection();
 
-  const householdId = bootstrap?.active_household_id ?? null;
-  const { loading, degraded, error, health, feed, refresh } =
-    useDashboard(householdId);
+  const { loading, error, health, feed, refresh } = useDashboard();
 
-  if (authLoading || bootstrapLoading) {
+  if (authLoading) {
     return (
-      <div className="min-h-screen bg-obsidian text-white px-6 py-16">
-        <div className="mx-auto max-w-5xl">
-          <div className="text-xs uppercase tracking-[0.35em] text-gold/70">
-            DOMYLI
-          </div>
-          <h1 className="mt-4 text-4xl font-semibold text-white">
-            Chargement du statut...
-          </h1>
+      <div className="min-h-screen bg-obsidian text-alabaster flex items-center justify-center px-6">
+        <div className="text-center">
+          <p className="text-xs uppercase tracking-[0.3em] text-gold/80">DOMYLI</p>
+          <h1 className="mt-4 text-3xl font-serif italic">Chargement du statut...</h1>
         </div>
       </div>
     );
@@ -95,21 +62,15 @@ export default function StatusPage() {
 
   if (!isAuthenticated || !hasHousehold) {
     return (
-      <div className="min-h-screen bg-obsidian text-white px-6 py-16">
-        <div className="mx-auto max-w-3xl">
-          <div className="text-xs uppercase tracking-[0.35em] text-gold/70">
-            DOMYLI
-          </div>
-          <h1 className="mt-4 text-4xl font-semibold text-white">
-            Foyer requis
-          </h1>
-          <p className="mt-5 max-w-2xl text-base leading-8 text-white/70">
-            Il faut une session authentifiée et un foyer actif pour accéder au
-            status.
+      <div className="min-h-screen bg-obsidian text-alabaster flex items-center justify-center px-6">
+        <div className="max-w-xl w-full border border-white/10 bg-white/5 p-8">
+          <p className="text-xs uppercase tracking-[0.3em] text-gold/80">DOMYLI</p>
+          <h1 className="mt-4 text-3xl font-serif italic">Foyer requis</h1>
+          <p className="mt-4 text-alabaster/70">
+            Il faut une session authentifiée et un foyer actif pour accéder au status.
           </p>
           <button
-            type="button"
-            onClick={() => navigate(ROUTES.HOME)}
+            onClick={() => navigateTo("/")}
             className="mt-8 border border-gold/40 px-6 py-3 text-sm uppercase tracking-[0.25em] text-gold hover:bg-gold hover:text-obsidian transition-colors"
           >
             Retour à l’accueil
@@ -120,142 +81,237 @@ export default function StatusPage() {
   }
 
   const globalStatus = computeGlobalStatus({
-    missingStock: health?.missing_stock_count ?? 0,
-    overdueTasks: health?.overdue_tasks_count ?? 0,
-    blockedTools: health?.blocked_tools_count ?? 0,
+    inventoryLowStock: health?.inventory_low_stock_count ?? 0,
+    openAlerts: health?.open_alert_count ?? 0,
+    openShopping: health?.open_shopping_count ?? 0,
   });
 
   const alerts = [
     {
-      title: "Stock manquant",
-      value: health?.missing_stock_count ?? 0,
+      title: "Stock bas",
+      value: health?.inventory_low_stock_count ?? 0,
+      show: (health?.inventory_low_stock_count ?? 0) > 0,
     },
     {
-      title: "Tâches en retard",
-      value: health?.overdue_tasks_count ?? 0,
+      title: "Alertes ouvertes",
+      value: health?.open_alert_count ?? 0,
+      show: (health?.open_alert_count ?? 0) > 0,
     },
     {
-      title: "Outils bloqués",
-      value: health?.blocked_tools_count ?? 0,
+      title: "Shopping ouverte",
+      value: health?.open_shopping_count ?? 0,
+      show: (health?.open_shopping_count ?? 0) > 0,
     },
-  ].filter((item) => item.value > 0);
+  ].filter((item) => item.show);
 
   return (
-    <div className="min-h-screen bg-obsidian text-white px-6 py-10">
-      <div className="mx-auto max-w-7xl">
-        <div className="flex flex-col gap-6 md:flex-row md:items-center md:justify-between">
-          <div className="flex items-start gap-4">
+    <div className="min-h-screen bg-obsidian text-alabaster">
+      <header className="border-b border-white/5 glass">
+        <div className="max-w-7xl mx-auto px-6 h-20 flex items-center justify-between">
+          <div className="flex items-center gap-3">
             <button
-              type="button"
-              onClick={() => navigate(ROUTES.DASHBOARD)}
-              className="mt-1 h-10 w-10 border border-white/10 flex items-center justify-center hover:border-gold/40 transition-colors"
+              onClick={() => navigateTo("/dashboard")}
+              className="w-10 h-10 border border-white/10 flex items-center justify-center hover:border-gold/40 transition-colors"
               aria-label="Retour"
             >
-              <ArrowLeft size={18} />
+              <ArrowLeft size={18} className="text-gold" />
+            </button>
+            <div>
+              <p className="text-[10px] uppercase tracking-[0.3em] text-gold/80">DOMYLI</p>
+              <h1 className="text-2xl font-serif italic">Status</h1>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-3">
+            <button
+              onClick={refresh}
+              className="border border-white/10 px-5 py-3 text-xs uppercase tracking-[0.25em] text-alabaster hover:border-gold/40 hover:text-gold transition-colors flex items-center gap-2"
+            >
+              <RefreshCw size={14} />
+              Rafraîchir
             </button>
 
-            <div>
-              <div className="text-xs uppercase tracking-[0.35em] text-gold/70">
-                DOMYLI
+            <button
+              onClick={() => navigateTo("/shopping")}
+              className="border border-white/10 px-5 py-3 text-xs uppercase tracking-[0.25em] text-alabaster hover:border-gold/40 hover:text-gold transition-colors"
+            >
+              Shopping
+            </button>
+
+            <button
+              onClick={() => navigateTo("/dashboard")}
+              className="border border-gold/40 px-5 py-3 text-xs uppercase tracking-[0.25em] text-gold hover:bg-gold hover:text-obsidian transition-colors"
+            >
+              Dashboard
+            </button>
+          </div>
+        </div>
+      </header>
+
+      <main className="max-w-7xl mx-auto px-6 py-12">
+        <section className="grid lg:grid-cols-4 gap-6">
+          <div className="border border-white/10 bg-white/5 p-6">
+            <div className="w-12 h-12 border border-gold/20 flex items-center justify-center mb-4">
+              <Package className="text-gold" size={24} />
+            </div>
+            <div className="text-sm uppercase tracking-[0.25em] text-alabaster/50">Stock bas</div>
+            <div className="mt-3 text-3xl font-serif italic">{health?.inventory_low_stock_count ?? 0}</div>
+          </div>
+
+          <div className="border border-white/10 bg-white/5 p-6">
+            <div className="w-12 h-12 border border-gold/20 flex items-center justify-center mb-4">
+              <AlertTriangle className="text-gold" size={24} />
+            </div>
+            <div className="text-sm uppercase tracking-[0.25em] text-alabaster/50">Alertes ouvertes</div>
+            <div className="mt-3 text-3xl font-serif italic">{health?.open_alert_count ?? 0}</div>
+          </div>
+
+          <div className="border border-white/10 bg-white/5 p-6">
+            <div className="w-12 h-12 border border-gold/20 flex items-center justify-center mb-4">
+              <Utensils className="text-gold" size={24} />
+            </div>
+            <div className="text-sm uppercase tracking-[0.25em] text-alabaster/50">Repas du jour</div>
+            <div className="mt-3 text-3xl font-serif italic">{health?.today_meal_count ?? 0}</div>
+          </div>
+
+          <div className="border border-white/10 bg-white/5 p-6">
+            <div className="w-12 h-12 border border-gold/20 flex items-center justify-center mb-4">
+              <ListTodo className="text-gold" size={24} />
+            </div>
+            <div className="text-sm uppercase tracking-[0.25em] text-alabaster/50">Tâches du jour</div>
+            <div className="mt-3 text-3xl font-serif italic">{health?.today_task_count ?? 0}</div>
+          </div>
+        </section>
+
+        <section className="grid lg:grid-cols-3 gap-8 mt-10">
+          <div className="lg:col-span-2 border border-white/10 bg-white/5 p-8">
+            <p className="text-xs uppercase tracking-[0.3em] text-gold/80">Charge opérationnelle</p>
+            <h2 className="mt-4 text-3xl font-serif italic">Charge par membre</h2>
+
+            {loading && (
+              <div className="mt-6 border border-white/10 bg-black/20 p-4 text-sm text-alabaster/70">
+                Chargement du flux DOMYLI...
               </div>
-              <h1 className="mt-2 text-4xl font-semibold text-white">Status</h1>
-              <p className="mt-3 text-sm leading-7 text-white/65">
-                Vue synthétique de la stabilité opérationnelle du foyer.
-              </p>
-            </div>
-          </div>
+            )}
 
-          <button
-            type="button"
-            onClick={() => void refresh()}
-            className="inline-flex items-center gap-3 border border-gold/40 px-5 py-3 text-xs uppercase tracking-[0.25em] text-gold hover:bg-gold hover:text-obsidian transition-colors"
-          >
-            <RefreshCw size={16} className={loading ? "animate-spin" : ""} />
-            Rafraîchir
-          </button>
-        </div>
+            {error && (
+              <div className="mt-6 border border-white/10 bg-black/20 p-4 text-sm text-alabaster/70">
+                {error.message}
+              </div>
+            )}
 
-        <section className="mt-10 border border-gold/10 bg-white/[0.03] p-6">
-          <div className="flex items-center gap-3 text-gold">
-            {globalStatus.icon}
-            <span className="text-xs uppercase tracking-[0.3em]">
-              {globalStatus.label}
-            </span>
-          </div>
-          <p className="mt-4 text-base leading-8 text-white/70">
-            {globalStatus.description}
-          </p>
-          {degraded && (
-            <p className="mt-4 text-sm text-amber-300">
-              Une partie du statut est disponible, mais au moins un RPC a remonté
-              une erreur explicite.
-            </p>
-          )}
-          {error && (
-            <div className="mt-4 border border-red-500/20 bg-red-500/10 px-4 py-4 text-sm text-red-300">
-              {error.message}
-            </div>
-          )}
-        </section>
+            {!loading && !error && feed && feed.members.length === 0 && (
+              <div className="mt-6 border border-white/10 bg-black/20 p-4 text-sm text-alabaster/70">
+                Aucun membre remonté pour la charge du jour.
+              </div>
+            )}
 
-        <div className="mt-8 grid gap-6 md:grid-cols-3">
-          {alerts.length === 0 ? (
-            <div className="md:col-span-3 border border-white/10 bg-white/[0.03] p-6 text-sm text-white/70">
-              Aucun signal critique ouvert pour le moment.
-            </div>
-          ) : (
-            alerts.map((alert) => (
-              <article
-                key={alert.title}
-                className="border border-white/10 bg-white/[0.03] p-6"
-              >
-                <div className="text-xs uppercase tracking-[0.25em] text-gold/70">
-                  {alert.title}
-                </div>
-                <div className="mt-4 text-4xl font-semibold text-white">
-                  {alert.value}
-                </div>
-              </article>
-            ))
-          )}
-        </div>
+            {!loading && !error && feed && feed.members.length > 0 && (
+              <div className="mt-6 grid gap-4">
+                {feed.members.map((member) => (
+                  <div
+                    key={member.user_id}
+                    className="border border-white/10 bg-black/20 p-4"
+                  >
+                    <div className="flex items-start justify-between gap-4">
+                      <div>
+                        <div className="text-xs uppercase tracking-[0.25em] text-gold/80">
+                          {member.role}
+                        </div>
+                        <div className="mt-2 text-lg font-serif italic">{member.user_id}</div>
+                        <div className="mt-2 text-sm text-alabaster/60">
+                          Capacité : {member.capacity_points_daily}
+                        </div>
+                      </div>
 
-        <section className="mt-10 border border-white/10 bg-white/[0.03] p-6">
-          <div className="text-xs uppercase tracking-[0.3em] text-gold/70">
-            Flux du jour
-          </div>
-
-          {!loading && (!Array.isArray(feed) || feed.length === 0) && (
-            <div className="mt-5 text-sm text-white/65">
-              Aucun événement exploitable n’a été retourné pour le moment.
-            </div>
-          )}
-
-          {Array.isArray(feed) && feed.length > 0 && (
-            <div className="mt-6 space-y-4">
-              {feed.map((entry, index) => (
-                <article
-                  key={`${entry.item_id || "item"}-${index}`}
-                  className="border border-white/10 px-4 py-4"
-                >
-                  <div className="flex items-center gap-3 text-gold">
-                    {feedIcon(entry.item_type)}
-                    <span className="text-xs uppercase tracking-[0.25em]">
-                      {entry.item_type}
-                    </span>
+                      <div className="text-xs uppercase tracking-[0.25em] text-alabaster/50">
+                        Tâches : {member.assigned_task_count}
+                      </div>
+                    </div>
                   </div>
+                ))}
+              </div>
+            )}
+          </div>
 
-                  <div className="mt-3 text-base text-white">{entry.title}</div>
+          <aside className="border border-white/10 bg-white/5 p-8">
+            <p className="text-xs uppercase tracking-[0.3em] text-gold/80">Pilotage</p>
 
-                  <div className="mt-2 text-sm text-white/60">
-                    {formatScheduledAt(entry.scheduled_at)}
-                  </div>
-                </article>
-              ))}
+            <div className="mt-6 border border-gold/20 bg-gold/5 p-4">
+              <div className="flex items-center gap-3">
+                <ShieldCheck size={18} className="text-gold" />
+                <div>
+                  <div className="text-sm uppercase tracking-[0.25em] text-gold/80">État global</div>
+                  <div className="mt-2 text-2xl font-serif italic">{globalStatus.label}</div>
+                  <div className="mt-2 text-sm text-alabaster/70">{globalStatus.description}</div>
+                </div>
+              </div>
             </div>
-          )}
+
+            <div className="mt-6 space-y-4 text-sm">
+              <div className="border border-white/10 bg-black/20 p-4">
+                <span className="text-alabaster/50">Foyer :</span>
+                <div className="mt-1 text-alabaster">{activeMembership?.household_name ?? "—"}</div>
+              </div>
+
+              <div className="border border-white/10 bg-black/20 p-4">
+                <span className="text-alabaster/50">Rôle :</span>
+                <div className="mt-1 text-alabaster">{activeMembership?.role ?? "—"}</div>
+              </div>
+
+              <div className="border border-white/10 bg-black/20 p-4">
+                <span className="text-alabaster/50">Jour observé :</span>
+                <div className="mt-1 text-alabaster">{health?.day ?? "—"}</div>
+              </div>
+
+              <div className="border border-white/10 bg-black/20 p-4">
+                <span className="text-alabaster/50">Super Admin :</span>
+                <div className="mt-1 text-alabaster">{bootstrap?.is_super_admin ? "Oui" : "Non"}</div>
+              </div>
+
+              <div className="border border-white/10 bg-black/20 p-4">
+                <span className="text-alabaster/50">Session :</span>
+                <div className="mt-1 text-alabaster">{sessionEmail ?? "—"}</div>
+              </div>
+            </div>
+
+            <div className="mt-8">
+              <div className="text-xs uppercase tracking-[0.3em] text-gold/80">Alertes prioritaires</div>
+
+              {alerts.length === 0 ? (
+                <div className="mt-4 border border-white/10 bg-black/20 p-4 text-sm text-alabaster/70">
+                  Aucune alerte prioritaire critique.
+                </div>
+              ) : (
+                <div className="mt-4 grid gap-3">
+                  {alerts.map((alert) => (
+                    <div key={alert.title} className="border border-white/10 bg-black/20 p-4">
+                      <div className="text-xs uppercase tracking-[0.25em] text-gold/80">
+                        {alert.title}
+                      </div>
+                      <div className="mt-2 text-2xl font-serif italic">{alert.value}</div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className="mt-8 border border-white/10 bg-black/20 p-4">
+              <div className="flex items-center gap-3">
+                <ShieldCheck size={18} className="text-gold" />
+                <span className="text-sm">RPC : app.rpc_today_health / app.rpc_today_load_feed</span>
+              </div>
+            </div>
+
+            <div className="mt-4 border border-white/10 bg-black/20 p-4">
+              <div className="flex items-center gap-3">
+                <Clock3 size={18} className="text-gold" />
+                <span className="text-sm">Cette page sert de centre de pilotage transverse.</span>
+              </div>
+            </div>
+          </aside>
         </section>
-      </div>
+      </main>
     </div>
   );
 }

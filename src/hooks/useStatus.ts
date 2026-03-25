@@ -1,15 +1,14 @@
 import { useCallback, useEffect, useState } from "react";
-import { toDomyliError, type DomyliAppError } from "@/src/lib/errors";
+import { toDomyliError, type DomyliAppError } from "../lib/errors";
 import {
   getTodayHealth,
   getTodayLoadFeed,
   type TodayHealthOutput,
   type TodayLoadFeedItem,
-} from "@/src/services/status/statusService";
+} from "../services/status/statusService";
 
 type StatusState = {
   loading: boolean;
-  degraded: boolean;
   error: DomyliAppError | null;
   health: TodayHealthOutput | null;
   feed: TodayLoadFeedItem[];
@@ -17,7 +16,6 @@ type StatusState = {
 
 const initialState: StatusState = {
   loading: false,
-  degraded: false,
   error: null,
   health: null,
   feed: [],
@@ -28,13 +26,12 @@ export function useStatus(householdId: string | null) {
 
   const refresh = useCallback(async () => {
     if (!householdId) {
-      setState((prev) => ({
-        ...prev,
+      setState({
         loading: false,
         error: null,
         health: null,
         feed: [],
-      }));
+      });
       return;
     }
 
@@ -45,23 +42,14 @@ export function useStatus(householdId: string | null) {
     }));
 
     try {
-      const [healthResult, feedResult] = await Promise.allSettled([
-        getTodayHealth(),
-        getTodayLoadFeed(),
+      const [health, feed] = await Promise.all([
+        getTodayHealth({ p_household_id: householdId }),
+        getTodayLoadFeed({ p_household_id: householdId }),
       ]);
-
-      const health = healthResult.status === "fulfilled" ? healthResult.value : null;
-      const feed = feedResult.status === "fulfilled" ? feedResult.value : [];
-      const healthError = healthResult.status === "rejected" ? healthResult.reason : null;
-      const feedError = feedResult.status === "rejected" ? feedResult.reason : null;
-
-      const isDegraded = healthResult.status === "rejected" || feedResult.status === "rejected";
-      const mainError = healthError || feedError;
 
       setState({
         loading: false,
-        degraded: isDegraded,
-        error: isDegraded && !health && feed.length === 0 ? toDomyliError(mainError) : null,
+        error: null,
         health,
         feed,
       });
@@ -72,7 +60,6 @@ export function useStatus(householdId: string | null) {
 
       setState({
         loading: false,
-        degraded: false,
         error: normalized,
         health: null,
         feed: [],

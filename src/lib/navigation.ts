@@ -1,15 +1,6 @@
-import { ROUTES } from "@/src/constants/routes";
+export function navigateTo(path: string) {
+  if (window.location.pathname === path) return;
 
-export { ROUTES };
-
-export function navigateTo(path: string, replace = false) {
-  if (typeof window === "undefined") return;
-
-  if (replace) {
-    window.history.replaceState({}, "", path);
-  } else {
-    window.history.pushState({}, "", path);
-  }
-
+  window.history.pushState({}, "", path);
   window.dispatchEvent(new PopStateEvent("popstate"));
 }

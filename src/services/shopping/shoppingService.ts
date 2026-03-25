@@ -1,5 +1,6 @@
-import { callRpc } from "@/src/services/rpc";
-import { unwrapRpcRow } from "@/src/services/unwrapRpcRow";
+import { callRpc } from "../rpc";
+import { unwrapRpcRow } from "../unwrapRpcRow";
+import { isMissingRpcError } from "../../lib/errors";
 
 export type ShoppingListRebuildOutput = {
   rebuilt: boolean;
@@ -32,38 +33,61 @@ type RawShoppingListItem = {
 };
 
 export async function rebuildShoppingList(): Promise<ShoppingListRebuildOutput> {
-  const rawResult = await callRpc<RawShoppingListRebuildOutput | RawShoppingListRebuildOutput[]>(
-    "rpc_shopping_list_rebuild",
-    {}
-  );
+  try {
+    const rawResult = await callRpc<
+      Record<string, never>,
+      RawShoppingListRebuildOutput | RawShoppingListRebuildOutput[]
+    >("rpc_shopping_list_rebuild", {});
 
-  const raw = unwrapRpcRow(rawResult);
+    const raw = unwrapRpcRow(rawResult);
 
-  return {
-    rebuilt: true,
-    items_count: Number(raw?.inserted_count ?? 0),
-    generated_at: new Date().toISOString(),
-  };
+    console.log("DOMYLI rpc_shopping_list_rebuild raw =>", rawResult);
+    console.log("DOMYLI rpc_shopping_list_rebuild normalized =>", raw);
+
+    return {
+      rebuilt: true,
+      items_count: Number(raw?.inserted_count ?? 0),
+      generated_at: new Date().toISOString(),
+    };
+  } catch (error) {
+    if (isMissingRpcError(error)) {
+      return {
+        rebuilt: false,
+        items_count: 0,
+        generated_at: new Date().toISOString(),
+      };
+    }
+    throw error;
+  }
 }
 
 export async function readShoppingList(): Promise<ShoppingListItem[]> {
-  const rawResult = await callRpc<RawShoppingListItem[] | RawShoppingListItem | null>(
-    "rpc_shopping_list_list",
-    {}
-  );
+  try {
+    const rawResult = await callRpc<
+      Record<string, never>,
+      RawShoppingListItem[] | RawShoppingListItem | null
+    >("rpc_shopping_list_list", {});
 
-  const rows = Array.isArray(rawResult)
-    ? rawResult
-    : rawResult
-    ? [rawResult]
-    : [];
+    console.log("DOMYLI rpc_shopping_list_list raw =>", rawResult);
 
-  return rows.map((row) => ({
-    shopping_item_id: row.shopping_item_id ?? "",
-    item_name: row.item_name ?? "Article DOMYLI",
-    quantity_needed: Number(row.quantity_needed ?? 0),
-    unit: row.unit ?? null,
-    priority: row.priority ?? null,
-    status: row.status ?? null,
-  }));
+    const rows = Array.isArray(rawResult)
+      ? rawResult
+      : rawResult
+        ? [rawResult]
+        : [];
+
+    return rows.map((row) => ({
+      shopping_item_id: row.shopping_item_id ?? "",
+      item_name: row.item_name ?? "Article DOMYLI",
+      quantity_needed: Number(row.quantity_needed ?? 0),
+      unit: row.unit ?? null,
+      priority: row.priority ?? null,
+      status: row.status ?? null,
+    }));
+  } catch (error) {
+    if (isMissingRpcError(error)) {
+      return [];
+    }
+    throw error;
+  }
 }

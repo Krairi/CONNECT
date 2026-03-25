@@ -1,19 +1,31 @@
-import { useMemo, useState } from "react";
-import { ArrowLeft, Gauge, RefreshCw, Save, Users } from "lucide-react";
-import { useNavigate } from "react-router-dom";
-
-import { useAuth } from "@/src/contexts/AuthContext";
-import { useCapacity } from "@/src/hooks/useCapacity";
-import { ROUTES } from "@/src/constants/routes";
+import { useState } from "react";
+import {
+  ArrowLeft,
+  ArrowRight,
+  Gauge,
+  House,
+  RefreshCw,
+  Save,
+  ShieldCheck,
+  Users,
+} from "lucide-react";
+import { useDomyliConnection } from "../hooks/useDomyliConnection";
+import { useCapacity } from "../hooks/useCapacity";
+import { navigateTo } from "../lib/navigation";
 
 function todayIsoDate() {
   return new Date().toISOString().slice(0, 10);
 }
 
 export default function CapacityPage() {
-  const navigate = useNavigate();
-  const { isAuthenticated, hasHousehold, authLoading, bootstrapLoading } =
-    useAuth();
+  const {
+    sessionEmail,
+    activeMembership,
+    bootstrap,
+    isAuthenticated,
+    hasHousehold,
+    authLoading,
+  } = useDomyliConnection();
 
   const [day, setDay] = useState(todayIsoDate());
   const [selectedMemberUserId, setSelectedMemberUserId] = useState("");
@@ -24,23 +36,12 @@ export default function CapacityPage() {
   const { loading, saving, error, capacity, lastSaved, refresh, saveMemberCapacity } =
     useCapacity(day);
 
-  const selectedMember = useMemo(() => {
+  if (authLoading) {
     return (
-      capacity?.members.find((m) => m.member_user_id === selectedMemberUserId) ??
-      null
-    );
-  }, [capacity?.members, selectedMemberUserId]);
-
-  if (authLoading || bootstrapLoading) {
-    return (
-      <div className="min-h-screen bg-obsidian text-white px-6 py-16">
-        <div className="mx-auto max-w-5xl">
-          <div className="text-xs uppercase tracking-[0.35em] text-gold/70">
-            DOMYLI
-          </div>
-          <h1 className="mt-4 text-4xl font-semibold text-white">
-            Chargement de la capacité...
-          </h1>
+      <div className="min-h-screen bg-obsidian text-alabaster flex items-center justify-center px-6">
+        <div className="text-center">
+          <p className="text-xs uppercase tracking-[0.3em] text-gold/80">DOMYLI</p>
+          <h1 className="mt-4 text-3xl font-serif italic">Chargement de la capacité...</h1>
         </div>
       </div>
     );
@@ -48,21 +49,15 @@ export default function CapacityPage() {
 
   if (!isAuthenticated || !hasHousehold) {
     return (
-      <div className="min-h-screen bg-obsidian text-white px-6 py-16">
-        <div className="mx-auto max-w-3xl">
-          <div className="text-xs uppercase tracking-[0.35em] text-gold/70">
-            DOMYLI
-          </div>
-          <h1 className="mt-4 text-4xl font-semibold text-white">
-            Foyer requis
-          </h1>
-          <p className="mt-5 max-w-2xl text-base leading-8 text-white/70">
-            Il faut une session authentifiée et un foyer actif pour accéder à la
-            capacité.
+      <div className="min-h-screen bg-obsidian text-alabaster flex items-center justify-center px-6">
+        <div className="max-w-xl w-full border border-white/10 bg-white/5 p-8">
+          <p className="text-xs uppercase tracking-[0.3em] text-gold/80">DOMYLI</p>
+          <h1 className="mt-4 text-3xl font-serif italic">Foyer requis</h1>
+          <p className="mt-4 text-alabaster/70">
+            Il faut une session authentifiée et un foyer actif pour accéder à la capacité.
           </p>
           <button
-            type="button"
-            onClick={() => navigate(ROUTES.HOME)}
+            onClick={() => navigateTo("/")}
             className="mt-8 border border-gold/40 px-6 py-3 text-sm uppercase tracking-[0.25em] text-gold hover:bg-gold hover:text-obsidian transition-colors"
           >
             Retour à l’accueil
@@ -91,182 +86,311 @@ export default function CapacityPage() {
         Number(capacityPointsDaily),
         reason.trim() || null
       );
-
       setLocalMessage(`Capacité enregistrée : ${result.capacity_entry_id}`);
       setCapacityPointsDaily("");
       setReason("");
     } catch {
-      // erreur déjà gérée par le hook
+      //
     }
   };
 
   return (
-    <div className="min-h-screen bg-obsidian text-white px-6 py-10">
-      <div className="mx-auto max-w-7xl">
-        <div className="flex flex-col gap-6 md:flex-row md:items-center md:justify-between">
-          <div className="flex items-start gap-4">
+    <div className="min-h-screen bg-obsidian text-alabaster">
+      <header className="border-b border-white/5 glass">
+        <div className="max-w-7xl mx-auto px-6 h-20 flex items-center justify-between">
+          <div className="flex items-center gap-3">
             <button
-              type="button"
-              onClick={() => navigate(ROUTES.DASHBOARD)}
-              className="mt-1 h-10 w-10 border border-white/10 flex items-center justify-center hover:border-gold/40 transition-colors"
+              onClick={() => navigateTo("/dashboard")}
+              className="w-10 h-10 border border-white/10 flex items-center justify-center hover:border-gold/40 transition-colors"
               aria-label="Retour"
             >
-              <ArrowLeft size={18} />
+              <ArrowLeft size={18} className="text-gold" />
             </button>
-
             <div>
-              <div className="text-xs uppercase tracking-[0.35em] text-gold/70">
-                DOMYLI
-              </div>
-              <h1 className="mt-2 text-4xl font-semibold text-white">
-                Capacity
-              </h1>
-              <p className="mt-3 text-sm leading-7 text-white/65">
-                Pilotage de la capacité quotidienne par membre.
-              </p>
+              <p className="text-[10px] uppercase tracking-[0.3em] text-gold/80">DOMYLI</p>
+              <h1 className="text-2xl font-serif italic">Capacity</h1>
             </div>
           </div>
 
-          <button
-            type="button"
-            onClick={() => void refresh()}
-            className="inline-flex items-center gap-3 border border-gold/40 px-5 py-3 text-xs uppercase tracking-[0.25em] text-gold hover:bg-gold hover:text-obsidian transition-colors"
-          >
-            <RefreshCw size={16} className={loading ? "animate-spin" : ""} />
-            Rafraîchir
-          </button>
-        </div>
-
-        <div className="mt-10 grid gap-6 xl:grid-cols-[1.2fr_0.8fr]">
-          <section className="border border-white/10 bg-white/[0.03] p-6">
-            <div className="mb-6 flex items-center gap-3 text-gold">
-              <Gauge size={18} />
-              <span className="text-xs uppercase tracking-[0.3em]">
-                Capacité du jour
-              </span>
-            </div>
-
-            <div className="grid gap-5 md:grid-cols-2">
-              <div>
-                <label className="mb-2 block text-xs uppercase tracking-[0.25em] text-gold/70">
-                  Jour
-                </label>
-                <input
-                  type="date"
-                  value={day}
-                  onChange={(e) => setDay(e.target.value)}
-                  className="w-full border border-white/10 bg-black/20 px-4 py-4 text-sm outline-none focus:border-gold/50"
-                />
-              </div>
-
-              <div>
-                <label className="mb-2 block text-xs uppercase tracking-[0.25em] text-gold/70">
-                  Membre
-                </label>
-                <select
-                  value={selectedMemberUserId}
-                  onChange={(e) => setSelectedMemberUserId(e.target.value)}
-                  className="w-full border border-white/10 bg-black/20 px-4 py-4 text-sm outline-none focus:border-gold/50"
-                >
-                  <option value="">Sélectionner</option>
-                  {(capacity?.members ?? []).map((member) => (
-                    <option
-                      key={member.member_user_id}
-                      value={member.member_user_id}
-                    >
-                      {member.display_name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="mb-2 block text-xs uppercase tracking-[0.25em] text-gold/70">
-                  Capacité quotidienne
-                </label>
-                <input
-                  value={capacityPointsDaily}
-                  onChange={(e) => setCapacityPointsDaily(e.target.value)}
-                  placeholder="8"
-                  className="w-full border border-white/10 bg-black/20 px-4 py-4 text-sm outline-none focus:border-gold/50"
-                />
-              </div>
-
-              <div>
-                <label className="mb-2 block text-xs uppercase tracking-[0.25em] text-gold/70">
-                  Raison
-                </label>
-                <input
-                  value={reason}
-                  onChange={(e) => setReason(e.target.value)}
-                  placeholder="Charge réduite, déplacement..."
-                  className="w-full border border-white/10 bg-black/20 px-4 py-4 text-sm outline-none focus:border-gold/50"
-                />
-              </div>
-            </div>
-
+          <div className="flex items-center gap-3">
             <button
-              type="button"
-              onClick={() => void handleSave()}
-              disabled={saving}
-              className="mt-6 inline-flex w-full items-center justify-center gap-3 border border-gold bg-gold px-5 py-4 text-sm uppercase tracking-[0.25em] text-obsidian disabled:opacity-50"
+              onClick={refresh}
+              className="border border-white/10 px-5 py-3 text-xs uppercase tracking-[0.25em] text-alabaster hover:border-gold/40 hover:text-gold transition-colors flex items-center gap-2"
             >
-              <Save size={16} />
-              {saving ? "Enregistrement..." : "Enregistrer la capacité"}
+              <RefreshCw size={14} />
+              Rafraîchir
             </button>
 
-            {(localMessage || error) && (
-              <div className="mt-6 border border-gold/20 bg-gold/5 px-4 py-4 text-sm text-gold/90">
-                {localMessage ?? error?.message}
-              </div>
-            )}
-          </section>
+            <button
+              onClick={() => navigateTo("/tools")}
+              className="border border-white/10 px-5 py-3 text-xs uppercase tracking-[0.25em] text-alabaster hover:border-gold/40 hover:text-gold transition-colors"
+            >
+              Tools
+            </button>
 
-          <aside className="border border-white/10 bg-white/[0.03] p-6">
-            <div className="mb-6 flex items-center gap-3 text-gold">
-              <Users size={18} />
-              <span className="text-xs uppercase tracking-[0.3em]">
-                Synthèse
-              </span>
+            <button
+              onClick={() => navigateTo("/dashboard")}
+              className="border border-gold/40 px-5 py-3 text-xs uppercase tracking-[0.25em] text-gold hover:bg-gold hover:text-obsidian transition-colors"
+            >
+              Dashboard
+            </button>
+          </div>
+        </div>
+      </header>
+
+      <main className="max-w-7xl mx-auto px-6 py-12">
+        <section className="grid lg:grid-cols-3 gap-8">
+          <div className="lg:col-span-2 border border-white/10 bg-white/5 p-8">
+            <p className="text-xs uppercase tracking-[0.3em] text-gold/80">Équilibrage du foyer</p>
+            <h2 className="mt-4 text-4xl font-serif italic">Piloter la capacité quotidienne</h2>
+            <p className="mt-6 text-alabaster/70 leading-relaxed">
+              Cette page est alignée sur
+              <span className="text-gold"> rpc_team_capacity(p_capacity_date)</span> et
+              <span className="text-gold">
+                {" "}
+                rpc_capacity_set_member_daily(p_user_id, p_capacity_date, p_capacity_points, p_reason)
+              </span>.
+            </p>
+
+            <div className="mt-10 grid md:grid-cols-4 gap-4">
+              <div className="border border-white/10 bg-black/20 p-4">
+                <div className="text-xs uppercase tracking-[0.25em] text-alabaster/50">
+                  Capacité de base
+                </div>
+                <div className="mt-2 text-3xl font-serif italic">
+                  {capacity?.total_base_capacity_points ?? 0}
+                </div>
+              </div>
+
+              <div className="border border-white/10 bg-black/20 p-4">
+                <div className="text-xs uppercase tracking-[0.25em] text-alabaster/50">
+                  Capacité effective
+                </div>
+                <div className="mt-2 text-3xl font-serif italic">
+                  {capacity?.total_effective_capacity_points ?? 0}
+                </div>
+              </div>
+
+              <div className="border border-white/10 bg-black/20 p-4">
+                <div className="text-xs uppercase tracking-[0.25em] text-alabaster/50">
+                  Effort assigné
+                </div>
+                <div className="mt-2 text-3xl font-serif italic">
+                  {capacity?.total_assigned_effort_points ?? 0}
+                </div>
+              </div>
+
+              <div className="border border-white/10 bg-black/20 p-4">
+                <div className="text-xs uppercase tracking-[0.25em] text-alabaster/50">
+                  Restant
+                </div>
+                <div className="mt-2 text-3xl font-serif italic">
+                  {capacity?.total_remaining_capacity_points ?? 0}
+                </div>
+              </div>
             </div>
 
-            <div className="space-y-4 text-sm leading-7 text-white/70">
-              <div>
-                <span className="text-gold">Total capacité :</span>{" "}
-                {capacity?.total_capacity_points ?? 0}
+            <div className="mt-10 border border-white/10 bg-black/20 p-6">
+              <div className="grid md:grid-cols-4 gap-4 items-end">
+                <div>
+                  <label className="mb-2 block text-xs uppercase tracking-[0.25em] text-alabaster/60">
+                    Date
+                  </label>
+                  <input
+                    type="date"
+                    value={day}
+                    onChange={(e) => setDay(e.target.value)}
+                    className="w-full border border-white/10 bg-obsidian px-4 py-3 text-sm outline-none focus:border-gold/50"
+                  />
+                </div>
+
+                <div>
+                  <label className="mb-2 block text-xs uppercase tracking-[0.25em] text-alabaster/60">
+                    Membre
+                  </label>
+                  <select
+                    value={selectedMemberUserId}
+                    onChange={(e) => {
+                      setSelectedMemberUserId(e.target.value);
+                      const member = capacity?.members.find(
+                        (m) => m.member_user_id === e.target.value
+                      );
+                      setCapacityPointsDaily(
+                        member ? String(member.effective_capacity_points) : ""
+                      );
+                    }}
+                    className="w-full border border-white/10 bg-obsidian px-4 py-3 text-sm outline-none focus:border-gold/50"
+                  >
+                    <option value="">Sélectionner</option>
+                    {capacity?.members.map((member) => (
+                      <option key={member.member_user_id} value={member.member_user_id}>
+                        {member.member_user_id}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="mb-2 block text-xs uppercase tracking-[0.25em] text-alabaster/60">
+                    Capacité quotidienne
+                  </label>
+                  <input
+                    type="number"
+                    value={capacityPointsDaily}
+                    onChange={(e) => setCapacityPointsDaily(e.target.value)}
+                    placeholder="10"
+                    className="w-full border border-white/10 bg-obsidian px-4 py-3 text-sm outline-none focus:border-gold/50"
+                  />
+                </div>
+
+                <div>
+                  <label className="mb-2 block text-xs uppercase tracking-[0.25em] text-alabaster/60">
+                    Raison
+                  </label>
+                  <input
+                    type="text"
+                    value={reason}
+                    onChange={(e) => setReason(e.target.value)}
+                    placeholder="Ajustement manuel"
+                    className="w-full border border-white/10 bg-obsidian px-4 py-3 text-sm outline-none focus:border-gold/50"
+                  />
+                </div>
               </div>
-              <div>
-                <span className="text-gold">Points assignés :</span>{" "}
-                {capacity?.assigned_points ?? 0}
+
+              <div className="mt-6 flex flex-col sm:flex-row gap-4">
+                <button
+                  type="button"
+                  onClick={handleSave}
+                  disabled={saving}
+                  className="flex items-center justify-center gap-3 bg-gold px-6 py-4 text-sm font-medium uppercase tracking-[0.25em] text-obsidian transition hover:opacity-90 disabled:opacity-50"
+                >
+                  <Save size={18} />
+                  {saving ? "Enregistrement..." : "Enregistrer la capacité"}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => navigateTo("/dashboard")}
+                  className="flex items-center justify-center gap-3 border border-white/10 px-6 py-4 text-sm uppercase tracking-[0.25em] text-alabaster hover:border-gold/40 hover:text-gold transition-colors"
+                >
+                  <ArrowRight size={18} />
+                  Retour dashboard
+                </button>
               </div>
-              <div>
-                <span className="text-gold">Restant :</span>{" "}
-                {capacity?.remaining_points ?? 0}
+            </div>
+
+            <div className="mt-10 border border-white/10 bg-black/20 p-6">
+              <div className="flex items-center gap-3 mb-4">
+                <Users size={18} className="text-gold" />
+                <h3 className="text-xl font-serif italic">Capacité par membre</h3>
               </div>
-              {selectedMember && (
-                <div className="border border-white/10 p-4">
-                  <div className="text-white">{selectedMember.display_name}</div>
-                  <div className="text-white/60">
-                    Capacité: {selectedMember.capacity_points_daily}
-                  </div>
-                  <div className="text-white/60">
-                    Assigné: {selectedMember.assigned_points}
-                  </div>
-                  <div className="text-white/60">
-                    Restant: {selectedMember.remaining_points}
-                  </div>
+
+              {loading && (
+                <div className="text-sm text-alabaster/70">Chargement de la capacité...</div>
+              )}
+
+              {!loading && (!capacity?.members || capacity.members.length === 0) && (
+                <div className="text-sm text-alabaster/70">Aucun membre remonté pour cette date.</div>
+              )}
+
+              {!loading && capacity?.members && capacity.members.length > 0 && (
+                <div className="grid gap-4">
+                  {capacity.members.map((member) => (
+                    <div
+                      key={member.member_user_id}
+                      className="border border-white/10 bg-obsidian p-4 grid md:grid-cols-6 gap-4 text-sm"
+                    >
+                      <div>
+                        <div className="text-alabaster/50">Membre</div>
+                        <div className="mt-1 text-alabaster">{member.member_user_id}</div>
+                      </div>
+                      <div>
+                        <div className="text-alabaster/50">Rôle</div>
+                        <div className="mt-1 text-alabaster">{member.role}</div>
+                      </div>
+                      <div>
+                        <div className="text-alabaster/50">Base</div>
+                        <div className="mt-1 text-alabaster">{member.base_capacity_points}</div>
+                      </div>
+                      <div>
+                        <div className="text-alabaster/50">Effective</div>
+                        <div className="mt-1 text-alabaster">{member.effective_capacity_points}</div>
+                      </div>
+                      <div>
+                        <div className="text-alabaster/50">Assigné</div>
+                        <div className="mt-1 text-alabaster">{member.assigned_effort_points}</div>
+                      </div>
+                      <div>
+                        <div className="text-alabaster/50">Restant</div>
+                        <div className="mt-1 text-alabaster">{member.remaining_capacity_points}</div>
+                      </div>
+                    </div>
+                  ))}
                 </div>
               )}
             </div>
 
-            {lastSaved && (
-              <div className="mt-6 border border-emerald-500/20 bg-emerald-500/10 px-4 py-4 text-sm text-emerald-300">
-                Dernière entrée enregistrée : {lastSaved.capacity_entry_id}
+            {(localMessage || error || lastSaved) && (
+              <div className="mt-8 border border-white/10 bg-black/20 p-4 text-sm text-alabaster/75">
+                {localMessage ??
+                  error?.message ??
+                  (lastSaved ? `Capacité enregistrée : ${lastSaved.capacity_entry_id}` : null)}
               </div>
             )}
+          </div>
+
+          <aside className="border border-white/10 bg-white/5 p-8">
+            <p className="text-xs uppercase tracking-[0.3em] text-gold/80">Contexte actif</p>
+
+            <div className="mt-6 space-y-4 text-sm">
+              <div className="border border-white/10 bg-black/20 p-4">
+                <span className="text-alabaster/50">Email :</span>
+                <div className="mt-1 text-alabaster">{sessionEmail ?? "—"}</div>
+              </div>
+
+              <div className="border border-white/10 bg-black/20 p-4">
+                <span className="text-alabaster/50">Foyer :</span>
+                <div className="mt-1 text-alabaster">{activeMembership?.household_name ?? "—"}</div>
+              </div>
+
+              <div className="border border-white/10 bg-black/20 p-4">
+                <span className="text-alabaster/50">Rôle :</span>
+                <div className="mt-1 text-alabaster">{activeMembership?.role ?? "—"}</div>
+              </div>
+
+              <div className="border border-white/10 bg-black/20 p-4">
+                <span className="text-alabaster/50">Super Admin :</span>
+                <div className="mt-1 text-alabaster">{bootstrap?.is_super_admin ? "Oui" : "Non"}</div>
+              </div>
+            </div>
+
+            <div className="mt-8 space-y-4">
+              <div className="border border-gold/20 bg-gold/5 p-4 text-sm text-alabaster/75">
+                <div className="flex items-center gap-3">
+                  <House size={18} className="text-gold" />
+                  <span>La capacité permet d’équilibrer l’effort domestique réel.</span>
+                </div>
+              </div>
+
+              <div className="border border-white/10 bg-black/20 p-4">
+                <div className="flex items-center gap-3">
+                  <Gauge size={18} className="text-gold" />
+                  <span className="text-sm">RPC : app.rpc_team_capacity(p_capacity_date)</span>
+                </div>
+              </div>
+
+              <div className="border border-white/10 bg-black/20 p-4">
+                <div className="flex items-center gap-3">
+                  <ShieldCheck size={18} className="text-gold" />
+                  <span className="text-sm">
+                    RPC : app.rpc_capacity_set_member_daily(p_user_id, p_capacity_date, p_capacity_points, p_reason)
+                  </span>
+                </div>
+              </div>
+            </div>
           </aside>
-        </div>
-      </div>
+        </section>
+      </main>
     </div>
   );
 }

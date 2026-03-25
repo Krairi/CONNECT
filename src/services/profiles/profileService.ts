@@ -1,7 +1,8 @@
-import { callRpc } from "@/src/services/rpc";
-import { unwrapRpcRow } from "@/src/services/unwrapRpcRow";
+import { callRpc } from "../rpc";
+import { unwrapRpcRow } from "../unwrapRpcRow";
 
 export type HumanProfileUpsertInput = {
+  p_household_id: string;
   p_member_user_id?: string | null;
   p_display_name: string;
   p_birth_date?: string | null;
@@ -19,12 +20,14 @@ export type HumanProfileUpsertInput = {
 
 export type HumanProfileUpsertOutput = {
   profile_id: string;
+  household_id: string;
   display_name: string;
   updated_at: string;
 };
 
 type RawHumanProfileUpsertOutput = {
   profile_id?: string | null;
+  household_id?: string | null;
   display_name?: string | null;
   updated_at?: string | null;
 };
@@ -33,13 +36,18 @@ export async function upsertHumanProfile(
   payload: HumanProfileUpsertInput
 ): Promise<HumanProfileUpsertOutput> {
   const rawResult = await callRpc<
+    HumanProfileUpsertInput,
     RawHumanProfileUpsertOutput | RawHumanProfileUpsertOutput[]
   >("rpc_human_profile_upsert", payload);
 
   const raw = unwrapRpcRow(rawResult);
 
+  console.log("DOMYLI rpc_human_profile_upsert raw =>", rawResult);
+  console.log("DOMYLI rpc_human_profile_upsert normalized =>", raw);
+
   return {
     profile_id: raw?.profile_id ?? "",
+    household_id: raw?.household_id ?? payload.p_household_id,
     display_name: raw?.display_name ?? payload.p_display_name,
     updated_at: raw?.updated_at ?? new Date().toISOString(),
   };

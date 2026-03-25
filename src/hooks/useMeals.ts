@@ -1,64 +1,86 @@
 import { useCallback, useState } from "react";
-
-import { toDomyliError, type DomyliAppError } from "@/src/lib/errors";
+import { toDomyliError, type DomyliAppError } from "../lib/errors";
 import {
   createMealPlan,
   upsertMealSlot,
   confirmMeal,
-  type MealPlanCreateOutput,
+  type MealPlanCreateInput,
   type MealSlotUpsertInput,
-  type MealSlotUpsertOutput,
   type MealConfirmOutput,
-} from "@/src/services/meals/mealService";
+} from "../services/meals/mealService";
+
+type MealDraft = {
+  meal_slot_id: string;
+  planned_for: string;
+  meal_type: string;
+  profile_id: string | null;
+  recipe_id: string | null;
+  title: string;
+  notes: string;
+  status: "PLANNED" | "CONFIRMED";
+};
 
 type MealsState = {
-  creatingPlan: boolean;
-  savingSlot: boolean;
+  loading: boolean;
+  saving: boolean;
   confirming: boolean;
   error: DomyliAppError | null;
-  lastCreatedPlan: MealPlanCreateOutput | null;
-  lastSavedSlot: MealSlotUpsertOutput | null;
-  lastConfirmedMeal: MealConfirmOutput | null;
+  items: MealDraft[];
+  lastCreatedMealSlotId: string | null;
+  lastUpdatedMealSlotId: string | null;
+  lastConfirmResult: MealConfirmOutput | null;
 };
 
 const initialState: MealsState = {
-  creatingPlan: false,
-  savingSlot: false,
+  loading: false,
+  saving: false,
   confirming: false,
   error: null,
-  lastCreatedPlan: null,
-  lastSavedSlot: null,
-  lastConfirmedMeal: null,
+  items: [],
+  lastCreatedMealSlotId: null,
+  lastUpdatedMealSlotId: null,
+  lastConfirmResult: null,
 };
 
 export function useMeals() {
-  const [state, setState] = useState(initialState);
+  const [state, setState] = useState<MealsState>(initialState);
 
-  const createPlan = useCallback(async (day: string) => {
+  const createMeal = useCallback(async (payload: MealPlanCreateInput) => {
     setState((prev) => ({
       ...prev,
-      creatingPlan: true,
+      saving: true,
       error: null,
+      lastCreatedMealSlotId: null,
     }));
 
     try {
-      const result = await createMealPlan({
-        p_day: day,
-      });
+      const mealSlotId = await createMealPlan(payload);
+
+      const newItem: MealDraft = {
+        meal_slot_id: mealSlotId,
+        planned_for: payload.p_planned_for,
+        meal_type: payload.p_meal_type,
+        profile_id: payload.p_profile_id ?? null,
+        recipe_id: payload.p_recipe_id ?? null,
+        title: payload.p_title ?? "Repas DOMYLI",
+        notes: payload.p_notes ?? "",
+        status: "PLANNED",
+      };
 
       setState((prev) => ({
         ...prev,
-        creatingPlan: false,
-        lastCreatedPlan: result,
+        saving: false,
+        items: [newItem, ...prev.items],
+        lastCreatedMealSlotId: mealSlotId,
       }));
 
-      return result;
+      return mealSlotId;
     } catch (error) {
       const normalized = toDomyliError(error);
 
       setState((prev) => ({
         ...prev,
-        creatingPlan: false,
+        saving: false,
         error: normalized,
       }));
 
@@ -66,43 +88,43 @@ export function useMeals() {
     }
   }, []);
 
-  const saveSlot = useCallback(async (payload: {
-    mealPlanId: string;
-    day: string;
-    slotCode: string;
-    profileId?: string | null;
-    recipeId?: string | null;
-    status?: string | null;
-  }) => {
+  const updateMeal = useCallback(async (payload: MealSlotUpsertInput) => {
     setState((prev) => ({
       ...prev,
-      savingSlot: true,
+      saving: true,
       error: null,
+      lastUpdatedMealSlotId: null,
     }));
 
     try {
-      const result = await upsertMealSlot({
-        p_meal_plan_id: payload.mealPlanId,
-        p_day: payload.day,
-        p_slot_code: payload.slotCode,
-        p_profile_id: payload.profileId ?? null,
-        p_recipe_id: payload.recipeId ?? null,
-        p_status: payload.status ?? "PENDING",
-      } satisfies MealSlotUpsertInput);
+      const mealSlotId = await upsertMealSlot(payload);
 
       setState((prev) => ({
         ...prev,
-        savingSlot: false,
-        lastSavedSlot: result,
+        saving: false,
+        items: prev.items.map((item) =>
+          item.meal_slot_id === mealSlotId
+            ? {
+                ...item,
+                planned_for: payload.p_planned_for,
+                meal_type: payload.p_meal_type,
+                profile_id: payload.p_profile_id ?? null,
+                recipe_id: payload.p_recipe_id ?? null,
+                title: payload.p_title ?? item.title,
+                notes: payload.p_notes ?? "",
+              }
+            : item
+        ),
+        lastUpdatedMealSlotId: mealSlotId,
       }));
 
-      return result;
+      return mealSlotId;
     } catch (error) {
       const normalized = toDomyliError(error);
 
       setState((prev) => ({
         ...prev,
-        savingSlot: false,
+        saving: false,
         error: normalized,
       }));
 
@@ -110,22 +132,26 @@ export function useMeals() {
     }
   }, []);
 
-  const confirmMealAction = useCallback(async (mealSlotId: string) => {
+  const confirmMealSlot = useCallback(async (mealSlotId: string) => {
     setState((prev) => ({
       ...prev,
       confirming: true,
       error: null,
+      lastConfirmResult: null,
     }));
 
     try {
-      const result = await confirmMeal({
-        p_meal_slot_id: mealSlotId,
-      });
+      const result = await confirmMeal({ p_meal_slot_id: mealSlotId });
 
       setState((prev) => ({
         ...prev,
         confirming: false,
-        lastConfirmedMeal: result,
+        items: prev.items.map((item) =>
+          item.meal_slot_id === mealSlotId
+            ? { ...item, status: "CONFIRMED" }
+            : item
+        ),
+        lastConfirmResult: result,
       }));
 
       return result;
@@ -142,10 +168,23 @@ export function useMeals() {
     }
   }, []);
 
+  const preloadMeal = useCallback((meal: MealDraft) => {
+    setState((prev) => {
+      const exists = prev.items.some((item) => item.meal_slot_id === meal.meal_slot_id);
+      if (exists) return prev;
+
+      return {
+        ...prev,
+        items: [meal, ...prev.items],
+      };
+    });
+  }, []);
+
   return {
     ...state,
-    createPlan,
-    saveSlot,
-    confirmMeal: confirmMealAction,
+    createMeal,
+    updateMeal,
+    confirmMealSlot,
+    preloadMeal,
   };
 }

@@ -1,75 +1,126 @@
-import { callRpc } from "@/src/services/rpc";
-import { unwrapRpcRow } from "@/src/services/unwrapRpcRow";
+import { callRpc } from "../rpc";
+import { isMissingRpcError } from "../../lib/errors";
 
 export type TodayHealthOutput = {
   day: string;
-  missing_stock_count: number;
-  overdue_tasks_count: number;
-  planned_meals_count: number;
-  confirmed_meals_count: number;
-  blocked_tools_count: number;
+  inventory_low_stock_count: number;
+  open_shopping_count: number;
+  open_alert_count: number;
+  today_meal_count: number;
+  today_task_count: number;
+  today_task_done_count: number;
 };
 
 type RawTodayHealthJson = {
+  household_id?: string | null;
   day?: string | null;
-  missing_stock_count?: number | null;
-  overdue_tasks_count?: number | null;
-  planned_meals_count?: number | null;
-  confirmed_meals_count?: number | null;
-  blocked_tools_count?: number | null;
+  inventory_low_stock_count?: number | null;
+  open_shopping_count?: number | null;
+  open_alert_count?: number | null;
+  today_meal_count?: number | null;
+  today_task_count?: number | null;
+  today_task_done_count?: number | null;
 };
 
-export type TodayLoadFeedItem = {
-  item_type: "TASK" | "MEAL" | "ALERT" | "TOOL" | string;
-  item_id: string;
-  title: string;
-  status: string;
-  scheduled_at?: string | null;
+export type TodayLoadFeedMember = {
+  user_id: string;
+  role: string;
+  capacity_points_daily: number;
+  assigned_task_count: number;
+  assigned_effort_points: number;
+  remaining_capacity_points: number;
 };
 
-type RawTodayLoadFeedItem = {
-  item_type?: string | null;
-  item_id?: string | null;
-  title?: string | null;
-  status?: string | null;
-  scheduled_at?: string | null;
+export type TodayLoadFeedOutput = {
+  household_id: string | null;
+  day: string;
+  members: TodayLoadFeedMember[];
+};
+
+type RawTodayLoadFeedMember = {
+  user_id?: string | null;
+  role?: string | null;
+  capacity_points_daily?: number | null;
+  assigned_task_count?: number | null;
+  assigned_effort_points?: number | null;
+  remaining_capacity_points?: number | null;
+};
+
+type RawTodayLoadFeedJson = {
+  household_id?: string | null;
+  day?: string | null;
+  members?: RawTodayLoadFeedMember[] | null;
 };
 
 export async function getTodayHealth(): Promise<TodayHealthOutput> {
-  const rawResult = await callRpc<RawTodayHealthJson | RawTodayHealthJson[]>(
-    "rpc_today_health",
-    {}
-  );
+  try {
+    const rawResult = await callRpc<Record<string, never>, RawTodayHealthJson>(
+      "rpc_today_health",
+      {}
+    );
 
-  const raw = unwrapRpcRow(rawResult);
+    console.log("DOMYLI rpc_today_health raw =>", rawResult);
 
-  return {
-    day: raw?.day ?? new Date().toISOString().slice(0, 10),
-    missing_stock_count: Number(raw?.missing_stock_count ?? 0),
-    overdue_tasks_count: Number(raw?.overdue_tasks_count ?? 0),
-    planned_meals_count: Number(raw?.planned_meals_count ?? 0),
-    confirmed_meals_count: Number(raw?.confirmed_meals_count ?? 0),
-    blocked_tools_count: Number(raw?.blocked_tools_count ?? 0),
-  };
+    const raw = rawResult ?? {};
+
+    return {
+      day: raw.day ?? new Date().toISOString().slice(0, 10),
+      inventory_low_stock_count: Number(raw.inventory_low_stock_count ?? 0),
+      open_shopping_count: Number(raw.open_shopping_count ?? 0),
+      open_alert_count: Number(raw.open_alert_count ?? 0),
+      today_meal_count: Number(raw.today_meal_count ?? 0),
+      today_task_count: Number(raw.today_task_count ?? 0),
+      today_task_done_count: Number(raw.today_task_done_count ?? 0),
+    };
+  } catch (error) {
+    if (isMissingRpcError(error)) {
+      return {
+        day: new Date().toISOString().slice(0, 10),
+        inventory_low_stock_count: 0,
+        open_shopping_count: 0,
+        open_alert_count: 0,
+        today_meal_count: 0,
+        today_task_count: 0,
+        today_task_done_count: 0,
+      };
+    }
+    throw error;
+  }
 }
 
-export async function getTodayLoadFeed(): Promise<TodayLoadFeedItem[]> {
-  const rawResult = await callRpc<RawTodayLoadFeedItem[] | RawTodayLoadFeedItem | null>(
-    "rpc_today_load_feed",
-    {}
-  );
+export async function getTodayLoadFeed(): Promise<TodayLoadFeedOutput> {
+  try {
+    const rawResult = await callRpc<Record<string, never>, RawTodayLoadFeedJson>(
+      "rpc_today_load_feed",
+      {}
+    );
 
-  const rows = Array.isArray(rawResult)
-    ? rawResult
-    : rawResult
-      ? [rawResult]
-      : [];
+    console.log("DOMYLI rpc_today_load_feed raw =>", rawResult);
 
-  return rows.map((item) => ({
-    item_type: item.item_type ?? "ALERT",
-    item_id: item.item_id ?? "",
-    title: item.title ?? "Élément DOMYLI",
-    status: item.status ?? "UNKNOWN",
-    scheduled_at: item.scheduled_at ?? null,
-  }));
+    const raw = rawResult ?? {};
+
+    return {
+      household_id: raw.household_id ?? null,
+      day: raw.day ?? new Date().toISOString().slice(0, 10),
+      members: Array.isArray(raw.members)
+        ? raw.members.map((member) => ({
+            user_id: member.user_id ?? "",
+            role: member.role ?? "MEMBRE",
+            capacity_points_daily: Number(member.capacity_points_daily ?? 0),
+            assigned_task_count: Number(member.assigned_task_count ?? 0),
+            assigned_effort_points: Number(member.assigned_effort_points ?? 0),
+            remaining_capacity_points: Number(member.remaining_capacity_points ?? 0),
+          }))
+        : [],
+    };
+  } catch (error) {
+    if (isMissingRpcError(error)) {
+      return {
+        household_id: null,
+        day: new Date().toISOString().slice(0, 10),
+        members: [],
+      };
+    }
+    throw error;
+  }
 }
