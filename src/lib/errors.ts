@@ -4,11 +4,26 @@ export type DomyliAppError = Error & {
   hint?: string | null;
 };
 
-export function createDomyliError(params: { message: string; code?: string; details?: string | null; hint?: string | null }): DomyliAppError {
-  const error = new Error(params.message) as DomyliAppError;
-  if (params.code) error.code = params.code;
-  if (params.details !== undefined) error.details = params.details;
-  if (params.hint !== undefined) error.hint = params.hint;
+export function createDomyliError(input: {
+  message: string;
+  code?: string;
+  details?: string | null;
+  hint?: string | null;
+}): DomyliAppError {
+  const error = new Error(input.message) as DomyliAppError;
+
+  if (input.code) {
+    error.code = input.code;
+  }
+
+  if (input.details !== undefined) {
+    error.details = input.details;
+  }
+
+  if (input.hint !== undefined) {
+    error.hint = input.hint;
+  }
+
   return error;
 }
 
@@ -17,7 +32,9 @@ export function toDomyliError(error: unknown): DomyliAppError {
     return error as DomyliAppError;
   }
 
-  const fallback = new Error("Une erreur DOMYLI est survenue.") as DomyliAppError;
+  const fallback = new Error(
+    "Une erreur DOMYLI est survenue."
+  ) as DomyliAppError;
 
   if (typeof error === "object" && error !== null) {
     const maybe = error as {
@@ -32,9 +49,17 @@ export function toDomyliError(error: unknown): DomyliAppError {
         ? maybe.message
         : "Une erreur DOMYLI est survenue.";
 
-    if (typeof maybe.code === "string") fallback.code = maybe.code;
-    if (typeof maybe.details === "string" || maybe.details === null) fallback.details = maybe.details as string | null;
-    if (typeof maybe.hint === "string" || maybe.hint === null) fallback.hint = maybe.hint as string | null;
+    if (typeof maybe.code === "string") {
+      fallback.code = maybe.code;
+    }
+
+    if (typeof maybe.details === "string" || maybe.details === null) {
+      fallback.details = maybe.details;
+    }
+
+    if (typeof maybe.hint === "string" || maybe.hint === null) {
+      fallback.hint = maybe.hint;
+    }
   }
 
   return fallback;
@@ -42,5 +67,11 @@ export function toDomyliError(error: unknown): DomyliAppError {
 
 export function isMissingRpcError(error: unknown): boolean {
   const err = toDomyliError(error);
-  return err.code === "PGRST202";
+  const message = err.message?.toLowerCase() ?? "";
+
+  return (
+    err.code === "PGRST202" ||
+    message.includes("could not find the function") ||
+    message.includes("schema cache")
+  );
 }

@@ -122,7 +122,9 @@ export function useDomyliAuthState() {
       const mergedMemberships = activeMembership
         ? memberships.some((m) => m.household_id === activeMembership.household_id)
           ? memberships.map((m) =>
-              m.household_id === activeMembership.household_id ? activeMembership : m
+              m.household_id === activeMembership.household_id
+                ? activeMembership
+                : m
             )
           : [activeMembership, ...memberships]
         : memberships;
@@ -219,19 +221,40 @@ export function useDomyliAuthState() {
     };
   }, [syncFromSession]);
 
-  const signInWithPassword = useCallback(async (email: string, password: string) => {
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
-    if (error) throw toDomyliError(error);
-  }, []);
+  const signInWithPassword = useCallback(
+    async (email: string, password: string) => {
+      const { error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
 
-  const signUpWithPassword = useCallback(async (email: string, password: string) => {
-    const { error } = await supabase.auth.signUp({ email, password });
-    if (error) throw toDomyliError(error);
-  }, []);
+      if (error) {
+        throw toDomyliError(error);
+      }
+    },
+    []
+  );
+
+  const signUpWithPassword = useCallback(
+    async (email: string, password: string) => {
+      const { error } = await supabase.auth.signUp({
+        email,
+        password,
+      });
+
+      if (error) {
+        throw toDomyliError(error);
+      }
+    },
+    []
+  );
 
   const signOut = useCallback(async () => {
     const { error } = await supabase.auth.signOut();
-    if (error) throw toDomyliError(error);
+
+    if (error) {
+      throw toDomyliError(error);
+    }
   }, []);
 
   const createFirstHousehold = useCallback(
@@ -264,6 +287,7 @@ export function useDomyliAuthState() {
 
   const derived = useMemo(() => {
     const memberships = state.bootstrap?.memberships ?? [];
+
     const activeMembership =
       memberships.find(
         (membership) =>

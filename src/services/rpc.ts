@@ -1,5 +1,6 @@
 import { supabase } from "@/src/lib/supabase";
 import { createDomyliError, toDomyliError } from "@/src/lib/errors";
+import { reportMonitoringEvent } from "@/src/lib/monitoring";
 
 type RpcPayload = Record<string, unknown>;
 
@@ -11,10 +12,14 @@ function unwrapSingle<T>(input: T | T[] | null | undefined): T | null {
 export async function callRpc<TOutput>(
   name: string,
   payload: RpcPayload = {},
-  options?: { requireAuth?: boolean; timeoutMs?: number; unwrap?: boolean }
+  options?: {
+    requireAuth?: boolean;
+    timeoutMs?: number;
+    unwrap?: boolean;
+  }
 ): Promise<TOutput> {
   const requireAuth = options?.requireAuth ?? true;
-  const timeoutMs = options?.timeoutMs ?? 10000;
+  const timeoutMs = options?.timeoutMs ?? 10_000;
   const unwrap = options?.unwrap ?? false;
 
   if (requireAuth) {
@@ -47,14 +52,31 @@ export async function callRpc<TOutput>(
       timeoutPromise,
     ]);
 
-    const { data, error } = result as { data: unknown; error: unknown };
+    const { data, error } = result as {
+      data: unknown;
+      error: unknown;
+    };
 
     if (error) {
       throw error;
     }
 
-    return (unwrap ? unwrapSingle(data as TOutput | TOutput[] | null) : data) as TOutput;
+    return (
+      unwrap
+        ? unwrapSingle(data as TOutput | TOutput[] | null)
+        : data
+    ) as TOutput;
   } catch (error) {
+    reportMonitoringEvent({
+      level: "error",
+      event: "rpc_call_failed",
+      message: `RPC app.${name} en erreur`,
+      meta: {
+        rpc: name,
+        payload,
+      },
+    });
+
     throw toDomyliError(error);
   }
 }

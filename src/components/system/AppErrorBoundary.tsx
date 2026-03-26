@@ -47,8 +47,7 @@ export class AppErrorBoundary extends React.Component<PropsWithChildren, State> 
             </h1>
 
             <p className="mt-4 text-alabaster/70 leading-7">
-              Recharge la page pour relancer le service. Si le problème persiste,
-              applique le runbook d’exploitation.
+              Recharge la page pour relancer le service.
             </p>
 
             {this.state.errorMessage ? (

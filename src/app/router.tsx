@@ -1,137 +1,70 @@
-import { createBrowserRouter, Link } from "react-router-dom";
+import { createBrowserRouter } from "react-router-dom";
 
-import LandingPage from "@/src/pages/LandingPage";
-import DashboardPage from "@/src/pages/DashboardPage";
-import ProfilesPage from "@/src/pages/ProfilesPage";
-import NotFoundPage from "@/src/pages/NotFoundPage";
 import ProtectedRoute from "@/src/components/common/ProtectedRoute";
 import { ROUTES } from "@/src/constants/routes";
+
+import LandingPage from "@/src/pages/LandingPage";
+import NotFoundPage from "@/src/pages/NotFoundPage";
+import DashboardPage from "@/src/pages/DashboardPage";
+import ProfilesPage from "@/src/pages/ProfilesPage";
 import InventoryPage from "@/src/pages/InventoryPage";
 import ShoppingPage from "@/src/pages/ShoppingPage";
-import StatusPage from "@/src/pages/StatusPage";
 import MealsPage from "@/src/pages/MealsPage";
 import TasksPage from "@/src/pages/TasksPage";
 import CapacityPage from "@/src/pages/CapacityPage";
+import ToolsPage from "@/src/pages/ToolsPage";
+import StatusPage from "@/src/pages/StatusPage";
 
-function PlaceholderPage({ title }: { title: string }) {
-  return (
-    <div className="min-h-screen bg-obsidian text-alabaster px-6 py-16">
-      <div className="mx-auto max-w-3xl">
-        <div className="text-xs uppercase tracking-[0.35em] text-gold">
-          DOMYLI
-        </div>
-        <h1 className="mt-4 text-4xl font-semibold">{title}</h1>
-        <p className="mt-5 text-alabaster/70 leading-8">
-          Cette page est hors périmètre P0. Le parcours minimum livré est :
-          landing, auth, foyer, profiles, dashboard.
-        </p>
-        <Link
-          to={ROUTES.DASHBOARD}
-          className="mt-8 inline-block border border-gold/40 px-6 py-3 text-sm uppercase tracking-[0.25em] text-gold hover:bg-gold hover:text-obsidian transition-colors"
-        >
-          Retour au dashboard
-        </Link>
-      </div>
-    </div>
-  );
+function withHousehold(element: React.ReactElement) {
+  return <ProtectedRoute requireHousehold>{element}</ProtectedRoute>;
 }
 
 export const router = createBrowserRouter([
   {
-    path: ROUTES.HOME,
+    path: ROUTES.home,
     element: <LandingPage />,
     errorElement: <NotFoundPage />,
   },
+
   {
-    path: ROUTES.DASHBOARD,
-    element: (
-      <ProtectedRoute requireHousehold>
-        <DashboardPage />
-      </ProtectedRoute>
-    ),
+    path: ROUTES.dashboard,
+    element: withHousehold(<DashboardPage />),
   },
   {
-    path: ROUTES.PROFILES,
-    element: (
-      <ProtectedRoute requireHousehold>
-        <ProfilesPage />
-      </ProtectedRoute>
-    ),
+    path: ROUTES.profiles,
+    element: withHousehold(<ProfilesPage />),
   },
   {
-    path: ROUTES.CAPACITY,
-    element: (
-      <ProtectedRoute requireHousehold>
-        <PlaceholderPage title="Capacity" />
-      </ProtectedRoute>
-    ),
+    path: ROUTES.inventory,
+    element: withHousehold(<InventoryPage />),
   },
   {
-    path: ROUTES.TASKS,
-    element: (
-      <ProtectedRoute requireHousehold>
-        <PlaceholderPage title="Tasks" />
-      </ProtectedRoute>
-    ),
+    path: ROUTES.shopping,
+    element: withHousehold(<ShoppingPage />),
   },
   {
-    path: ROUTES.TOOLS,
-    element: (
-      <ProtectedRoute requireHousehold>
-        <PlaceholderPage title="Tools" />
-      </ProtectedRoute>
-    ),
+    path: ROUTES.meals,
+    element: withHousehold(<MealsPage />),
   },
   {
-  path: ROUTES.INVENTORY,
-  element: (
-    <ProtectedRoute requireHousehold>
-      <InventoryPage />
-    </ProtectedRoute>
-  ),
+    path: ROUTES.tasks,
+    element: withHousehold(<TasksPage />),
   },
   {
-  path: ROUTES.SHOPPING,
-  element: (
-    <ProtectedRoute requireHousehold>
-      <ShoppingPage />
-    </ProtectedRoute>
-  ),
+    path: ROUTES.capacity,
+    element: withHousehold(<CapacityPage />),
   },
   {
-  path: ROUTES.STATUS,
-  element: (
-    <ProtectedRoute requireHousehold>
-      <StatusPage />
-    </ProtectedRoute>
-  ),
+    path: ROUTES.tools,
+    element: withHousehold(<ToolsPage />),
   },
   {
-  path: ROUTES.MEALS,
-  element: (
-    <ProtectedRoute requireHousehold>
-      <MealsPage />
-    </ProtectedRoute>
-  ),
+    path: ROUTES.status,
+    element: withHousehold(<StatusPage />),
   },
+
   {
-  path: ROUTES.CAPACITY,
-  element: (
-    <ProtectedRoute requireHousehold>
-      <CapacityPage />
-    </ProtectedRoute>
-  ),
-  },
-  {
-  path: ROUTES.TASKS,
-  element: (
-    <ProtectedRoute requireHousehold>
-      <TasksPage />
-    </ProtectedRoute>
-  ),
-  },
-  {
-    path: "*",
+    path: ROUTES.notFound,
     element: <NotFoundPage />,
   },
 ]);

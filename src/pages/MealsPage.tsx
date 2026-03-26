@@ -1,10 +1,14 @@
 import { useMemo, useState } from "react";
 import {
   ArrowLeft,
+  ArrowRight,
   CalendarDays,
   CheckCircle2,
+  ClipboardList,
   Plus,
+  RefreshCw,
   Save,
+  ShieldCheck,
   Utensils,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
@@ -13,12 +17,29 @@ import { useAuth } from "@/src/providers/AuthProvider";
 import { useMeals } from "@/src/hooks/useMeals";
 import { ROUTES } from "@/src/constants/routes";
 import type { MealType } from "@/src/services/meals/mealService";
+import {
+  buildMealNotes,
+  extractOperatorNotes,
+  findMealTemplateCodeFromDraft,
+  getMealFlowLabel,
+  getMealStatusLabel,
+  getMealTemplateByCode,
+  getMealTemplatesByType,
+  getMealTypeLabel,
+  MEAL_TYPE_OPTIONS,
+} from "@/src/constants/mealCatalog";
 
 function todayIsoDate() {
   return new Date().toISOString().slice(0, 10);
 }
 
-const mealTypes: MealType[] = ["BREAKFAST", "LUNCH", "SNACK", "DINNER"];
+function FlowBadge({ flow }: { flow: string }) {
+  return (
+    <span className="inline-flex items-center border border-gold/30 bg-gold/10 px-3 py-1 text-xs uppercase tracking-[0.18em] text-gold">
+      {getMealFlowLabel(flow)}
+    </span>
+  );
+}
 
 export default function MealsPage() {
   const navigate = useNavigate();
@@ -49,53 +70,56 @@ export default function MealsPage() {
   const [selectedMealSlotId, setSelectedMealSlotId] = useState("");
   const [plannedFor, setPlannedFor] = useState(todayIsoDate());
   const [mealType, setMealType] = useState<MealType>("LUNCH");
-  const [profileId, setProfileId] = useState("");
-  const [recipeId, setRecipeId] = useState("");
-  const [title, setTitle] = useState("");
-  const [notes, setNotes] = useState("");
+  const [templateCode, setTemplateCode] = useState("");
+  const [operatorNotes, setOperatorNotes] = useState("");
   const [localMessage, setLocalMessage] = useState<string | null>(null);
 
-  const isEditMode = useMemo(
-    () => Boolean(selectedMealSlotId),
-    [selectedMealSlotId]
+  const isEditMode = useMemo(() => Boolean(selectedMealSlotId), [selectedMealSlotId]);
+
+  const templateOptions = useMemo(
+    () => getMealTemplatesByType(mealType),
+    [mealType]
   );
+
+  const selectedTemplate = useMemo(
+    () => getMealTemplateByCode(templateCode),
+    [templateCode]
+  );
+
+  const canSubmit = useMemo(() => {
+    return Boolean(plannedFor && mealType && templateCode);
+  }, [plannedFor, mealType, templateCode]);
 
   if (authLoading || bootstrapLoading) {
     return (
-      <div className="min-h-screen bg-obsidian text-alabaster px-6 py-16">
-        <div className="mx-auto max-w-5xl">
-          <div className="text-xs uppercase tracking-[0.35em] text-gold">
-            DOMYLI
-          </div>
-          <h1 className="mt-4 text-4xl font-semibold">
-            Chargement des repas...
-          </h1>
+      <main className="min-h-screen bg-black px-6 py-10 text-white">
+        <div className="mx-auto max-w-3xl border border-gold/20 bg-black/40 p-8">
+          <div className="text-xs uppercase tracking-[0.35em] text-gold/80">DOMYLI</div>
+          <h1 className="mt-4 text-3xl font-semibold">Chargement des repas...</h1>
         </div>
-      </div>
+      </main>
     );
   }
 
   if (!isAuthenticated || !hasHousehold) {
     return (
-      <div className="min-h-screen bg-obsidian text-alabaster px-6 py-16">
-        <div className="mx-auto max-w-4xl">
-          <div className="text-xs uppercase tracking-[0.35em] text-gold">
-            DOMYLI
-          </div>
-          <h1 className="mt-4 text-4xl font-semibold">Foyer requis</h1>
-          <p className="mt-5 max-w-2xl text-alabaster/70 leading-8">
-            Il faut une session authentifiée et un foyer actif pour accéder aux
-            repas.
+      <main className="min-h-screen bg-black px-6 py-10 text-white">
+        <div className="mx-auto max-w-3xl border border-gold/20 bg-black/40 p-8">
+          <div className="text-xs uppercase tracking-[0.35em] text-gold/80">DOMYLI</div>
+          <h1 className="mt-4 text-3xl font-semibold">Foyer requis</h1>
+          <p className="mt-4 text-white/70">
+            Il faut une session authentifiée et un foyer actif pour accéder aux repas.
           </p>
+
           <button
             type="button"
             onClick={() => navigate(ROUTES.HOME)}
-            className="mt-8 border border-gold/40 px-6 py-3 text-sm uppercase tracking-[0.25em] text-gold hover:bg-gold hover:text-obsidian transition-colors"
+            className="mt-8 border border-gold/40 px-6 py-3 text-sm uppercase tracking-[0.25em] text-gold transition-colors hover:bg-gold hover:text-black"
           >
             Retour à l’accueil
           </button>
         </div>
-      </div>
+      </main>
     );
   }
 
@@ -103,10 +127,21 @@ export default function MealsPage() {
     setSelectedMealSlotId("");
     setPlannedFor(todayIsoDate());
     setMealType("LUNCH");
-    setProfileId("");
-    setRecipeId("");
-    setTitle("");
-    setNotes("");
+    setTemplateCode("");
+    setOperatorNotes("");
+    setLocalMessage(null);
+  };
+
+  const handleMealTypeChange = (nextType: MealType) => {
+    setMealType(nextType);
+    setTemplateCode("");
+    setOperatorNotes("");
+    setLocalMessage(null);
+  };
+
+  const handleTemplateChange = (nextTemplateCode: string) => {
+    setTemplateCode(nextTemplateCode);
+    setLocalMessage(null);
   };
 
   const handleCreateOrUpdate = async () => {
@@ -122,8 +157,8 @@ export default function MealsPage() {
       return;
     }
 
-    if (!title.trim() && !recipeId.trim()) {
-      setLocalMessage("Renseigne au moins un titre ou un recipe_id existant.");
+    if (!selectedTemplate) {
+      setLocalMessage("Sélectionne un template de repas DOMYLI.");
       return;
     }
 
@@ -133,10 +168,10 @@ export default function MealsPage() {
           p_meal_slot_id: selectedMealSlotId,
           p_planned_for: plannedFor,
           p_meal_type: mealType,
-          p_profile_id: profileId.trim() || null,
-          p_recipe_id: recipeId.trim() || null,
-          p_title: title.trim() || null,
-          p_notes: notes.trim() || null,
+          p_profile_id: null,
+          p_recipe_id: null,
+          p_title: selectedTemplate.label,
+          p_notes: buildMealNotes(selectedTemplate, operatorNotes),
         });
 
         setLocalMessage(`Repas mis à jour : ${mealSlotId}`);
@@ -144,17 +179,17 @@ export default function MealsPage() {
         const mealSlotId = await createMeal({
           p_planned_for: plannedFor,
           p_meal_type: mealType,
-          p_profile_id: profileId.trim() || null,
-          p_recipe_id: recipeId.trim() || null,
-          p_title: title.trim() || null,
-          p_notes: notes.trim() || null,
+          p_profile_id: null,
+          p_recipe_id: null,
+          p_title: selectedTemplate.label,
+          p_notes: buildMealNotes(selectedTemplate, operatorNotes),
         });
 
         setSelectedMealSlotId(mealSlotId);
         setLocalMessage(`Repas créé : ${mealSlotId}`);
       }
     } catch {
-      // déjà géré dans le hook
+      // erreur déjà gérée par le hook
     }
   };
 
@@ -165,10 +200,8 @@ export default function MealsPage() {
     setSelectedMealSlotId(meal.meal_slot_id);
     setPlannedFor(meal.planned_for);
     setMealType(meal.meal_type);
-    setProfileId(meal.profile_id ?? "");
-    setRecipeId(meal.recipe_id ?? "");
-    setTitle(meal.title ?? "");
-    setNotes(meal.notes ?? "");
+    setTemplateCode(findMealTemplateCodeFromDraft(meal.meal_type, meal.title));
+    setOperatorNotes(extractOperatorNotes(meal.notes));
     setLocalMessage(`Édition du repas : ${meal.meal_slot_id}`);
   };
 
@@ -181,129 +214,139 @@ export default function MealsPage() {
         `Repas confirmé : ${result.meal_slot_id ?? mealSlotId} (${result.status ?? "CONFIRMED"})`
       );
     } catch {
-      // déjà géré dans le hook
+      // erreur déjà gérée par le hook
     }
   };
 
   return (
-    <div className="min-h-screen bg-obsidian text-alabaster px-6 py-10">
-      <div className="mx-auto max-w-6xl">
-        <div className="flex items-start gap-4">
-          <button
-            type="button"
-            onClick={() => navigate(ROUTES.DASHBOARD)}
-            className="mt-1 h-10 w-10 border border-white/10 flex items-center justify-center hover:border-gold/40 transition-colors"
-            aria-label="Retour"
-          >
-            <ArrowLeft size={18} />
-          </button>
-
+    <main className="min-h-screen bg-black px-6 py-8 text-white">
+      <div className="mx-auto max-w-7xl">
+        <div className="mb-8 flex items-start justify-between gap-4">
           <div>
-            <div className="text-xs uppercase tracking-[0.35em] text-gold">
+            <button
+              type="button"
+              onClick={() => navigate(ROUTES.DASHBOARD)}
+              className="mt-1 inline-flex h-10 w-10 items-center justify-center border border-white/10 transition-colors hover:border-gold/40"
+              aria-label="Retour"
+            >
+              <ArrowLeft className="h-4 w-4" />
+            </button>
+
+            <div className="mt-6 text-xs uppercase tracking-[0.35em] text-gold/80">
               DOMYLI
             </div>
-            <h1 className="mt-2 text-4xl font-semibold">Meals</h1>
-            <p className="mt-3 max-w-2xl text-alabaster/70 leading-8">
-              Création, mise à jour et confirmation d’un repas sur le foyer
-              actif.
+            <h1 className="mt-3 text-4xl font-semibold">Meals</h1>
+            <p className="mt-3 max-w-3xl text-white/65">
+              Ici, un repas n’est pas une simple ligne libre. C’est une intention
+              canonique du foyer, cadrée par le type de repas, les contraintes
+              humaines et l’exécution réelle.
             </p>
           </div>
         </div>
 
-        <div className="mt-10 grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
-          <section className="glass metallic-border rounded-[2rem] p-6">
-            <div className="inline-flex items-center gap-3 text-gold">
-              <Utensils size={18} />
-              <span className="text-xs uppercase tracking-[0.3em]">
-                Planification repas
+        <div className="grid gap-8 lg:grid-cols-[1.3fr_0.7fr]">
+          <section className="rounded-[2rem] border border-gold/20 bg-black/40 p-8">
+            <div className="mb-6 flex items-center gap-3 text-gold/85">
+              <Utensils className="h-5 w-5" />
+              <span className="text-xs uppercase tracking-[0.35em]">
+                Planification gouvernée
               </span>
             </div>
 
-            <h2 className="mt-5 text-2xl font-semibold text-alabaster">
-              {isEditMode ? "Modifier un repas" : "Créer un repas"}
+            <h2 className="text-3xl font-semibold">
+              {isEditMode ? "Modifier un repas canonique" : "Créer un repas canonique"}
             </h2>
 
-            <p className="mt-4 text-sm leading-8 text-alabaster/65">
-              Cette page est alignée sur <code>rpc_meal_slot_upsert</code> et{" "}
-              <code>rpc_meal_confirm_v3</code>.
+            <p className="mt-6 max-w-3xl text-lg leading-9 text-white/65">
+              Sélectionne un type de repas puis un template DOMYLI. Le titre est
+              généré de manière canonique et les notes sont structurées pour rester
+              compatibles avec le contrat RPC actuel.
             </p>
 
-            <div className="mt-8 grid gap-5 md:grid-cols-2">
+            <div className="mt-10 grid gap-6 md:grid-cols-2">
               <div>
-                <label className="mb-2 block text-xs uppercase tracking-[0.25em] text-gold/80">
+                <label className="mb-3 block text-xs uppercase tracking-[0.32em] text-gold/80">
                   Date
                 </label>
                 <input
                   type="date"
                   value={plannedFor}
                   onChange={(e) => setPlannedFor(e.target.value)}
-                  className="w-full border border-white/10 bg-obsidian px-4 py-3 text-sm outline-none focus:border-gold/50"
+                  className="w-full border border-white/10 bg-black/20 px-4 py-4 text-sm outline-none focus:border-gold/50"
                 />
               </div>
 
               <div>
-                <label className="mb-2 block text-xs uppercase tracking-[0.25em] text-gold/80">
+                <label className="mb-3 block text-xs uppercase tracking-[0.32em] text-gold/80">
                   Type de repas
                 </label>
                 <select
                   value={mealType}
-                  onChange={(e) => setMealType(e.target.value as MealType)}
-                  className="w-full border border-white/10 bg-obsidian px-4 py-3 text-sm outline-none focus:border-gold/50"
+                  onChange={(e) => handleMealTypeChange(e.target.value as MealType)}
+                  className="w-full border border-white/10 bg-black/20 px-4 py-4 text-sm outline-none focus:border-gold/50"
                 >
-                  {mealTypes.map((type) => (
-                    <option key={type} value={type}>
-                      {type}
+                  {MEAL_TYPE_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
                     </option>
                   ))}
                 </select>
               </div>
 
-              <div>
-                <label className="mb-2 block text-xs uppercase tracking-[0.25em] text-gold/80">
-                  Profile ID
+              <div className="md:col-span-2">
+                <label className="mb-3 block text-xs uppercase tracking-[0.32em] text-gold/80">
+                  Template repas DOMYLI
                 </label>
-                <input
-                  value={profileId}
-                  onChange={(e) => setProfileId(e.target.value)}
-                  placeholder="uuid optionnel"
-                  className="w-full border border-white/10 bg-obsidian px-4 py-3 text-sm outline-none focus:border-gold/50"
-                />
+                <select
+                  value={templateCode}
+                  onChange={(e) => handleTemplateChange(e.target.value)}
+                  className="w-full border border-white/10 bg-black/20 px-4 py-4 text-sm outline-none focus:border-gold/50"
+                >
+                  <option value="">Sélectionner un template canonique</option>
+                  {templateOptions.map((template) => (
+                    <option key={template.code} value={template.code}>
+                      {template.label}
+                    </option>
+                  ))}
+                </select>
               </div>
 
-              <div>
-                <label className="mb-2 block text-xs uppercase tracking-[0.25em] text-gold/80">
-                  Recipe ID
-                </label>
-                <input
-                  value={recipeId}
-                  onChange={(e) => setRecipeId(e.target.value)}
-                  placeholder="uuid optionnel"
-                  className="w-full border border-white/10 bg-obsidian px-4 py-3 text-sm outline-none focus:border-gold/50"
-                />
+              <div className="md:col-span-2 rounded-[1.5rem] border border-white/10 bg-black/20 px-5 py-5">
+                <div className="text-xs uppercase tracking-[0.24em] text-gold/75">
+                  Titre canonique généré
+                </div>
+                <div className="mt-3 text-xl">
+                  {selectedTemplate?.label ?? "—"}
+                </div>
+              </div>
+
+              <div className="md:col-span-2 rounded-[1.5rem] border border-white/10 bg-black/20 px-5 py-5">
+                <div className="text-xs uppercase tracking-[0.24em] text-gold/75">
+                  Lecture template
+                </div>
+                <div className="mt-3 text-white/75">
+                  {selectedTemplate?.description ?? "Sélectionne un template pour afficher sa lecture métier."}
+                </div>
+
+                {selectedTemplate?.flows?.length ? (
+                  <div className="mt-4 flex flex-wrap gap-2">
+                    {selectedTemplate.flows.map((flow) => (
+                      <FlowBadge key={flow} flow={flow} />
+                    ))}
+                  </div>
+                ) : null}
               </div>
 
               <div className="md:col-span-2">
-                <label className="mb-2 block text-xs uppercase tracking-[0.25em] text-gold/80">
-                  Titre
-                </label>
-                <input
-                  value={title}
-                  onChange={(e) => setTitle(e.target.value)}
-                  placeholder="Ex: Déjeuner protéiné"
-                  className="w-full border border-white/10 bg-obsidian px-4 py-3 text-sm outline-none focus:border-gold/50"
-                />
-              </div>
-
-              <div className="md:col-span-2">
-                <label className="mb-2 block text-xs uppercase tracking-[0.25em] text-gold/80">
-                  Notes
+                <label className="mb-3 block text-xs uppercase tracking-[0.32em] text-gold/80">
+                  Note foyer optionnelle
                 </label>
                 <textarea
-                  value={notes}
-                  onChange={(e) => setNotes(e.target.value)}
+                  value={operatorNotes}
+                  onChange={(e) => setOperatorNotes(e.target.value)}
                   rows={4}
-                  placeholder="Notes optionnelles"
-                  className="w-full resize-none border border-white/10 bg-obsidian px-4 py-3 text-sm outline-none focus:border-gold/50"
+                  placeholder="Ex: utiliser en priorité les produits frais déjà ouverts."
+                  className="w-full resize-none border border-white/10 bg-black/20 px-4 py-4 text-sm outline-none focus:border-gold/50"
                 />
               </div>
             </div>
@@ -312,8 +355,8 @@ export default function MealsPage() {
               <button
                 type="button"
                 onClick={handleCreateOrUpdate}
-                disabled={saving}
-                className="flex items-center justify-center gap-3 bg-gold px-6 py-4 text-sm font-medium uppercase tracking-[0.25em] text-obsidian transition hover:opacity-90 disabled:opacity-50"
+                disabled={!canSubmit || saving}
+                className="inline-flex items-center justify-center gap-3 bg-gold px-6 py-4 text-sm uppercase tracking-[0.25em] text-black transition hover:opacity-90 disabled:opacity-50"
               >
                 {isEditMode ? <Save size={18} /> : <Plus size={18} />}
                 {saving
@@ -328,7 +371,7 @@ export default function MealsPage() {
                   type="button"
                   onClick={() => handleConfirm(selectedMealSlotId)}
                   disabled={confirming}
-                  className="flex items-center justify-center gap-3 border border-white/10 px-6 py-4 text-sm uppercase tracking-[0.25em] text-alabaster hover:border-gold/40 hover:text-gold transition-colors disabled:opacity-50"
+                  className="inline-flex items-center justify-center gap-3 border border-white/10 px-6 py-4 text-sm uppercase tracking-[0.25em] text-white transition-colors hover:border-gold/40 hover:text-gold disabled:opacity-50"
                 >
                   <CheckCircle2 size={18} />
                   {confirming ? "Confirmation..." : "Confirmer le repas"}
@@ -338,7 +381,7 @@ export default function MealsPage() {
               <button
                 type="button"
                 onClick={resetForm}
-                className="flex items-center justify-center gap-3 border border-white/10 px-6 py-4 text-sm uppercase tracking-[0.25em] text-alabaster hover:border-gold/40 hover:text-gold transition-colors"
+                className="inline-flex items-center justify-center gap-3 border border-white/10 px-6 py-4 text-sm uppercase tracking-[0.25em] text-white transition-colors hover:border-gold/40 hover:text-gold"
               >
                 <CalendarDays size={18} />
                 Reset
@@ -350,7 +393,7 @@ export default function MealsPage() {
               lastCreatedMealSlotId ||
               lastUpdatedMealSlotId ||
               lastConfirmResult) && (
-              <div className="mt-8 border border-white/10 bg-black/20 p-4 text-sm text-alabaster/75">
+              <div className="mt-8 border border-gold/20 bg-gold/10 px-5 py-4 text-base text-gold">
                 {localMessage ??
                   error?.message ??
                   (lastCreatedMealSlotId
@@ -362,89 +405,152 @@ export default function MealsPage() {
                     : null)}
               </div>
             )}
+
+            <div className="mt-8 rounded-[1.5rem] border border-white/10 bg-black/20 px-5 py-5">
+              <div className="flex items-center gap-3 text-gold/85">
+                <RefreshCw className="h-4 w-4" />
+                <span className="text-sm">
+                  Contrat RPC conservé, normalisation front renforcée.
+                </span>
+              </div>
+            </div>
           </section>
 
-          <aside className="glass metallic-border rounded-[2rem] p-7">
-            <div className="text-xs uppercase tracking-[0.3em] text-gold/80">
-              Session active
-            </div>
+          <aside className="space-y-6">
+            <section className="rounded-[2rem] border border-gold/20 bg-black/40 p-8">
+              <div className="mb-6 flex items-center gap-3 text-gold/85">
+                <ClipboardList className="h-5 w-5" />
+                <span className="text-xs uppercase tracking-[0.35em]">
+                  Lecture métier DOMYLI
+                </span>
+              </div>
 
-            <div className="mt-6 space-y-4">
-              <div className="rounded-2xl border border-white/8 bg-black/20 px-4 py-4">
-                <div className="text-xs uppercase tracking-[0.22em] text-gold/80">
-                  Email
+              <div className="space-y-5">
+                <div className="rounded-[1.5rem] border border-white/10 bg-black/20 px-5 py-5">
+                  <div className="text-xs uppercase tracking-[0.28em] text-gold/75">
+                    Email
+                  </div>
+                  <div className="mt-3 text-2xl">{sessionEmail ?? "—"}</div>
                 </div>
-                <div className="mt-2 text-sm text-alabaster">
-                  {sessionEmail ?? "—"}
+
+                <div className="rounded-[1.5rem] border border-white/10 bg-black/20 px-5 py-5">
+                  <div className="text-xs uppercase tracking-[0.28em] text-gold/75">
+                    Foyer
+                  </div>
+                  <div className="mt-3 text-2xl">
+                    {activeMembership?.household_name ?? "—"}
+                  </div>
+                </div>
+
+                <div className="rounded-[1.5rem] border border-white/10 bg-black/20 px-5 py-5">
+                  <div className="text-xs uppercase tracking-[0.28em] text-gold/75">
+                    Rôle
+                  </div>
+                  <div className="mt-3 text-2xl">{activeMembership?.role ?? "—"}</div>
+                </div>
+
+                <div className="rounded-[1.5rem] border border-white/10 bg-black/20 px-5 py-5">
+                  <div className="text-xs uppercase tracking-[0.28em] text-gold/75">
+                    Super Admin
+                  </div>
+                  <div className="mt-3 text-2xl">
+                    {bootstrap?.is_super_admin ? "Oui" : "Non"}
+                  </div>
+                </div>
+
+                <div className="rounded-[1.5rem] border border-white/10 bg-black/20 px-5 py-5">
+                  <div className="text-xs uppercase tracking-[0.28em] text-gold/75">
+                    Type canonique
+                  </div>
+                  <div className="mt-3 text-2xl">{getMealTypeLabel(mealType)}</div>
+                </div>
+
+                <div className="rounded-[1.5rem] border border-white/10 bg-black/20 px-5 py-5">
+                  <div className="text-xs uppercase tracking-[0.28em] text-gold/75">
+                    Template sélectionné
+                  </div>
+                  <div className="mt-3 text-lg">
+                    {selectedTemplate?.label ?? "—"}
+                  </div>
                 </div>
               </div>
 
-              <div className="rounded-2xl border border-white/8 bg-black/20 px-4 py-4">
-                <div className="text-xs uppercase tracking-[0.22em] text-gold/80">
-                  Foyer
-                </div>
-                <div className="mt-2 text-sm text-alabaster">
-                  {activeMembership?.household_name ?? "—"}
-                </div>
+              <div className="mt-6 flex items-center gap-3 text-white/45">
+                <ShieldCheck className="h-4 w-4 text-gold/80" />
+                <span className="text-sm">
+                  Meal gouverné DOMYLI : type canonique, template lisible, confirmation traçable.
+                </span>
               </div>
+            </section>
 
-              <div className="rounded-2xl border border-white/8 bg-black/20 px-4 py-4">
-                <div className="text-xs uppercase tracking-[0.22em] text-gold/80">
-                  Rôle
-                </div>
-                <div className="mt-2 text-sm text-alabaster">
-                  {activeMembership?.role ?? "—"}
-                </div>
-              </div>
-
-              <div className="rounded-2xl border border-white/8 bg-black/20 px-4 py-4">
-                <div className="text-xs uppercase tracking-[0.22em] text-gold/80">
-                  Super Admin
-                </div>
-                <div className="mt-2 text-sm text-alabaster">
-                  {bootstrap?.is_super_admin ? "Oui" : "Non"}
-                </div>
-              </div>
-            </div>
-
-            <div className="mt-8 border border-white/10 bg-black/20 p-6">
-              <div className="flex items-center gap-3 mb-4">
-                <Utensils size={18} className="text-gold" />
-                <h3 className="text-xl font-serif italic">
-                  Repas manipulés dans cette session
-                </h3>
+            <section className="rounded-[2rem] border border-gold/20 bg-black/40 p-8">
+              <div className="mb-6 flex items-center gap-3 text-gold/85">
+                <Utensils className="h-5 w-5" />
+                <span className="text-xs uppercase tracking-[0.35em]">
+                  Repas manipulés
+                </span>
               </div>
 
               {items.length === 0 ? (
-                <div className="text-sm text-alabaster/70">
+                <div className="rounded-[1.5rem] border border-white/10 bg-black/20 px-5 py-5 text-white/70">
                   Aucun repas créé ou modifié dans cette session.
                 </div>
               ) : (
                 <div className="space-y-4">
                   {items.map((item) => (
-                    <button
+                    <div
                       key={item.meal_slot_id}
-                      type="button"
-                      onClick={() => handleEdit(item.meal_slot_id)}
-                      className="block w-full rounded-2xl border border-white/8 bg-black/20 px-4 py-4 text-left hover:border-gold/30 transition-colors"
+                      className="rounded-[1.5rem] border border-white/10 bg-black/20 p-5"
                     >
-                      <div className="text-xs uppercase tracking-[0.22em] text-gold/80">
-                        {item.meal_type}
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <div className="text-xs uppercase tracking-[0.22em] text-gold/80">
+                            {getMealTypeLabel(item.meal_type)}
+                          </div>
+                          <div className="mt-2 text-base text-white">
+                            {item.title ?? item.meal_slot_id}
+                          </div>
+                          <div className="mt-2 text-xs text-white/60">
+                            {item.planned_for} · {getMealStatusLabel(item.status)}
+                          </div>
+                        </div>
                       </div>
-                      <div className="mt-2 text-sm text-alabaster">
-                        {item.title ?? item.recipe_id ?? item.meal_slot_id}
+
+                      <div className="mt-4 flex flex-wrap gap-3">
+                        <button
+                          type="button"
+                          onClick={() => handleEdit(item.meal_slot_id)}
+                          className="inline-flex items-center justify-center gap-2 border border-white/10 px-4 py-3 text-xs uppercase tracking-[0.18em] text-white transition-colors hover:border-gold/40 hover:text-gold"
+                        >
+                          Éditer
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => handleConfirm(item.meal_slot_id)}
+                          disabled={confirming}
+                          className="inline-flex items-center justify-center gap-2 border border-gold/30 px-4 py-3 text-xs uppercase tracking-[0.18em] text-gold transition-colors hover:bg-gold/10 disabled:opacity-50"
+                        >
+                          Confirmer
+                        </button>
                       </div>
-                      <div className="mt-2 text-xs text-alabaster/60">
-                        {item.planned_for} · {item.status ?? "DRAFT"}
-                      </div>
-                    </button>
+                    </div>
                   ))}
                 </div>
               )}
-            </div>
+
+              <button
+                type="button"
+                onClick={() => navigate(ROUTES.DASHBOARD)}
+                className="mt-8 inline-flex w-full items-center justify-center gap-3 border border-white/10 px-5 py-4 text-sm uppercase tracking-[0.24em] text-white transition-colors hover:border-gold/40 hover:text-gold"
+              >
+                Retour dashboard
+                <ArrowRight className="h-4 w-4" />
+              </button>
+            </section>
           </aside>
         </div>
       </div>
-    </div>
+    </main>
   );
 }

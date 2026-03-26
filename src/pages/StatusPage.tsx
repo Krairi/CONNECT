@@ -1,42 +1,49 @@
+import { useMemo, useState } from "react";
 import {
   AlertTriangle,
   ArrowLeft,
-  Clock3,
-  ListTodo,
+  ArrowRight,
+  ClipboardList,
   Package,
   RefreshCw,
   ShieldCheck,
+  TimerReset,
   Utensils,
+  Wrench,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 
 import { useAuth } from "@/src/providers/AuthProvider";
-import { useDashboard } from "@/src/hooks/useDashboard";
+import { useStatus } from "@/src/hooks/useStatus";
 import { ROUTES } from "@/src/constants/routes";
+import {
+  computeDomyliGlobalStatus,
+  formatStatusDate,
+  getDomyliPriorityAlerts,
+  getStatusFeedTypeLabel,
+  getStatusFlowLabel,
+  getStatusItemSeverityCode,
+  getStatusSignalMeta,
+  sortStatusFeedItems,
+  summarizeStatusFeedByType,
+} from "@/src/constants/statusCatalog";
 
-function computeGlobalStatus(input: {
-  inventoryLowStock: number;
-  openAlerts: number;
-  openShopping: number;
-}) {
-  if (input.openAlerts > 0) {
-    return {
-      label: "Attention requise",
-      description: "Des alertes ouvertes doivent être traitées.",
-    };
-  }
+function FlowBadge({ label }: { label: string }) {
+  return (
+    <span className="inline-flex items-center border border-gold/30 bg-gold/10 px-3 py-1 text-xs uppercase tracking-[0.18em] text-gold">
+      {label}
+    </span>
+  );
+}
 
-  if (input.inventoryLowStock > 0 || input.openShopping > 0) {
-    return {
-      label: "Sous contrôle",
-      description: "Le foyer fonctionne, mais des approvisionnements sont à prévoir.",
-    };
-  }
+function SignalBadge({ code }: { code: "STABLE" | "WATCH" | "ATTENTION" | "CRITICAL" }) {
+  const meta = getStatusSignalMeta(code);
 
-  return {
-    label: "Stable",
-    description: "Aucun signal bloquant critique détecté pour le moment.",
-  };
+  return (
+    <span className="inline-flex items-center border border-gold/30 bg-gold/10 px-3 py-1 text-xs uppercase tracking-[0.18em] text-gold">
+      {meta.label}
+    </span>
+  );
 }
 
 export default function StatusPage() {
@@ -52,360 +59,437 @@ export default function StatusPage() {
     bootstrapLoading,
   } = useAuth();
 
-  const { loading, error, health, feed, refresh } = useDashboard();
+  const householdId = bootstrap?.active_household_id ?? null;
+  const { loading, error, health, feed, refresh } = useStatus(householdId);
+
+  const [localMessage, setLocalMessage] = useState<string | null>(null);
+
+  const globalStatus = useMemo(
+    () => computeDomyliGlobalStatus(health),
+    [health]
+  );
+
+  const sortedFeed = useMemo(() => sortStatusFeedItems(feed), [feed]);
+
+  const priorityAlerts = useMemo(
+    () => getDomyliPriorityAlerts(health),
+    [health]
+  );
+
+  const feedSummary = useMemo(
+    () => summarizeStatusFeedByType(sortedFeed),
+    [sortedFeed]
+  );
+
+  const flowLabels = useMemo(
+    () =>
+      [
+        getStatusFlowLabel("INVENTORY"),
+        getStatusFlowLabel("TASKS"),
+        getStatusFlowLabel("MEALS"),
+        getStatusFlowLabel("TOOLS"),
+        getStatusFlowLabel("HOUSEHOLD"),
+      ] as const,
+    []
+  );
 
   if (authLoading || bootstrapLoading) {
     return (
-      <div className="min-h-screen bg-obsidian text-alabaster px-6 py-16">
-        <div className="mx-auto max-w-5xl">
-          <div className="text-xs uppercase tracking-[0.35em] text-gold">
+      <main className="min-h-screen bg-black px-6 py-10 text-white">
+        <div className="mx-auto max-w-3xl border border-gold/20 bg-black/40 p-8">
+          <div className="text-xs uppercase tracking-[0.35em] text-gold/80">
             DOMYLI
           </div>
-          <h1 className="mt-4 text-4xl font-semibold">
+          <h1 className="mt-4 text-3xl font-semibold">
             Chargement du statut...
           </h1>
         </div>
-      </div>
+      </main>
     );
   }
 
-  if (!isAuthenticated || !hasHousehold) {
+  if (!isAuthenticated || !hasHousehold || !householdId) {
     return (
-      <div className="min-h-screen bg-obsidian text-alabaster px-6 py-16">
-        <div className="mx-auto max-w-4xl">
-          <div className="text-xs uppercase tracking-[0.35em] text-gold">
+      <main className="min-h-screen bg-black px-6 py-10 text-white">
+        <div className="mx-auto max-w-3xl border border-gold/20 bg-black/40 p-8">
+          <div className="text-xs uppercase tracking-[0.35em] text-gold/80">
             DOMYLI
           </div>
-          <h1 className="mt-4 text-4xl font-semibold">Foyer requis</h1>
-          <p className="mt-5 max-w-2xl text-alabaster/70 leading-8">
-            Il faut une session authentifiée et un foyer actif pour accéder au
-            status.
+          <h1 className="mt-4 text-3xl font-semibold">Foyer requis</h1>
+          <p className="mt-4 text-white/70">
+            Il faut une session authentifiée et un foyer actif pour accéder au status.
           </p>
+
           <button
             type="button"
             onClick={() => navigate(ROUTES.HOME)}
-            className="mt-8 border border-gold/40 px-6 py-3 text-sm uppercase tracking-[0.25em] text-gold hover:bg-gold hover:text-obsidian transition-colors"
+            className="mt-8 border border-gold/40 px-6 py-3 text-sm uppercase tracking-[0.25em] text-gold transition-colors hover:bg-gold hover:text-black"
           >
             Retour à l’accueil
           </button>
         </div>
-      </div>
+      </main>
     );
   }
 
-  const globalStatus = computeGlobalStatus({
-    inventoryLowStock: health?.inventory_low_stock_count ?? 0,
-    openAlerts: health?.open_alert_count ?? 0,
-    openShopping: health?.open_shopping_count ?? 0,
-  });
+  const handleRefresh = async () => {
+    setLocalMessage(null);
 
-  const alerts = [
-    {
-      title: "Stock bas",
-      value: health?.inventory_low_stock_count ?? 0,
-      show: (health?.inventory_low_stock_count ?? 0) > 0,
-    },
-    {
-      title: "Alertes ouvertes",
-      value: health?.open_alert_count ?? 0,
-      show: (health?.open_alert_count ?? 0) > 0,
-    },
-    {
-      title: "Shopping ouverte",
-      value: health?.open_shopping_count ?? 0,
-      show: (health?.open_shopping_count ?? 0) > 0,
-    },
-  ].filter((item) => item.show);
+    try {
+      await refresh();
+      setLocalMessage("Statut DOMYLI rafraîchi.");
+    } catch {
+      // erreur déjà gérée par le hook
+    }
+  };
 
   return (
-    <div className="min-h-screen bg-obsidian text-alabaster px-6 py-10">
-      <div className="mx-auto max-w-6xl">
-        <div className="flex items-start gap-4">
-          <button
-            type="button"
-            onClick={() => navigate(ROUTES.DASHBOARD)}
-            className="mt-1 h-10 w-10 border border-white/10 flex items-center justify-center hover:border-gold/40 transition-colors"
-            aria-label="Retour"
-          >
-            <ArrowLeft size={18} />
-          </button>
-
+    <main className="min-h-screen bg-black px-6 py-8 text-white">
+      <div className="mx-auto max-w-7xl">
+        <div className="mb-8 flex items-start justify-between gap-4">
           <div>
-            <div className="text-xs uppercase tracking-[0.35em] text-gold">
+            <button
+              type="button"
+              onClick={() => navigate(ROUTES.DASHBOARD)}
+              className="mt-1 inline-flex h-10 w-10 items-center justify-center border border-white/10 transition-colors hover:border-gold/40"
+              aria-label="Retour"
+            >
+              <ArrowLeft className="h-4 w-4" />
+            </button>
+
+            <div className="mt-6 text-xs uppercase tracking-[0.35em] text-gold/80">
               DOMYLI
             </div>
-            <h1 className="mt-2 text-4xl font-semibold">Status</h1>
-            <p className="mt-3 max-w-2xl text-alabaster/70 leading-8">
-              Centre de pilotage transverse : stock, alertes, shopping, repas,
-              tâches et charge.
+            <h1 className="mt-3 text-4xl font-semibold">Status</h1>
+            <p className="mt-3 max-w-3xl text-white/65">
+              Ici, le statut n’est pas un simple tableau de bord. C’est la lecture
+              transverse de l’état du foyer à partir des signaux réels : stock,
+              tâches, repas, outils et charge quotidienne.
             </p>
           </div>
         </div>
 
-        <div className="mt-8 flex flex-wrap gap-3">
-          <button
-            type="button"
-            onClick={() => void refresh()}
-            className="border border-gold/40 px-5 py-3 text-xs uppercase tracking-[0.25em] text-gold hover:bg-gold hover:text-obsidian transition-colors"
-          >
-            <span className="inline-flex items-center gap-2">
-              <RefreshCw size={14} className={loading ? "animate-spin" : ""} />
-              Rafraîchir
-            </span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => navigate(ROUTES.SHOPPING)}
-            className="border border-white/10 px-5 py-3 text-xs uppercase tracking-[0.25em] text-alabaster hover:border-gold/40 hover:text-gold transition-colors"
-          >
-            Shopping
-          </button>
-
-          <button
-            type="button"
-            onClick={() => navigate(ROUTES.DASHBOARD)}
-            className="border border-gold/40 px-5 py-3 text-xs uppercase tracking-[0.25em] text-gold hover:bg-gold hover:text-obsidian transition-colors"
-          >
-            Dashboard
-          </button>
-        </div>
-
-        <div className="mt-10 grid gap-6 md:grid-cols-4">
-          <article className="glass metallic-border rounded-[1.75rem] p-6">
-            <div className="inline-flex rounded-xl border border-gold/20 p-3 text-gold">
-              <Package size={18} />
-            </div>
-            <div className="mt-4 text-xs uppercase tracking-[0.25em] text-gold/80">
-              Stock bas
-            </div>
-            <div className="mt-3 text-3xl font-semibold text-alabaster">
-              {health?.inventory_low_stock_count ?? 0}
-            </div>
-          </article>
-
-          <article className="glass metallic-border rounded-[1.75rem] p-6">
-            <div className="inline-flex rounded-xl border border-gold/20 p-3 text-gold">
-              <AlertTriangle size={18} />
-            </div>
-            <div className="mt-4 text-xs uppercase tracking-[0.25em] text-gold/80">
-              Alertes ouvertes
-            </div>
-            <div className="mt-3 text-3xl font-semibold text-alabaster">
-              {health?.open_alert_count ?? 0}
-            </div>
-          </article>
-
-          <article className="glass metallic-border rounded-[1.75rem] p-6">
-            <div className="inline-flex rounded-xl border border-gold/20 p-3 text-gold">
-              <Utensils size={18} />
-            </div>
-            <div className="mt-4 text-xs uppercase tracking-[0.25em] text-gold/80">
-              Repas du jour
-            </div>
-            <div className="mt-3 text-3xl font-semibold text-alabaster">
-              {health?.today_meal_count ?? 0}
-            </div>
-          </article>
-
-          <article className="glass metallic-border rounded-[1.75rem] p-6">
-            <div className="inline-flex rounded-xl border border-gold/20 p-3 text-gold">
-              <ListTodo size={18} />
-            </div>
-            <div className="mt-4 text-xs uppercase tracking-[0.25em] text-gold/80">
-              Tâches du jour
-            </div>
-            <div className="mt-3 text-3xl font-semibold text-alabaster">
-              {health?.today_task_count ?? 0}
-            </div>
-          </article>
-        </div>
-
-        <div className="mt-10 grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
-          <section className="glass metallic-border rounded-[2rem] p-6">
-            <div className="inline-flex items-center gap-3 text-gold">
-              <Clock3 size={18} />
-              <span className="text-xs uppercase tracking-[0.3em]">
-                Charge opérationnelle
+        <div className="grid gap-8 lg:grid-cols-[1.3fr_0.7fr]">
+          <section className="rounded-[2rem] border border-gold/20 bg-black/40 p-8">
+            <div className="mb-6 flex items-center gap-3 text-gold/85">
+              <ClipboardList className="h-5 w-5" />
+              <span className="text-xs uppercase tracking-[0.35em]">
+                Pilotage transverse
               </span>
             </div>
 
-            <h2 className="mt-5 text-2xl font-semibold text-alabaster">
-              Charge par membre
-            </h2>
+            <h2 className="text-3xl font-semibold">Centre de lecture opérationnelle</h2>
 
-            {loading && (
-              <div className="mt-8 rounded-2xl border border-white/8 bg-black/20 px-4 py-4 text-sm text-alabaster/65">
-                Chargement du flux DOMYLI...
+            <p className="mt-6 max-w-3xl text-lg leading-9 text-white/65">
+              Le statut du jour consolide les signaux structurants du foyer et
+              hiérarchise le flux à regarder en premier.
+            </p>
+
+            <div className="mt-8 flex flex-wrap gap-4">
+              <button
+                type="button"
+                onClick={handleRefresh}
+                disabled={loading}
+                className="inline-flex items-center justify-center gap-3 border border-white/10 px-6 py-4 text-sm uppercase tracking-[0.24em] text-white transition-colors hover:border-gold/40 hover:text-gold disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <RefreshCw className="h-4 w-4" />
+                {loading ? "Chargement..." : "Rafraîchir"}
+              </button>
+
+              <button
+                type="button"
+                onClick={() => navigate(ROUTES.INVENTORY)}
+                className="inline-flex items-center justify-center gap-3 border border-white/10 px-6 py-4 text-sm uppercase tracking-[0.24em] text-white transition-colors hover:border-gold/40 hover:text-gold"
+              >
+                <Package className="h-4 w-4" />
+                Inventory
+              </button>
+
+              <button
+                type="button"
+                onClick={() => navigate(ROUTES.TASKS)}
+                className="inline-flex items-center justify-center gap-3 border border-white/10 px-6 py-4 text-sm uppercase tracking-[0.24em] text-white transition-colors hover:border-gold/40 hover:text-gold"
+              >
+                <TimerReset className="h-4 w-4" />
+                Tasks
+              </button>
+
+              <button
+                type="button"
+                onClick={() => navigate(ROUTES.MEALS)}
+                className="inline-flex items-center justify-center gap-3 border border-white/10 px-6 py-4 text-sm uppercase tracking-[0.24em] text-white transition-colors hover:border-gold/40 hover:text-gold"
+              >
+                <Utensils className="h-4 w-4" />
+                Meals
+              </button>
+
+              <button
+                type="button"
+                onClick={() => navigate(ROUTES.TOOLS)}
+                className="inline-flex items-center justify-center gap-3 border border-white/10 px-6 py-4 text-sm uppercase tracking-[0.24em] text-white transition-colors hover:border-gold/40 hover:text-gold"
+              >
+                <Wrench className="h-4 w-4" />
+                Tools
+              </button>
+
+              <button
+                type="button"
+                onClick={() => navigate(ROUTES.DASHBOARD)}
+                className="inline-flex items-center justify-center gap-3 border border-gold/30 px-6 py-4 text-sm uppercase tracking-[0.24em] text-gold transition-colors hover:bg-gold/10"
+              >
+                Dashboard
+                <ArrowRight className="h-4 w-4" />
+              </button>
+            </div>
+
+            {(localMessage || error) && (
+              <div className="mt-8 border border-gold/20 bg-gold/10 px-5 py-4 text-lg text-gold">
+                {localMessage ?? error?.message}
               </div>
             )}
 
-            {error && (
-              <div className="mt-8 border border-gold/20 bg-gold/5 px-4 py-4 text-sm text-gold">
-                {error.message}
+            <div className="mt-8 grid gap-4 md:grid-cols-5">
+              <div className="rounded-[1.5rem] border border-white/10 bg-black/20 px-5 py-5">
+                <div className="text-xs uppercase tracking-[0.24em] text-gold/75">
+                  Stock manquant
+                </div>
+                <div className="mt-3 text-3xl font-semibold">
+                  {health?.missing_stock_count ?? 0}
+                </div>
               </div>
-            )}
 
-            {!loading && !error && feed.members.length === 0 && (
-              <div className="mt-8 rounded-2xl border border-white/8 bg-black/20 px-4 py-4 text-sm text-alabaster/65">
-                Aucun membre remonté pour la charge du jour.
+              <div className="rounded-[1.5rem] border border-white/10 bg-black/20 px-5 py-5">
+                <div className="text-xs uppercase tracking-[0.24em] text-gold/75">
+                  Tâches en retard
+                </div>
+                <div className="mt-3 text-3xl font-semibold">
+                  {health?.overdue_tasks_count ?? 0}
+                </div>
               </div>
-            )}
 
-            {!loading && !error && feed.members.length > 0 && (
-              <div className="mt-8 space-y-4">
-                {feed.members.map((member) => (
-                  <article
-                    key={member.user_id}
-                    className="rounded-2xl border border-white/8 bg-black/20 px-4 py-4"
-                  >
-                    <div className="grid gap-4 md:grid-cols-4">
-                      <div>
-                        <div className="text-xs uppercase tracking-[0.22em] text-gold/80">
-                          Rôle
-                        </div>
-                        <div className="mt-2 text-sm text-alabaster">
-                          {member.role}
-                        </div>
-                      </div>
-
-                      <div>
-                        <div className="text-xs uppercase tracking-[0.22em] text-gold/80">
-                          User ID
-                        </div>
-                        <div className="mt-2 text-sm text-alabaster break-all">
-                          {member.user_id}
-                        </div>
-                      </div>
-
-                      <div>
-                        <div className="text-xs uppercase tracking-[0.22em] text-gold/80">
-                          Capacité
-                        </div>
-                        <div className="mt-2 text-sm text-alabaster">
-                          {member.capacity_points_daily}
-                        </div>
-                      </div>
-
-                      <div>
-                        <div className="text-xs uppercase tracking-[0.22em] text-gold/80">
-                          Tâches
-                        </div>
-                        <div className="mt-2 text-sm text-alabaster">
-                          {member.assigned_task_count}
-                        </div>
-                      </div>
-                    </div>
-                  </article>
-                ))}
+              <div className="rounded-[1.5rem] border border-white/10 bg-black/20 px-5 py-5">
+                <div className="text-xs uppercase tracking-[0.24em] text-gold/75">
+                  Repas planifiés
+                </div>
+                <div className="mt-3 text-3xl font-semibold">
+                  {health?.planned_meals_count ?? 0}
+                </div>
               </div>
-            )}
+
+              <div className="rounded-[1.5rem] border border-white/10 bg-black/20 px-5 py-5">
+                <div className="text-xs uppercase tracking-[0.24em] text-gold/75">
+                  Repas confirmés
+                </div>
+                <div className="mt-3 text-3xl font-semibold">
+                  {health?.confirmed_meals_count ?? 0}
+                </div>
+              </div>
+
+              <div className="rounded-[1.5rem] border border-white/10 bg-black/20 px-5 py-5">
+                <div className="text-xs uppercase tracking-[0.24em] text-gold/75">
+                  Outils bloqués
+                </div>
+                <div className="mt-3 text-3xl font-semibold">
+                  {health?.blocked_tools_count ?? 0}
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-8 rounded-[1.5rem] border border-white/10 bg-black/20 px-5 py-5">
+              <div className="flex flex-wrap items-start justify-between gap-4">
+                <div>
+                  <div className="text-xs uppercase tracking-[0.24em] text-gold/75">
+                    État global DOMYLI
+                  </div>
+                  <div className="mt-3 text-2xl">{globalStatus.label}</div>
+                  <div className="mt-2 max-w-2xl text-white/70">
+                    {globalStatus.description}
+                  </div>
+                </div>
+
+                <SignalBadge code={globalStatus.code} />
+              </div>
+            </div>
+
+            <div className="mt-8">
+              <div className="mb-4 text-xs uppercase tracking-[0.24em] text-gold/75">
+                Flux priorisé du jour
+              </div>
+
+              {loading && (
+                <div className="rounded-[1.5rem] border border-white/10 bg-black/20 px-5 py-5 text-white/70">
+                  Chargement du flux DOMYLI...
+                </div>
+              )}
+
+              {!loading && !error && sortedFeed.length === 0 && (
+                <div className="rounded-[1.5rem] border border-white/10 bg-black/20 px-5 py-5 text-white/70">
+                  Aucun élément de flux remonté pour le moment.
+                </div>
+              )}
+
+              {!loading && !error && sortedFeed.length > 0 && (
+                <div className="space-y-4">
+                  {sortedFeed.map((item) => {
+                    const severityCode = getStatusItemSeverityCode(item);
+                    const severity = getStatusSignalMeta(severityCode);
+
+                    return (
+                      <article
+                        key={`${item.item_type}-${item.item_id}`}
+                        className="rounded-[1.5rem] border border-white/10 bg-black/20 p-5"
+                      >
+                        <div className="flex flex-wrap items-start justify-between gap-4">
+                          <div>
+                            <div className="text-xs uppercase tracking-[0.22em] text-gold/80">
+                              {getStatusFeedTypeLabel(item.item_type)}
+                            </div>
+                            <div className="mt-2 text-xl">{item.title}</div>
+                            <div className="mt-2 text-sm text-white/60">
+                              {item.status || "UNKNOWN"} · {formatStatusDate(item.scheduled_at)}
+                            </div>
+                          </div>
+
+                          <SignalBadge code={severity.code} />
+                        </div>
+
+                        <div className="mt-4 text-sm text-white/70">
+                          {severity.description}
+                        </div>
+                      </article>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
           </section>
 
-          <aside className="glass metallic-border rounded-[2rem] p-7">
-            <div className="inline-flex items-center gap-3 text-gold">
-              <ShieldCheck size={18} />
-              <span className="text-xs uppercase tracking-[0.3em]">
-                Pilotage
-              </span>
-            </div>
+          <aside className="space-y-6">
+            <section className="rounded-[2rem] border border-gold/20 bg-black/40 p-8">
+              <div className="mb-6 flex items-center gap-3 text-gold/85">
+                <ShieldCheck className="h-5 w-5" />
+                <span className="text-xs uppercase tracking-[0.35em]">
+                  Lecture métier DOMYLI
+                </span>
+              </div>
 
-            <div className="mt-6 space-y-4">
-              <div className="rounded-2xl border border-white/8 bg-black/20 px-4 py-4">
-                <div className="text-xs uppercase tracking-[0.22em] text-gold/80">
-                  État global
+              <div className="space-y-5">
+                <div className="rounded-[1.5rem] border border-white/10 bg-black/20 px-5 py-5">
+                  <div className="text-xs uppercase tracking-[0.28em] text-gold/75">
+                    Session
+                  </div>
+                  <div className="mt-3 text-2xl">{sessionEmail ?? "—"}</div>
                 </div>
-                <div className="mt-2 text-sm text-alabaster">
-                  {globalStatus.label}
+
+                <div className="rounded-[1.5rem] border border-white/10 bg-black/20 px-5 py-5">
+                  <div className="text-xs uppercase tracking-[0.28em] text-gold/75">
+                    Foyer
+                  </div>
+                  <div className="mt-3 text-2xl">
+                    {activeMembership?.household_name ?? "—"}
+                  </div>
                 </div>
-                <div className="mt-2 text-sm text-alabaster/60">
-                  {globalStatus.description}
+
+                <div className="rounded-[1.5rem] border border-white/10 bg-black/20 px-5 py-5">
+                  <div className="text-xs uppercase tracking-[0.28em] text-gold/75">
+                    Rôle
+                  </div>
+                  <div className="mt-3 text-2xl">{activeMembership?.role ?? "—"}</div>
+                </div>
+
+                <div className="rounded-[1.5rem] border border-white/10 bg-black/20 px-5 py-5">
+                  <div className="text-xs uppercase tracking-[0.28em] text-gold/75">
+                    Jour observé
+                  </div>
+                  <div className="mt-3 text-2xl">{health?.day ?? "—"}</div>
+                </div>
+
+                <div className="rounded-[1.5rem] border border-white/10 bg-black/20 px-5 py-5">
+                  <div className="text-xs uppercase tracking-[0.28em] text-gold/75">
+                    Super Admin
+                  </div>
+                  <div className="mt-3 text-2xl">
+                    {bootstrap?.is_super_admin ? "Oui" : "Non"}
+                  </div>
                 </div>
               </div>
 
-              <div className="rounded-2xl border border-white/8 bg-black/20 px-4 py-4">
-                <div className="text-xs uppercase tracking-[0.22em] text-gold/80">
-                  Foyer
+              <div className="mt-8">
+                <div className="text-xs uppercase tracking-[0.24em] text-gold/75">
+                  Flux surveillés
                 </div>
-                <div className="mt-2 text-sm text-alabaster">
-                  {activeMembership?.household_name ?? "—"}
+
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {flowLabels.map((label) => (
+                    <FlowBadge key={label} label={label} />
+                  ))}
                 </div>
               </div>
+            </section>
 
-              <div className="rounded-2xl border border-white/8 bg-black/20 px-4 py-4">
-                <div className="text-xs uppercase tracking-[0.22em] text-gold/80">
-                  Rôle
-                </div>
-                <div className="mt-2 text-sm text-alabaster">
-                  {activeMembership?.role ?? "—"}
-                </div>
+            <section className="rounded-[2rem] border border-gold/20 bg-black/40 p-8">
+              <div className="mb-6 flex items-center gap-3 text-gold/85">
+                <AlertTriangle className="h-5 w-5" />
+                <span className="text-xs uppercase tracking-[0.35em]">
+                  Alertes prioritaires
+                </span>
               </div>
 
-              <div className="rounded-2xl border border-white/8 bg-black/20 px-4 py-4">
-                <div className="text-xs uppercase tracking-[0.22em] text-gold/80">
-                  Jour observé
-                </div>
-                <div className="mt-2 text-sm text-alabaster">
-                  {health?.day ?? "—"}
-                </div>
-              </div>
-
-              <div className="rounded-2xl border border-white/8 bg-black/20 px-4 py-4">
-                <div className="text-xs uppercase tracking-[0.22em] text-gold/80">
-                  Super Admin
-                </div>
-                <div className="mt-2 text-sm text-alabaster">
-                  {bootstrap?.is_super_admin ? "Oui" : "Non"}
-                </div>
-              </div>
-
-              <div className="rounded-2xl border border-white/8 bg-black/20 px-4 py-4">
-                <div className="text-xs uppercase tracking-[0.22em] text-gold/80">
-                  Session
-                </div>
-                <div className="mt-2 text-sm text-alabaster">
-                  {sessionEmail ?? "—"}
-                </div>
-              </div>
-            </div>
-
-            <div className="mt-8 border border-white/10 bg-black/20 p-6">
-              <h3 className="text-xl font-serif italic">Alertes prioritaires</h3>
-
-              {alerts.length === 0 ? (
-                <div className="mt-4 text-sm text-alabaster/70">
-                  Aucune alerte prioritaire critique.
+              {priorityAlerts.length === 0 ? (
+                <div className="rounded-[1.5rem] border border-white/10 bg-black/20 px-5 py-5 text-white/70">
+                  Aucun signal prioritaire remonté aujourd’hui.
                 </div>
               ) : (
-                <div className="mt-4 space-y-3">
-                  {alerts.map((alert) => (
+                <div className="space-y-4">
+                  {priorityAlerts.map((alert) => (
                     <div
-                      key={alert.title}
-                      className="rounded-2xl border border-white/8 bg-black/20 px-4 py-4"
+                      key={alert.code}
+                      className="rounded-[1.5rem] border border-white/10 bg-black/20 p-5"
                     >
-                      <div className="text-xs uppercase tracking-[0.22em] text-gold/80">
-                        {alert.title}
-                      </div>
-                      <div className="mt-2 text-sm text-alabaster">
-                        {alert.value}
+                      <div className="flex items-start justify-between gap-4">
+                        <div>
+                          <div className="text-xs uppercase tracking-[0.22em] text-gold/80">
+                            {alert.label}
+                          </div>
+                          <div className="mt-2 text-2xl">{alert.value}</div>
+                          <div className="mt-2 text-sm text-white/70">
+                            {alert.description}
+                          </div>
+                        </div>
+
+                        <SignalBadge code={alert.severity as any} />
                       </div>
                     </div>
                   ))}
                 </div>
               )}
 
-              <div className="mt-6 text-sm leading-8 text-alabaster/65">
-                RPC : <code>app.rpc_today_health</code> /{" "}
-                <code>app.rpc_today_load_feed</code>
+              <div className="mt-6 rounded-[1.5rem] border border-white/10 bg-black/20 px-5 py-5">
+                <div className="text-xs uppercase tracking-[0.24em] text-gold/75">
+                  Répartition du flux
+                </div>
+
+                <div className="mt-4 space-y-3">
+                  {feedSummary.map((entry) => (
+                    <div
+                      key={entry.code}
+                      className="flex items-center justify-between gap-3 text-sm"
+                    >
+                      <span className="text-white/75">{entry.label}</span>
+                      <span className="text-gold">{entry.count}</span>
+                    </div>
+                  ))}
+                </div>
               </div>
 
-              <div className="mt-2 text-sm leading-8 text-alabaster/65">
-                Cette page sert de centre de pilotage transverse.
+              <div className="mt-6 text-sm text-white/45">
+                RPC surveillées : <code>app.rpc_today_health</code> /{" "}
+                <code>app.rpc_today_load_feed</code>
               </div>
-            </div>
+            </section>
           </aside>
         </div>
       </div>
-    </div>
+    </main>
   );
 }
