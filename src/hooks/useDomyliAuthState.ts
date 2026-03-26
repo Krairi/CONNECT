@@ -66,9 +66,17 @@ const initialState: AuthState = {
 };
 
 function normalizeMembership(
-  input?: Partial<Membership> | null
+  input?:
+    | {
+        household_id?: string | null;
+        household_name?: string | null;
+        role?: string | null;
+      }
+    | null,
 ): Membership | null {
-  if (!input?.household_id) return null;
+  if (!input?.household_id) {
+    return null;
+  }
 
   return {
     household_id: input.household_id,
@@ -77,89 +85,146 @@ function normalizeMembership(
   };
 }
 
+function mergeMemberships(
+  current: Membership[],
+  incoming: Membership | null,
+): Membership[] {
+  if (!incoming) {
+    return current;
+  }
+
+  const exists = current.some(
+    (membership) => membership.household_id === incoming.household_id,
+  );
+
+  if (!exists) {
+    return [incoming, ...current];
+  }
+
+  return current.map((membership) =>
+    membership.household_id === incoming.household_id ? incoming : membership,
+  );
+}
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => {
+    window.setTimeout(resolve, ms);
+  });
+}
+
 export function useDomyliAuthState() {
   const [state, setState] = useState<AuthState>(initialState);
 
-  const refreshBootstrap = useCallback(async () => {
-    setState((prev) => ({
-      ...prev,
-      bootstrapLoading: true,
-      error: null,
-    }));
-
-    try {
-      const rawBootstrap = await callRpc<RawBootstrap | null>(
-        "rpc_user_bootstrap",
-        {},
-        { unwrap: true }
-      );
-
-      const rawActive = await callRpc<RawActiveHousehold | null>(
-        "rpc_user_active_household",
-        {},
-        { unwrap: true }
-      );
-
-      const memberships = Array.isArray(rawBootstrap?.memberships)
-        ? rawBootstrap.memberships
-            .map((membership) =>
-              normalizeMembership({
-                household_id: membership.household_id ?? null,
-                household_name: membership.household_name ?? null,
-                role: membership.role ?? null,
-              })
-            )
-            .filter((membership): membership is Membership => Boolean(membership))
-        : [];
-
-      const activeMembership = normalizeMembership({
-        household_id:
-          rawActive?.active_household_id ?? rawActive?.household_id ?? null,
-        household_name: rawActive?.household_name ?? rawActive?.name ?? null,
-        role: rawActive?.role ?? null,
-      });
-
-      const mergedMemberships = activeMembership
-        ? memberships.some((m) => m.household_id === activeMembership.household_id)
-          ? memberships.map((m) =>
-              m.household_id === activeMembership.household_id
-                ? activeMembership
-                : m
-            )
-          : [activeMembership, ...memberships]
-        : memberships;
-
-      const normalized: BootstrapState = {
-        user_id: rawBootstrap?.user_id ?? "",
-        active_household_id:
-          rawActive?.active_household_id ??
-          rawActive?.household_id ??
-          rawBootstrap?.active_household_id ??
-          null,
-        is_super_admin: Boolean(rawBootstrap?.is_super_admin),
-        memberships: mergedMemberships,
-      };
+  const refreshBootstrap = useCallback(
+    async (options?: {
+      retries?: number;
+      retryDelayMs?: number;
+      bootstrapTimeoutMs?: number;
+      activeTimeoutMs?: number;
+    }) => {
+      const retries = options?.retries ?? 0;
+      const retryDelayMs = options?.retryDelayMs ?? 900;
+      const bootstrapTimeoutMs = options?.bootstrapTimeoutMs ?? 10_000;
+      const activeTimeoutMs = options?.activeTimeoutMs ?? 10_000;
 
       setState((prev) => ({
         ...prev,
-        bootstrapLoading: false,
-        bootstrap: normalized,
+        bootstrapLoading: true,
         error: null,
       }));
 
-      return normalized;
-    } catch (error) {
-      const normalized = toDomyliError(error);
+      let lastError: unknown = null;
 
-      setState((prev) => ({
-        ...prev,
-        bootstrapLoading: false,
-        error: normalized,
-      }));
+      for (let attempt = 0; attempt <= retries; attempt += 1) {
+        try {
+          const rawBootstrap = await callRpc<RawBootstrap>(
+            "rpc_user_bootstrap",
+            {},
+            {
+              unwrap: true,
+              timeoutMs: bootstrapTimeoutMs,
+            },
+          );
 
-      throw normalized;
-    }
-  }, []);
+          const rawActive = await callRpc<RawActiveHousehold>(
+            "rpc_user_active_household",
+            {},
+            {
+              unwrap: true,
+              timeoutMs: activeTimeoutMs,
+            },
+          );
+
+          const memberships = Array.isArray(rawBootstrap?.memberships)
+            ? rawBootstrap.memberships
+                .map((membership) =>
+                  normalizeMembership({
+                    household_id: membership.household_id ?? null,
+                    household_name: membership.household_name ?? null,
+                    role: membership.role ?? null,
+                  }),
+                )
+                .filter((membership): membership is Membership =>
+                  Boolean(membership),
+                )
+            : [];
+
+          const activeMembership = normalizeMembership({
+            household_id:
+              rawActive?.active_household_id ??
+              rawActive?.household_id ??
+              null,
+            household_name:
+              rawActive?.household_name ?? rawActive?.name ?? null,
+            role: rawActive?.role ?? null,
+          });
+
+          const mergedMemberships = activeMembership
+            ? mergeMemberships(memberships, activeMembership)
+            : memberships;
+
+          const normalized: BootstrapState = {
+            user_id: rawBootstrap?.user_id ?? "",
+            active_household_id:
+              rawActive?.active_household_id ??
+              rawActive?.household_id ??
+              rawBootstrap?.active_household_id ??
+              null,
+            is_super_admin: Boolean(rawBootstrap?.is_super_admin),
+            memberships: mergedMemberships,
+          };
+
+          setState((prev) => ({
+            ...prev,
+            bootstrapLoading: false,
+            bootstrap: normalized,
+            error: null,
+          }));
+
+          return normalized;
+        } catch (error) {
+          lastError = toDomyliError(error);
+
+          const isLastAttempt = attempt >= retries;
+
+          if (isLastAttempt) {
+            setState((prev) => ({
+              ...prev,
+              bootstrapLoading: false,
+              error: toDomyliError(lastError),
+            }));
+
+            throw toDomyliError(lastError);
+          }
+
+          await delay(retryDelayMs);
+        }
+      }
+
+      throw toDomyliError(lastError);
+    },
+    [],
+  );
 
   const syncFromSession = useCallback(
     async (session: Session | null) => {
@@ -182,16 +247,18 @@ export function useDomyliAuthState() {
 
       await refreshBootstrap();
     },
-    [refreshBootstrap]
+    [refreshBootstrap],
   );
 
   useEffect(() => {
     let mounted = true;
 
-    const bootstrap = async () => {
+    const bootstrapSession = async () => {
       const { data, error } = await supabase.auth.getSession();
 
-      if (!mounted) return;
+      if (!mounted) {
+        return;
+      }
 
       if (error) {
         setState((prev) => ({
@@ -206,12 +273,15 @@ export function useDomyliAuthState() {
       await syncFromSession(data.session);
     };
 
-    void bootstrap();
+    void bootstrapSession();
 
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (!mounted) return;
+      if (!mounted) {
+        return;
+      }
+
       void syncFromSession(session);
     });
 
@@ -232,7 +302,7 @@ export function useDomyliAuthState() {
         throw toDomyliError(error);
       }
     },
-    []
+    [],
   );
 
   const signUpWithPassword = useCallback(
@@ -246,7 +316,7 @@ export function useDomyliAuthState() {
         throw toDomyliError(error);
       }
     },
-    []
+    [],
   );
 
   const signOut = useCallback(async () => {
@@ -268,21 +338,78 @@ export function useDomyliAuthState() {
         });
       }
 
-      const created = await callRpc<RawHouseholdCreate | null>(
+      const created = await callRpc<RawHouseholdCreate>(
         "rpc_household_create",
         { p_name: trimmedName },
-        { unwrap: true }
+        {
+          unwrap: true,
+          timeoutMs: 25_000,
+          retries: 1,
+          retryDelayMs: 1_200,
+        },
       );
 
-      await refreshBootstrap();
+      const createdMembership = normalizeMembership({
+        household_id: created?.household_id ?? null,
+        household_name: created?.household_name ?? trimmedName,
+        role: created?.role ?? "GARANTE",
+      });
+
+      if (createdMembership) {
+        setState((prev) => ({
+          ...prev,
+          bootstrapLoading: true,
+          error: null,
+          bootstrap: {
+            user_id: prev.bootstrap?.user_id ?? "",
+            active_household_id:
+              createdMembership.household_id ??
+              prev.bootstrap?.active_household_id ??
+              null,
+            is_super_admin: prev.bootstrap?.is_super_admin ?? false,
+            memberships: mergeMemberships(
+              prev.bootstrap?.memberships ?? [],
+              createdMembership,
+            ),
+          },
+        }));
+      }
+
+      try {
+        await refreshBootstrap({
+          retries: 3,
+          retryDelayMs: 1_000,
+          bootstrapTimeoutMs: 15_000,
+          activeTimeoutMs: 15_000,
+        });
+      } catch (error) {
+        if (!createdMembership) {
+          throw error;
+        }
+
+        setState((prev) => ({
+          ...prev,
+          bootstrapLoading: false,
+          error: null,
+          bootstrap: {
+            user_id: prev.bootstrap?.user_id ?? "",
+            active_household_id: createdMembership.household_id,
+            is_super_admin: prev.bootstrap?.is_super_admin ?? false,
+            memberships: mergeMemberships(
+              prev.bootstrap?.memberships ?? [],
+              createdMembership,
+            ),
+          },
+        }));
+      }
 
       return {
-        household_id: created?.household_id ?? "",
-        household_name: created?.household_name ?? trimmedName,
-        role: created?.role ?? "OWNER",
+        household_id: createdMembership?.household_id ?? "",
+        household_name: createdMembership?.household_name ?? trimmedName,
+        role: createdMembership?.role ?? "GARANTE",
       };
     },
-    [refreshBootstrap]
+    [refreshBootstrap],
   );
 
   const derived = useMemo(() => {
@@ -291,14 +418,16 @@ export function useDomyliAuthState() {
     const activeMembership =
       memberships.find(
         (membership) =>
-          membership.household_id === state.bootstrap?.active_household_id
+          membership.household_id === state.bootstrap?.active_household_id,
       ) ??
       memberships[0] ??
       null;
 
     return {
       isAuthenticated: Boolean(state.sessionEmail),
-      hasHousehold: Boolean(state.bootstrap?.active_household_id),
+      hasHousehold: Boolean(
+        state.bootstrap?.active_household_id ?? activeMembership?.household_id,
+      ),
       activeMembership,
     };
   }, [state.bootstrap, state.sessionEmail]);
