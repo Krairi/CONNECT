@@ -65,12 +65,15 @@ function shouldRetryInventorySignature(error: unknown): boolean {
   );
 }
 
-function uniquePayloads(payloads: Array<Record<string, unknown>>): Array<Record<string, unknown>> {
+function uniquePayloads(
+  payloads: Array<Record<string, unknown>>
+): Array<Record<string, unknown>> {
   const seen = new Set<string>();
   const result: Array<Record<string, unknown>> = [];
 
   for (const payload of payloads) {
     const key = JSON.stringify(payload);
+
     if (!seen.has(key)) {
       seen.add(key);
       result.push(payload);
@@ -115,13 +118,7 @@ function buildInventoryPayloadVariants(
     ...(unit ? { p_unit: unit } : {}),
   };
 
-  return uniquePayloads([
-    full,
-    withCategory,
-    withUnit,
-    withMin,
-    requiredOnly,
-  ]);
+  return uniquePayloads([full, withCategory, withUnit, withMin, requiredOnly]);
 }
 
 function normalizeInventoryItemOutput(
