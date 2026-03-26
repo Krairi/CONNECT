@@ -172,7 +172,9 @@ export default function InventoryPage() {
       const result = await saveItem({
         p_household_id: householdId,
         p_name: selectedItem.label,
+        p_item_code: selectedItem.code,
         p_category: categoryLabel,
+        p_category_code: categoryCode,
         p_unit: unitCode,
         p_qty_on_hand: Number(qtyOnHand),
         p_min_qty: minQty !== "" ? Number(minQty) : null,

@@ -1,5 +1,5 @@
+import { createDomyliError, toDomyliError } from "@/src/lib/errors";
 import { callRpc } from "@/src/services/rpc";
-import { toDomyliError } from "@/src/lib/errors";
 
 export type InventoryItemUpsertInput = {
   p_household_id: string;
@@ -8,6 +8,8 @@ export type InventoryItemUpsertInput = {
   p_unit?: string | null;
   p_qty_on_hand: number;
   p_min_qty?: number | null;
+  p_item_code?: string | null;
+  p_category_code?: string | null;
 };
 
 export type InventoryItemUpsertOutput = {
@@ -42,83 +44,261 @@ export type ShoppingListRebuildForHouseholdOutput = {
   generated_at: string;
 };
 
-function shouldRetryWithoutPayload(error: unknown): boolean {
-  const normalized = toDomyliError(error);
-  const message = normalized.message?.toLowerCase() ?? "";
+type InventorySignatureInput = {
+  householdId: string;
+  itemName: string;
+  itemCode: string | null;
+  categoryLabel: string | null;
+  categoryCode: string | null;
+  unit: string | null;
+  qtyOnHand: number;
+  minQty: number | null;
+};
 
-  return (
-    normalized.code === "PGRST202" ||
-    message.includes("could not find the function") ||
-    message.includes("function app.rpc_shopping_list_rebuild")
-  );
+function trimToNull(value?: string | null): string | null {
+  const normalized = value?.trim();
+  return normalized ? normalized : null;
 }
 
-function shouldRetryInventorySignature(error: unknown): boolean {
+function uniquePayloads(
+  payloads: Array<Record<string, unknown> | null>
+): Array<Record<string, unknown>> {
+  const seen = new Set<string>();
+  const result: Array<Record<string, unknown>> = [];
+
+  for (const payload of payloads) {
+    if (!payload) continue;
+
+    const key = JSON.stringify(payload);
+    if (seen.has(key)) continue;
+
+    seen.add(key);
+    result.push(payload);
+  }
+
+  return result;
+}
+
+function shouldRetryMissingRpc(error: unknown, rpcName: string): boolean {
   const normalized = toDomyliError(error);
   const message = `${normalized.message ?? ""} ${normalized.details ?? ""} ${normalized.hint ?? ""}`.toLowerCase();
 
   return (
     normalized.code === "PGRST202" ||
     message.includes("could not find the function") ||
-    message.includes("function app.rpc_inventory_item_upsert") ||
-    message.includes("app.rpc_inventory_item_upsert(")
+    message.includes("schema cache") ||
+    message.includes(`function app.${rpcName}`) ||
+    message.includes(`app.${rpcName}(`)
   );
 }
 
-function uniquePayloads(
-  payloads: Array<Record<string, unknown>>
-): Array<Record<string, unknown>> {
-  const seen = new Set<string>();
-  const result: Array<Record<string, unknown>> = [];
+function buildNamePayload(
+  input: InventorySignatureInput,
+  nameKey: "p_name" | "p_item_name",
+  nameValue: string,
+  qtyKey: "p_qty_on_hand" | "p_quantity_on_hand" | "p_qty",
+  options?: {
+    includeCategory?: boolean;
+    includeUnit?: boolean;
+    includeMinQty?: boolean;
+  }
+): Record<string, unknown> {
+  const payload: Record<string, unknown> = {
+    p_household_id: input.householdId,
+    [nameKey]: nameValue,
+    [qtyKey]: input.qtyOnHand,
+  };
 
-  for (const payload of payloads) {
-    const key = JSON.stringify(payload);
-
-    if (!seen.has(key)) {
-      seen.add(key);
-      result.push(payload);
-    }
+  if (options?.includeCategory && input.categoryLabel) {
+    payload.p_category = input.categoryLabel;
   }
 
-  return result;
+  if (options?.includeUnit && input.unit) {
+    payload.p_unit = input.unit;
+  }
+
+  if (options?.includeMinQty && input.minQty !== null) {
+    payload.p_min_qty = input.minQty;
+  }
+
+  return payload;
+}
+
+function buildCodePayload(
+  input: InventorySignatureInput,
+  codeKey: "p_item_code" | "p_stock_key",
+  qtyKey: "p_qty_on_hand" | "p_quantity_on_hand" | "p_qty",
+  options?: {
+    includeCategoryCode?: boolean;
+    includeUnit?: boolean;
+    includeMinQty?: boolean;
+  }
+): Record<string, unknown> | null {
+  if (!input.itemCode) {
+    return null;
+  }
+
+  const payload: Record<string, unknown> = {
+    p_household_id: input.householdId,
+    [codeKey]: input.itemCode,
+    [qtyKey]: input.qtyOnHand,
+  };
+
+  if (options?.includeCategoryCode && input.categoryCode) {
+    payload.p_category_code = input.categoryCode;
+  }
+
+  if (options?.includeUnit && input.unit) {
+    payload.p_unit = input.unit;
+  }
+
+  if (options?.includeMinQty && input.minQty !== null) {
+    payload.p_min_qty = input.minQty;
+  }
+
+  return payload;
+}
+
+function buildHybridPayload(
+  input: InventorySignatureInput,
+  qtyKey: "p_qty_on_hand" | "p_quantity_on_hand" | "p_qty"
+): Record<string, unknown> | null {
+  if (!input.itemCode) {
+    return null;
+  }
+
+  const payload: Record<string, unknown> = {
+    p_household_id: input.householdId,
+    p_name: input.itemName,
+    p_item_code: input.itemCode,
+    [qtyKey]: input.qtyOnHand,
+  };
+
+  if (input.categoryLabel) {
+    payload.p_category = input.categoryLabel;
+  }
+
+  if (input.categoryCode) {
+    payload.p_category_code = input.categoryCode;
+  }
+
+  if (input.unit) {
+    payload.p_unit = input.unit;
+  }
+
+  if (input.minQty !== null) {
+    payload.p_min_qty = input.minQty;
+  }
+
+  return payload;
 }
 
 function buildInventoryPayloadVariants(
   payload: InventoryItemUpsertInput
 ): Array<Record<string, unknown>> {
-  const category = payload.p_category?.trim() || null;
-  const unit = payload.p_unit?.trim() || null;
-  const minQty =
-    payload.p_min_qty === null || payload.p_min_qty === undefined
-      ? null
-      : Number(payload.p_min_qty);
-
-  const requiredOnly: Record<string, unknown> = {
-    p_household_id: payload.p_household_id,
-    p_name: payload.p_name,
-    p_qty_on_hand: Number(payload.p_qty_on_hand),
+  const input: InventorySignatureInput = {
+    householdId: payload.p_household_id,
+    itemName: payload.p_name.trim(),
+    itemCode: trimToNull(payload.p_item_code),
+    categoryLabel: trimToNull(payload.p_category),
+    categoryCode: trimToNull(payload.p_category_code),
+    unit: trimToNull(payload.p_unit),
+    qtyOnHand: Number(payload.p_qty_on_hand),
+    minQty:
+      payload.p_min_qty === null || payload.p_min_qty === undefined
+        ? null
+        : Number(payload.p_min_qty),
   };
 
-  const withMin: Record<string, unknown> = {
-    ...requiredOnly,
-    p_min_qty: minQty ?? 0,
-  };
+  const namesToTry = uniquePayloads([
+    { value: input.itemName },
+    input.itemCode ? { value: input.itemCode } : null,
+  ]).map((entry) => String(entry.value));
 
-  const withCategory: Record<string, unknown> = category
-    ? { ...withMin, p_category: category }
-    : withMin;
+  const payloads: Array<Record<string, unknown> | null> = [];
 
-  const withUnit: Record<string, unknown> = unit
-    ? { ...withMin, p_unit: unit }
-    : withMin;
+  for (const nameValue of namesToTry) {
+    payloads.push(
+      buildNamePayload(input, "p_name", nameValue, "p_qty_on_hand", {
+        includeCategory: true,
+        includeUnit: true,
+        includeMinQty: true,
+      }),
+      buildNamePayload(input, "p_name", nameValue, "p_qty_on_hand", {
+        includeUnit: true,
+        includeMinQty: true,
+      }),
+      buildNamePayload(input, "p_name", nameValue, "p_qty_on_hand", {
+        includeUnit: true,
+      }),
+      buildNamePayload(input, "p_name", nameValue, "p_qty_on_hand"),
+      buildNamePayload(input, "p_item_name", nameValue, "p_qty_on_hand", {
+        includeCategory: true,
+        includeUnit: true,
+        includeMinQty: true,
+      }),
+      buildNamePayload(input, "p_item_name", nameValue, "p_qty_on_hand", {
+        includeUnit: true,
+        includeMinQty: true,
+      }),
+      buildNamePayload(input, "p_item_name", nameValue, "p_qty_on_hand", {
+        includeUnit: true,
+      }),
+      buildNamePayload(input, "p_item_name", nameValue, "p_qty_on_hand"),
+      buildNamePayload(input, "p_name", nameValue, "p_quantity_on_hand", {
+        includeUnit: true,
+        includeMinQty: true,
+      }),
+      buildNamePayload(input, "p_name", nameValue, "p_qty", {
+        includeUnit: true,
+        includeMinQty: true,
+      }),
+      buildNamePayload(input, "p_item_name", nameValue, "p_quantity_on_hand", {
+        includeUnit: true,
+        includeMinQty: true,
+      }),
+      buildNamePayload(input, "p_item_name", nameValue, "p_qty", {
+        includeUnit: true,
+        includeMinQty: true,
+      })
+    );
+  }
 
-  const full: Record<string, unknown> = {
-    ...withMin,
-    ...(category ? { p_category: category } : {}),
-    ...(unit ? { p_unit: unit } : {}),
-  };
+  payloads.push(
+    buildHybridPayload(input, "p_qty_on_hand"),
+    buildHybridPayload(input, "p_quantity_on_hand"),
+    buildHybridPayload(input, "p_qty"),
+    buildCodePayload(input, "p_item_code", "p_qty_on_hand", {
+      includeCategoryCode: true,
+      includeUnit: true,
+      includeMinQty: true,
+    }),
+    buildCodePayload(input, "p_item_code", "p_qty_on_hand", {
+      includeUnit: true,
+      includeMinQty: true,
+    }),
+    buildCodePayload(input, "p_item_code", "p_quantity_on_hand", {
+      includeCategoryCode: true,
+      includeUnit: true,
+      includeMinQty: true,
+    }),
+    buildCodePayload(input, "p_item_code", "p_qty", {
+      includeCategoryCode: true,
+      includeUnit: true,
+      includeMinQty: true,
+    }),
+    buildCodePayload(input, "p_stock_key", "p_qty_on_hand", {
+      includeCategoryCode: true,
+      includeUnit: true,
+      includeMinQty: true,
+    }),
+    buildCodePayload(input, "p_stock_key", "p_qty_on_hand", {
+      includeUnit: true,
+      includeMinQty: true,
+    })
+  );
 
-  return uniquePayloads([full, withCategory, withUnit, withMin, requiredOnly]);
+  return uniquePayloads(payloads);
 }
 
 function normalizeInventoryItemOutput(
@@ -133,6 +313,19 @@ function normalizeInventoryItemOutput(
     min_qty: Number(raw?.min_qty ?? payload.p_min_qty ?? 0),
     unit: raw?.unit ?? payload.p_unit ?? null,
   };
+}
+
+function createInventorySignatureError(lastError: unknown): Error {
+  const normalized = toDomyliError(lastError);
+
+  return createDomyliError({
+    message:
+      "La RPC d’inventaire DOMYLI existe probablement avec une signature différente de celle attendue par le front.",
+    code: normalized.code ?? "DOMYLI_INVENTORY_RPC_SIGNATURE_MISMATCH",
+    details: normalized.message,
+    hint:
+      "Le front a essayé plusieurs signatures compatibles avec les libellés et avec les codes canoniques. Si l’erreur continue, il faudra aligner la signature réelle de app.rpc_inventory_item_upsert côté Supabase ou recharger le cache PostgREST.",
+  });
 }
 
 async function upsertInventoryRpc(
@@ -151,13 +344,13 @@ async function upsertInventoryRpc(
     } catch (error) {
       lastError = error;
 
-      if (!shouldRetryInventorySignature(error)) {
+      if (!shouldRetryMissingRpc(error, "rpc_inventory_item_upsert")) {
         throw error;
       }
     }
   }
 
-  throw lastError;
+  throw createInventorySignatureError(lastError);
 }
 
 async function rebuildShoppingRpc(
@@ -170,7 +363,7 @@ async function rebuildShoppingRpc(
       { unwrap: true }
     );
   } catch (error) {
-    if (!shouldRetryWithoutPayload(error)) {
+    if (!shouldRetryMissingRpc(error, "rpc_shopping_list_rebuild")) {
       throw error;
     }
 
