@@ -67,33 +67,37 @@ function normalizeMeal(raw: RawMealOutput): MealDraft {
   };
 }
 
-export async function createMeal(payload: CreateMealInput): Promise<string> {
+export async function createMeal(
+  payload: CreateMealInput
+): Promise<string> {
   const raw = await callRpc<RawMealOutput | null>(
     "rpc_meal_slot_upsert",
     payload,
-    { unwrap: true },
+    { unwrap: true }
   );
 
   return raw?.meal_slot_id ?? "";
 }
 
-export async function updateMeal(payload: UpdateMealInput): Promise<string> {
+export async function updateMeal(
+  payload: UpdateMealInput
+): Promise<string> {
   const raw = await callRpc<RawMealOutput | null>(
     "rpc_meal_slot_upsert",
     payload,
-    { unwrap: true },
+    { unwrap: true }
   );
 
   return raw?.meal_slot_id ?? payload.p_meal_slot_id;
 }
 
 export async function confirmMealSlot(
-  mealSlotId: string,
+  mealSlotId: string
 ): Promise<MealConfirmResult> {
   const raw = await callRpc<RawConfirmOutput | null>(
     "rpc_meal_confirm_v3",
     { p_meal_slot_id: mealSlotId },
-    { unwrap: true },
+    { unwrap: true }
   );
 
   return {
@@ -103,7 +107,7 @@ export async function confirmMealSlot(
 }
 
 export function buildSessionMealDraft(
-  input: CreateMealInput & { meal_slot_id: string; status?: string | null },
+  input: CreateMealInput & { meal_slot_id: string; status?: string | null }
 ): MealDraft {
   return normalizeMeal({
     meal_slot_id: input.meal_slot_id,
