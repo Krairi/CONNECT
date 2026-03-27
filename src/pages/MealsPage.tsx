@@ -1,7 +1,6 @@
 import { useMemo, useState } from "react";
 import {
   ArrowLeft,
-  ArrowRight,
   CalendarDays,
   CheckCircle2,
   ClipboardList,
@@ -76,26 +75,48 @@ export default function MealsPage() {
 
   const isEditMode = useMemo(() => Boolean(selectedMealSlotId), [selectedMealSlotId]);
 
-  const templateOptions = useMemo(
-    () => getMealTemplatesByType(mealType),
-    [mealType]
-  );
+  const draftOptions = useMemo(() => {
+    return [...items].sort((a, b) => {
+      const dateA = a.planned_for ?? "";
+      const dateB = b.planned_for ?? "";
+      return dateB.localeCompare(dateA);
+    });
+  }, [items]);
 
-  const selectedTemplate = useMemo(
-    () => getMealTemplateByCode(templateCode),
-    [templateCode]
-  );
+  const selectedDraft = useMemo(() => {
+    return items.find((item) => item.meal_slot_id === selectedMealSlotId) ?? null;
+  }, [items, selectedMealSlotId]);
+
+  const templateOptions = useMemo(() => {
+    return getMealTemplatesByType(mealType);
+  }, [mealType]);
+
+  const selectedTemplate = useMemo(() => {
+    return getMealTemplateByCode(templateCode);
+  }, [templateCode]);
 
   const canSubmit = useMemo(() => {
     return Boolean(plannedFor && mealType && templateCode);
   }, [plannedFor, mealType, templateCode]);
 
+  const canConfirmSelected = useMemo(() => {
+    if (!selectedDraft) return false;
+    return !["CONFIRMED", "EXECUTED", "CANCELLED"].includes(
+      selectedDraft.status ?? "",
+    );
+  }, [selectedDraft]);
+
   if (authLoading || bootstrapLoading) {
     return (
       <main className="min-h-screen bg-black px-6 py-10 text-white">
-        <div className="mx-auto max-w-3xl border border-gold/20 bg-black/40 p-8">
-          <div className="text-xs uppercase tracking-[0.35em] text-gold/80">DOMYLI</div>
-          <h1 className="mt-4 text-3xl font-semibold">Chargement des repas...</h1>
+        <div className="mx-auto max-w-6xl rounded-[2rem] border border-gold/20 bg-black/40 p-8">
+          <div className="text-xs uppercase tracking-[0.35em] text-gold/80">
+            DOMYLI
+          </div>
+          <h1 className="mt-4 text-4xl font-semibold">Chargement des repas...</h1>
+          <p className="mt-4 text-white/65">
+            Synchronisation du contexte repas du foyer.
+          </p>
         </div>
       </main>
     );
@@ -104,11 +125,14 @@ export default function MealsPage() {
   if (!isAuthenticated || !hasHousehold) {
     return (
       <main className="min-h-screen bg-black px-6 py-10 text-white">
-        <div className="mx-auto max-w-3xl border border-gold/20 bg-black/40 p-8">
-          <div className="text-xs uppercase tracking-[0.35em] text-gold/80">DOMYLI</div>
-          <h1 className="mt-4 text-3xl font-semibold">Foyer requis</h1>
-          <p className="mt-4 text-white/70">
-            Il faut une session authentifiée et un foyer actif pour accéder aux repas.
+        <div className="mx-auto max-w-4xl rounded-[2rem] border border-gold/20 bg-black/40 p-8">
+          <div className="text-xs uppercase tracking-[0.35em] text-gold/80">
+            DOMYLI
+          </div>
+          <h1 className="mt-4 text-4xl font-semibold">Foyer requis</h1>
+          <p className="mt-4 text-white/65">
+            Il faut une session authentifiée et un foyer actif pour accéder aux
+            repas.
           </p>
 
           <button
@@ -142,6 +166,23 @@ export default function MealsPage() {
   const handleTemplateChange = (nextTemplateCode: string) => {
     setTemplateCode(nextTemplateCode);
     setLocalMessage(null);
+  };
+
+  const handleSelectDraft = (mealSlotId: string) => {
+    if (!mealSlotId) {
+      resetForm();
+      return;
+    }
+
+    const meal = items.find((item) => item.meal_slot_id === mealSlotId);
+    if (!meal) return;
+
+    setSelectedMealSlotId(meal.meal_slot_id);
+    setPlannedFor(meal.planned_for);
+    setMealType(meal.meal_type);
+    setTemplateCode(findMealTemplateCodeFromDraft(meal.meal_type, meal.title));
+    setOperatorNotes(extractOperatorNotes(meal.notes));
+    setLocalMessage(`Édition du repas : ${meal.meal_slot_id}`);
   };
 
   const handleCreateOrUpdate = async () => {
@@ -194,15 +235,7 @@ export default function MealsPage() {
   };
 
   const handleEdit = (mealSlotId: string) => {
-    const meal = items.find((item) => item.meal_slot_id === mealSlotId);
-    if (!meal) return;
-
-    setSelectedMealSlotId(meal.meal_slot_id);
-    setPlannedFor(meal.planned_for);
-    setMealType(meal.meal_type);
-    setTemplateCode(findMealTemplateCodeFromDraft(meal.meal_type, meal.title));
-    setOperatorNotes(extractOperatorNotes(meal.notes));
-    setLocalMessage(`Édition du repas : ${meal.meal_slot_id}`);
+    handleSelectDraft(mealSlotId);
   };
 
   const handleConfirm = async (mealSlotId: string) => {
@@ -210,8 +243,9 @@ export default function MealsPage() {
 
     try {
       const result = await confirmMealSlot(mealSlotId);
+
       setLocalMessage(
-        `Repas confirmé : ${result.meal_slot_id ?? mealSlotId} (${result.status ?? "CONFIRMED"})`
+        `Repas confirmé : ${result.meal_slot_id ?? mealSlotId} (${result.status ?? "CONFIRMED"})`,
       );
     } catch {
       // erreur déjà gérée par le hook
@@ -221,27 +255,25 @@ export default function MealsPage() {
   return (
     <main className="min-h-screen bg-black px-6 py-8 text-white">
       <div className="mx-auto max-w-7xl">
-        <div className="mb-8 flex items-start justify-between gap-4">
-          <div>
-            <button
-              type="button"
-              onClick={() => navigate(ROUTES.DASHBOARD)}
-              className="mt-1 inline-flex h-10 w-10 items-center justify-center border border-white/10 transition-colors hover:border-gold/40"
-              aria-label="Retour"
-            >
-              <ArrowLeft className="h-4 w-4" />
-            </button>
+        <div className="mb-8">
+          <button
+            type="button"
+            onClick={() => navigate(ROUTES.DASHBOARD)}
+            className="mt-1 inline-flex h-10 w-10 items-center justify-center border border-white/10 transition-colors hover:border-gold/40"
+            aria-label="Retour"
+          >
+            <ArrowLeft className="h-4 w-4" />
+          </button>
 
-            <div className="mt-6 text-xs uppercase tracking-[0.35em] text-gold/80">
-              DOMYLI
-            </div>
-            <h1 className="mt-3 text-4xl font-semibold">Meals</h1>
-            <p className="mt-3 max-w-3xl text-white/65">
-              Ici, un repas n’est pas une simple ligne libre. C’est une intention
-              canonique du foyer, cadrée par le type de repas, les contraintes
-              humaines et l’exécution réelle.
-            </p>
+          <div className="mt-6 text-xs uppercase tracking-[0.35em] text-gold/80">
+            DOMYLI
           </div>
+          <h1 className="mt-3 text-4xl font-semibold">Meals</h1>
+          <p className="mt-3 max-w-3xl text-white/65">
+            Ici, un repas n’est pas une ligne libre. C’est une intention
+            canonique du foyer, cadrée par le type de repas, le template DOMYLI
+            et une exécution traçable.
+          </p>
         </div>
 
         <div className="grid gap-8 lg:grid-cols-[1.3fr_0.7fr]">
@@ -259,11 +291,30 @@ export default function MealsPage() {
 
             <p className="mt-6 max-w-3xl text-lg leading-9 text-white/65">
               Sélectionne un type de repas puis un template DOMYLI. Le titre est
-              généré de manière canonique et les notes sont structurées pour rester
-              compatibles avec le contrat RPC actuel.
+              généré de manière canonique et la note libre reste limitée au seul
+              commentaire opérateur du foyer.
             </p>
 
             <div className="mt-10 grid gap-6 md:grid-cols-2">
+              <div>
+                <label className="mb-3 block text-xs uppercase tracking-[0.32em] text-gold/80">
+                  Repas déjà manipulés
+                </label>
+                <select
+                  value={selectedMealSlotId}
+                  onChange={(e) => handleSelectDraft(e.target.value)}
+                  className="w-full border border-white/10 bg-black/20 px-4 py-4 text-sm outline-none focus:border-gold/50"
+                >
+                  <option value="">Créer un nouveau repas</option>
+                  {draftOptions.map((item) => (
+                    <option key={item.meal_slot_id} value={item.meal_slot_id}>
+                      {item.planned_for} • {getMealTypeLabel(item.meal_type)} •{" "}
+                      {item.title ?? "Sans titre"} • {getMealStatusLabel(item.status)}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
               <div>
                 <label className="mb-3 block text-xs uppercase tracking-[0.32em] text-gold/80">
                   Date
@@ -293,7 +344,7 @@ export default function MealsPage() {
                 </select>
               </div>
 
-              <div className="md:col-span-2">
+              <div>
                 <label className="mb-3 block text-xs uppercase tracking-[0.32em] text-gold/80">
                   Template repas DOMYLI
                 </label>
@@ -311,30 +362,43 @@ export default function MealsPage() {
                 </select>
               </div>
 
-              <div className="md:col-span-2 rounded-[1.5rem] border border-white/10 bg-black/20 px-5 py-5">
-                <div className="text-xs uppercase tracking-[0.24em] text-gold/75">
-                  Titre canonique généré
+              <div className="md:col-span-2 grid gap-6 md:grid-cols-2">
+                <div className="rounded-[1.5rem] border border-white/10 bg-black/20 px-5 py-5">
+                  <div className="text-xs uppercase tracking-[0.24em] text-gold/75">
+                    Titre canonique généré
+                  </div>
+                  <div className="mt-3 text-xl">
+                    {selectedTemplate?.label ?? "—"}
+                  </div>
                 </div>
-                <div className="mt-3 text-xl">
-                  {selectedTemplate?.label ?? "—"}
+
+                <div className="rounded-[1.5rem] border border-white/10 bg-black/20 px-5 py-5">
+                  <div className="text-xs uppercase tracking-[0.24em] text-gold/75">
+                    Lecture template
+                  </div>
+                  <div className="mt-3 text-sm text-white/75">
+                    {selectedTemplate?.description ??
+                      "Sélectionne un template pour afficher sa lecture métier."}
+                  </div>
                 </div>
               </div>
 
-              <div className="md:col-span-2 rounded-[1.5rem] border border-white/10 bg-black/20 px-5 py-5">
-                <div className="text-xs uppercase tracking-[0.24em] text-gold/75">
-                  Lecture template
-                </div>
-                <div className="mt-3 text-white/75">
-                  {selectedTemplate?.description ?? "Sélectionne un template pour afficher sa lecture métier."}
-                </div>
-
-                {selectedTemplate?.flows?.length ? (
-                  <div className="mt-4 flex flex-wrap gap-2">
-                    {selectedTemplate.flows.map((flow) => (
-                      <FlowBadge key={flow} flow={flow} />
-                    ))}
+              <div className="md:col-span-2">
+                <div className="rounded-[1.5rem] border border-white/10 bg-black/20 px-5 py-5">
+                  <div className="text-xs uppercase tracking-[0.24em] text-gold/75">
+                    Flux impactés
                   </div>
-                ) : null}
+
+                  <div className="mt-4 flex flex-wrap gap-2">
+                    {selectedTemplate?.flows?.length ? (
+                      selectedTemplate.flows.map((flow) => (
+                        <FlowBadge key={flow} flow={flow} />
+                      ))
+                    ) : (
+                      <span className="text-white/45">Aucun flux affiché</span>
+                    )}
+                  </div>
+                </div>
               </div>
 
               <div className="md:col-span-2">
@@ -345,7 +409,7 @@ export default function MealsPage() {
                   value={operatorNotes}
                   onChange={(e) => setOperatorNotes(e.target.value)}
                   rows={4}
-                  placeholder="Ex: utiliser en priorité les produits frais déjà ouverts."
+                  placeholder="Ex : utiliser en priorité les produits frais déjà ouverts."
                   className="w-full resize-none border border-white/10 bg-black/20 px-4 py-4 text-sm outline-none focus:border-gold/50"
                 />
               </div>
@@ -362,21 +426,19 @@ export default function MealsPage() {
                 {saving
                   ? "Enregistrement..."
                   : isEditMode
-                  ? "Mettre à jour le repas"
-                  : "Créer le repas"}
+                    ? "Mettre à jour le repas"
+                    : "Créer le repas"}
               </button>
 
-              {selectedMealSlotId && (
-                <button
-                  type="button"
-                  onClick={() => handleConfirm(selectedMealSlotId)}
-                  disabled={confirming}
-                  className="inline-flex items-center justify-center gap-3 border border-white/10 px-6 py-4 text-sm uppercase tracking-[0.25em] text-white transition-colors hover:border-gold/40 hover:text-gold disabled:opacity-50"
-                >
-                  <CheckCircle2 size={18} />
-                  {confirming ? "Confirmation..." : "Confirmer le repas"}
-                </button>
-              )}
+              <button
+                type="button"
+                onClick={() => selectedMealSlotId && handleConfirm(selectedMealSlotId)}
+                disabled={!selectedMealSlotId || !canConfirmSelected || confirming}
+                className="inline-flex items-center justify-center gap-3 border border-white/10 px-6 py-4 text-sm uppercase tracking-[0.25em] text-white transition-colors hover:border-gold/40 hover:text-gold disabled:opacity-50"
+              >
+                <CheckCircle2 size={18} />
+                {confirming ? "Confirmation..." : "Confirmer le repas"}
+              </button>
 
               <button
                 type="button"
@@ -385,6 +447,14 @@ export default function MealsPage() {
               >
                 <CalendarDays size={18} />
                 Reset
+              </button>
+
+              <button
+                type="button"
+                onClick={() => navigate(ROUTES.SHOPPING)}
+                className="inline-flex items-center justify-center gap-3 border border-gold/30 px-6 py-4 text-sm uppercase tracking-[0.25em] text-gold transition-colors hover:bg-gold/10"
+              >
+                Ouvrir Shopping
               </button>
             </div>
 
@@ -399,10 +469,10 @@ export default function MealsPage() {
                   (lastCreatedMealSlotId
                     ? `Repas créé : ${lastCreatedMealSlotId}`
                     : lastUpdatedMealSlotId
-                    ? `Repas mis à jour : ${lastUpdatedMealSlotId}`
-                    : lastConfirmResult
-                    ? `Repas confirmé : ${lastConfirmResult.meal_slot_id ?? "—"}`
-                    : null)}
+                      ? `Repas mis à jour : ${lastUpdatedMealSlotId}`
+                      : lastConfirmResult
+                        ? `Repas confirmé : ${lastConfirmResult.meal_slot_id ?? "—"}`
+                        : null)}
               </div>
             )}
 
@@ -469,16 +539,15 @@ export default function MealsPage() {
                   <div className="text-xs uppercase tracking-[0.28em] text-gold/75">
                     Template sélectionné
                   </div>
-                  <div className="mt-3 text-lg">
-                    {selectedTemplate?.label ?? "—"}
-                  </div>
+                  <div className="mt-3 text-lg">{selectedTemplate?.label ?? "—"}</div>
                 </div>
               </div>
 
               <div className="mt-6 flex items-center gap-3 text-white/45">
                 <ShieldCheck className="h-4 w-4 text-gold/80" />
                 <span className="text-sm">
-                  Meal gouverné DOMYLI : type canonique, template lisible, confirmation traçable.
+                  Meal gouverné DOMYLI : type canonique, template lisible,
+                  confirmation traçable.
                 </span>
               </div>
             </section>
@@ -497,56 +566,68 @@ export default function MealsPage() {
                 </div>
               ) : (
                 <div className="space-y-4">
-                  {items.map((item) => (
-                    <div
-                      key={item.meal_slot_id}
+                  {draftOptions.map((meal) => (
+                    <article
+                      key={meal.meal_slot_id}
                       className="rounded-[1.5rem] border border-white/10 bg-black/20 p-5"
                     >
-                      <div className="flex items-start justify-between gap-3">
+                      <div className="flex flex-wrap items-start justify-between gap-3">
                         <div>
-                          <div className="text-xs uppercase tracking-[0.22em] text-gold/80">
-                            {getMealTypeLabel(item.meal_type)}
+                          <div className="text-xs uppercase tracking-[0.24em] text-gold/75">
+                            Repas
                           </div>
-                          <div className="mt-2 text-base text-white">
-                            {item.title ?? item.meal_slot_id}
+                          <h3 className="mt-2 text-xl font-medium">
+                            {meal.title ?? "Sans titre"}
+                          </h3>
+                        </div>
+
+                        <span className="inline-flex items-center border border-gold/30 bg-gold/10 px-3 py-1 text-xs uppercase tracking-[0.18em] text-gold">
+                          {getMealStatusLabel(meal.status)}
+                        </span>
+                      </div>
+
+                      <div className="mt-5 grid gap-4 md:grid-cols-2">
+                        <div className="rounded-[1rem] border border-white/10 bg-black/30 px-4 py-4">
+                          <div className="text-xs uppercase tracking-[0.2em] text-gold/75">
+                            Date
                           </div>
-                          <div className="mt-2 text-xs text-white/60">
-                            {item.planned_for} · {getMealStatusLabel(item.status)}
+                          <div className="mt-2 text-base">{meal.planned_for}</div>
+                        </div>
+
+                        <div className="rounded-[1rem] border border-white/10 bg-black/30 px-4 py-4">
+                          <div className="text-xs uppercase tracking-[0.2em] text-gold/75">
+                            Type
+                          </div>
+                          <div className="mt-2 text-base">
+                            {getMealTypeLabel(meal.meal_type)}
                           </div>
                         </div>
                       </div>
 
-                      <div className="mt-4 flex flex-wrap gap-3">
+                      <div className="mt-5 flex flex-wrap gap-3">
                         <button
                           type="button"
-                          onClick={() => handleEdit(item.meal_slot_id)}
-                          className="inline-flex items-center justify-center gap-2 border border-white/10 px-4 py-3 text-xs uppercase tracking-[0.18em] text-white transition-colors hover:border-gold/40 hover:text-gold"
+                          onClick={() => handleEdit(meal.meal_slot_id)}
+                          className="inline-flex items-center justify-center gap-2 border border-white/10 px-4 py-3 text-xs uppercase tracking-[0.2em] text-white transition-colors hover:border-gold/40 hover:text-gold"
                         >
-                          Éditer
+                          Modifier
                         </button>
 
                         <button
                           type="button"
-                          onClick={() => handleConfirm(item.meal_slot_id)}
-                          disabled={confirming}
-                          className="inline-flex items-center justify-center gap-2 border border-gold/30 px-4 py-3 text-xs uppercase tracking-[0.18em] text-gold transition-colors hover:bg-gold/10 disabled:opacity-50"
+                          onClick={() => handleConfirm(meal.meal_slot_id)}
+                          disabled={["CONFIRMED", "EXECUTED", "CANCELLED"].includes(
+                            meal.status ?? "",
+                          )}
+                          className="inline-flex items-center justify-center gap-2 border border-gold/30 px-4 py-3 text-xs uppercase tracking-[0.2em] text-gold transition-colors hover:bg-gold/10 disabled:opacity-40"
                         >
                           Confirmer
                         </button>
                       </div>
-                    </div>
+                    </article>
                   ))}
                 </div>
               )}
-
-              <button
-                type="button"
-                onClick={() => navigate(ROUTES.DASHBOARD)}
-                className="mt-8 inline-flex w-full items-center justify-center gap-3 border border-white/10 px-5 py-4 text-sm uppercase tracking-[0.24em] text-white transition-colors hover:border-gold/40 hover:text-gold"
-              >
-                Retour dashboard
-                <ArrowRight className="h-4 w-4" />
-              </button>
             </section>
           </aside>
         </div>
