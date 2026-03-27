@@ -1,7 +1,7 @@
 import { Link } from "react-router-dom";
 import { useMemo } from "react";
-import { useDashboard } from "../hooks/useDashboard";
 import { useStatus } from "../hooks/useStatus";
+import useDashboard from "../hooks/useDashboard";
 
 type UnknownRecord = Record<string, unknown>;
 
