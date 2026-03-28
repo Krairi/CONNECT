@@ -4,12 +4,12 @@ import { toDomyliError } from "@/src/lib/errors";
 export type InventoryItemUpsertInput = {
   p_household_id: string;
   p_name: string;
-  p_category?: string | null;
-  p_unit?: string | null;
+  p_category: string;
+  p_unit: string;
   p_qty_on_hand: number;
   p_min_qty?: number | null;
-  p_item_code?: string | null;
-  p_category_code?: string | null;
+  p_item_code: string;
+  p_category_code: string;
 };
 
 export type InventoryItemUpsertOutput = {
@@ -24,25 +24,37 @@ export type InventoryItemUpsertOutput = {
 type RawInventoryItemUpsertOutput = {
   item_id?: string | null;
   inventory_item_id?: string | null;
+  id?: string | null;
   stock_key?: string | null;
   item_name?: string | null;
   name?: string | null;
-  qty_on_hand?: number | null;
-  min_qty?: number | null;
+  qty_on_hand?: number | string | null;
+  min_qty?: number | string | null;
   unit?: string | null;
 };
 
 type RawShoppingListRebuildOutput = {
-  inserted_count?: number | null;
-  existing_open_count?: number | null;
+  inserted_count?: number | string | null;
+  existing_open_count?: number | string | null;
+  items_count?: number | string | null;
   generated_at?: string | null;
 };
 
-export type ShoppingListRebuildForHouseholdOutput = {
+export type ShoppingListRebuildOutput = {
   rebuilt: boolean;
   items_count: number;
   generated_at: string;
 };
+
+function trimRequired(value: string, fieldLabel: string): string {
+  const normalized = value.trim();
+
+  if (!normalized) {
+    throw new Error(`${fieldLabel} est obligatoire.`);
+  }
+
+  return normalized;
+}
 
 function trimToNull(value?: string | null): string | null {
   const normalized = value?.trim();
@@ -53,116 +65,84 @@ function pickFirst<T>(value: T | T[] | null | undefined): T | null {
   if (Array.isArray(value)) {
     return value[0] ?? null;
   }
+
   return value ?? null;
 }
 
-function isRpcSignatureError(error: unknown, rpcName: string): boolean {
-  const normalized = toDomyliError(error);
-  const haystack = `${normalized.message ?? ""} ${normalized.details ?? ""} ${normalized.hint ?? ""}`.toLowerCase();
+function toNumber(value: number | string | null | undefined, fallback = 0): number {
+  const normalized = Number(value);
 
-  return (
-    normalized.code === "PGRST202" ||
-    haystack.includes("could not find the function") ||
-    haystack.includes("schema cache") ||
-    haystack.includes(rpcName.toLowerCase())
-  );
+  return Number.isFinite(normalized) ? normalized : fallback;
 }
 
 function normalizeInventoryItem(
-  raw: RawInventoryItemUpsertOutput | RawInventoryItemUpsertOutput[] | null | undefined,
-  payload: InventoryItemUpsertInput
+  raw:
+    | RawInventoryItemUpsertOutput
+    | RawInventoryItemUpsertOutput[]
+    | null
+    | undefined,
+  payload: InventoryItemUpsertInput,
 ): InventoryItemUpsertOutput {
   const row = pickFirst(raw);
 
   return {
-    item_id: row?.item_id ?? row?.inventory_item_id ?? "",
+    item_id: row?.item_id ?? row?.inventory_item_id ?? row?.id ?? "",
     stock_key: row?.stock_key ?? null,
     item_name: row?.item_name ?? row?.name ?? payload.p_name,
-    qty_on_hand: Number(row?.qty_on_hand ?? payload.p_qty_on_hand),
-    min_qty: Number(row?.min_qty ?? payload.p_min_qty ?? 0),
-    unit: row?.unit ?? payload.p_unit ?? null,
+    qty_on_hand: toNumber(row?.qty_on_hand, payload.p_qty_on_hand),
+    min_qty: toNumber(row?.min_qty, payload.p_min_qty ?? 0),
+    unit: row?.unit ?? payload.p_unit,
   };
-}
-
-function buildInventoryCandidates(payload: InventoryItemUpsertInput): Array<Record<string, unknown>> {
-  const basePayload: Record<string, unknown> = {
-    p_household_id: payload.p_household_id,
-    p_name: payload.p_name.trim(),
-    p_category: trimToNull(payload.p_category),
-    p_unit: trimToNull(payload.p_unit),
-    p_qty_on_hand: Number(payload.p_qty_on_hand),
-    p_min_qty:
-      payload.p_min_qty === null || payload.p_min_qty === undefined
-        ? null
-        : Number(payload.p_min_qty),
-  };
-
-  const enrichedPayload: Record<string, unknown> = {
-    ...basePayload,
-    p_item_code: trimToNull(payload.p_item_code),
-    p_category_code: trimToNull(payload.p_category_code),
-  };
-
-  const hasCanonicalCodes =
-    typeof enrichedPayload.p_item_code === "string" ||
-    typeof enrichedPayload.p_category_code === "string";
-
-  return hasCanonicalCodes ? [enrichedPayload, basePayload] : [basePayload];
 }
 
 export async function upsertInventoryItem(
-  payload: InventoryItemUpsertInput
+  payload: InventoryItemUpsertInput,
 ): Promise<InventoryItemUpsertOutput> {
-  const candidates = buildInventoryCandidates(payload);
-  let lastError: unknown = null;
-
-  for (const candidate of candidates) {
-    try {
-      const raw = await callRpc("rpc_inventory_item_upsert", candidate);
-      return normalizeInventoryItem(
-        raw as RawInventoryItemUpsertOutput | RawInventoryItemUpsertOutput[] | null,
-        payload
-      );
-    } catch (error) {
-      lastError = error;
-
-      if (!isRpcSignatureError(error, "rpc_inventory_item_upsert")) {
-        throw toDomyliError(error);
-      }
-    }
-  }
-
-  throw toDomyliError(lastError);
-}
-
-async function rebuildShoppingRpc(
-  householdId: string
-): Promise<RawShoppingListRebuildOutput | RawShoppingListRebuildOutput[] | null> {
   try {
-    return (await callRpc("rpc_shopping_list_rebuild", {
-      p_household_id: householdId,
-    })) as RawShoppingListRebuildOutput | RawShoppingListRebuildOutput[] | null;
-  } catch (error) {
-    if (!isRpcSignatureError(error, "rpc_shopping_list_rebuild")) {
-      throw toDomyliError(error);
-    }
+    const raw = await callRpc("rpc_inventory_item_upsert", {
+      p_household_id: payload.p_household_id,
+      p_name: trimRequired(payload.p_name, "Le nom de l’article"),
+      p_category: trimRequired(payload.p_category, "La catégorie"),
+      p_unit: trimRequired(payload.p_unit, "L’unité"),
+      p_qty_on_hand: Number(payload.p_qty_on_hand),
+      p_min_qty:
+        payload.p_min_qty === null || payload.p_min_qty === undefined
+          ? null
+          : Number(payload.p_min_qty),
+      p_item_code: trimRequired(payload.p_item_code, "Le code article"),
+      p_category_code: trimRequired(
+        payload.p_category_code,
+        "Le code catégorie",
+      ),
+    });
 
-    return (await callRpc("rpc_shopping_list_rebuild", {})) as
-      | RawShoppingListRebuildOutput
-      | RawShoppingListRebuildOutput[]
-      | null;
+    return normalizeInventoryItem(
+      raw as RawInventoryItemUpsertOutput | RawInventoryItemUpsertOutput[] | null,
+      payload,
+    );
+  } catch (error) {
+    throw toDomyliError(error);
   }
 }
 
-export async function rebuildShoppingListForHousehold(
-  householdId: string
-): Promise<ShoppingListRebuildForHouseholdOutput> {
-  const raw = await rebuildShoppingRpc(householdId);
-  const row = pickFirst(raw);
+export async function rebuildShoppingList(): Promise<ShoppingListRebuildOutput> {
+  try {
+    const raw = (await callRpc(
+      "rpc_shopping_list_rebuild",
+      {},
+    )) as RawShoppingListRebuildOutput | RawShoppingListRebuildOutput[] | null;
 
-  return {
-    rebuilt: true,
-    items_count: Number(row?.inserted_count ?? row?.existing_open_count ?? 0),
-    generated_at: row?.generated_at ?? new Date().toISOString(),
-  };
+    const row = pickFirst(raw);
+
+    return {
+      rebuilt: true,
+      items_count: toNumber(
+        row?.items_count ?? row?.inserted_count ?? row?.existing_open_count,
+        0,
+      ),
+      generated_at: trimToNull(row?.generated_at) ?? new Date().toISOString(),
+    };
+  } catch (error) {
+    throw toDomyliError(error);
+  }
 }
