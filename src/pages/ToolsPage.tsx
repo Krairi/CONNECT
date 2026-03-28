@@ -9,10 +9,9 @@ import {
   ShieldCheck,
   Wrench,
 } from "lucide-react";
-
-import { useDomyliConnection } from "../hooks/useDomyliConnection";
-import { useTools } from "../hooks/useTools";
-import { navigateTo } from "../lib/navigation";
+import { useAuth } from "@/src/providers/AuthProvider";
+import { useTools } from "@/src/hooks/useTools";
+import { navigateTo } from "@/src/lib/navigation";
 import {
   buildToolDescription,
   extractToolOperatorNotes,
@@ -29,7 +28,8 @@ import {
   TOOL_CATEGORY_OPTIONS,
   type ToolAssetStatusCode,
   type ToolReleaseStatusCode,
-} from "../constants/toolCatalog";
+} from "@/src/constants/toolCatalog";
+import { ROUTES } from "@/src/constants/routes";
 
 function toIsoDateTimeLocal(value: string) {
   return value ? value.slice(0, 16) : "";
@@ -48,7 +48,7 @@ function nowLocalPlus(hours: number) {
 
 function FlowBadge({ label }: { label: string }) {
   return (
-    <span className="inline-flex items-center border border-gold/30 bg-gold/10 px-3 py-1 text-xs uppercase tracking-[0.18em] text-gold">
+    <span className="inline-flex items-center rounded-full border border-gold/20 bg-gold/10 px-3 py-1 text-[11px] uppercase tracking-[0.2em] text-gold">
       {label}
     </span>
   );
@@ -62,7 +62,8 @@ export default function ToolsPage() {
     isAuthenticated,
     hasHousehold,
     authLoading,
-  } = useDomyliConnection();
+    bootstrapLoading,
+  } = useAuth();
 
   const {
     saving,
@@ -70,6 +71,8 @@ export default function ToolsPage() {
     releasing,
     error,
     tools,
+    assets,
+    openReservations,
     lastUpsertResult,
     lastReservationId,
     lastReleaseId,
@@ -78,13 +81,12 @@ export default function ToolsPage() {
     releaseToolReservation,
   } = useTools();
 
-  const [toolId, setToolId] = useState("");
+  const [selectedToolId, setSelectedToolId] = useState("");
   const [categoryCode, setCategoryCode] = useState("");
   const [templateCode, setTemplateCode] = useState("");
   const [operatorNotes, setOperatorNotes] = useState("");
   const [toolIsActive, setToolIsActive] = useState(true);
 
-  const [assetId, setAssetId] = useState("");
   const [assetName, setAssetName] = useState("");
   const [assetStatus, setAssetStatus] =
     useState<ToolAssetStatusCode>("AVAILABLE");
@@ -93,7 +95,6 @@ export default function ToolsPage() {
   const [reserveAssetId, setReserveAssetId] = useState("");
   const [reserveStartsAt, setReserveStartsAt] = useState(nowLocalPlus(1));
   const [reserveEndsAt, setReserveEndsAt] = useState(nowLocalPlus(2));
-  const [reserveTaskInstanceId, setReserveTaskInstanceId] = useState("");
   const [reserveNotes, setReserveNotes] = useState("");
 
   const [releaseReservationId, setReleaseReservationId] = useState("");
@@ -104,31 +105,30 @@ export default function ToolsPage() {
 
   const templateOptions = useMemo(
     () => getToolTemplatesByCategory(categoryCode),
-    [categoryCode]
+    [categoryCode],
   );
 
   const selectedTemplate = useMemo(
     () => getToolTemplateByCode(templateCode),
-    [templateCode]
+    [templateCode],
   );
 
-  const sessionAssets = useMemo(
-    () =>
-      tools.filter((tool) => Boolean(tool.asset_id)).map((tool) => ({
-        tool_id: tool.tool_id,
-        tool_name: tool.name,
-        category: tool.category,
-        asset_id: tool.asset_id as string,
-        asset_name: tool.asset_name,
-        asset_status: tool.asset_status,
-        asset_notes: tool.asset_notes,
-      })),
-    [tools]
+  const selectedTool = useMemo(
+    () => tools.find((tool) => tool.tool_id === selectedToolId) ?? null,
+    [tools, selectedToolId],
   );
 
   const selectedReserveAsset = useMemo(
-    () => sessionAssets.find((asset) => asset.asset_id === reserveAssetId) ?? null,
-    [sessionAssets, reserveAssetId]
+    () => assets.find((asset) => asset.asset_id === reserveAssetId) ?? null,
+    [assets, reserveAssetId],
+  );
+
+  const selectedReleaseReservation = useMemo(
+    () =>
+      openReservations.find(
+        (reservation) => reservation.reservation_id === releaseReservationId,
+      ) ?? null,
+    [openReservations, releaseReservationId],
   );
 
   useEffect(() => {
@@ -137,40 +137,42 @@ export default function ToolsPage() {
     }
   }, [lastReservationId, releaseReservationId]);
 
-  if (authLoading) {
+  if (authLoading || bootstrapLoading) {
     return (
-      <main className="min-h-screen bg-black px-6 py-10 text-white">
-        <div className="mx-auto max-w-3xl border border-gold/20 bg-black/40 p-8">
-          <div className="text-xs uppercase tracking-[0.35em] text-gold/80">
+      <div className="min-h-screen bg-black px-6 py-10 text-white">
+        <div className="mx-auto max-w-6xl rounded-[28px] border border-white/10 bg-white/5 p-8 backdrop-blur">
+          <p className="text-xs uppercase tracking-[0.24em] text-gold">
             DOMYLI
-          </div>
-          <h1 className="mt-4 text-3xl font-semibold">Chargement des outils...</h1>
+          </p>
+          <h1 className="mt-4 text-3xl font-semibold">
+            Chargement des outils...
+          </h1>
         </div>
-      </main>
+      </div>
     );
   }
 
   if (!isAuthenticated || !hasHousehold) {
     return (
-      <main className="min-h-screen bg-black px-6 py-10 text-white">
-        <div className="mx-auto max-w-3xl border border-gold/20 bg-black/40 p-8">
-          <div className="text-xs uppercase tracking-[0.35em] text-gold/80">
+      <div className="min-h-screen bg-black px-6 py-10 text-white">
+        <div className="mx-auto max-w-6xl rounded-[28px] border border-white/10 bg-white/5 p-8 backdrop-blur">
+          <p className="text-xs uppercase tracking-[0.24em] text-gold">
             DOMYLI
-          </div>
-          <h1 className="mt-4 text-3xl font-semibold">Foyer requis</h1>
-          <p className="mt-4 text-white/70">
-            Il faut une session authentifiée et un foyer actif pour accéder aux outils.
           </p>
-
+          <h1 className="mt-4 text-3xl font-semibold">Foyer requis</h1>
+          <p className="mt-3 text-white/70">
+            Il faut une session authentifiée et un foyer actif pour accéder aux
+            outils.
+          </p>
           <button
             type="button"
-            onClick={() => navigateTo("/")}
+            onClick={() => navigateTo(ROUTES.HOME)}
             className="mt-8 border border-gold/40 px-6 py-3 text-sm uppercase tracking-[0.25em] text-gold transition-colors hover:bg-gold hover:text-black"
           >
             Retour à l’accueil
           </button>
         </div>
-      </main>
+      </div>
     );
   }
 
@@ -178,6 +180,8 @@ export default function ToolsPage() {
     setCategoryCode(nextCategoryCode);
     setTemplateCode("");
     setOperatorNotes("");
+    setAssetName("");
+    setAssetNotes("");
     setLocalMessage(null);
   };
 
@@ -186,18 +190,18 @@ export default function ToolsPage() {
     setLocalMessage(null);
 
     const template = getToolTemplateByCode(nextTemplateCode);
-    if (template && !assetId) {
+
+    if (template) {
       setAssetName(template.defaultAssetName);
     }
   };
 
   const resetCreationState = () => {
-    setToolId("");
+    setSelectedToolId("");
     setCategoryCode("");
     setTemplateCode("");
     setOperatorNotes("");
     setToolIsActive(true);
-    setAssetId("");
     setAssetName("");
     setAssetStatus("AVAILABLE");
     setAssetNotes("");
@@ -213,31 +217,26 @@ export default function ToolsPage() {
 
     try {
       const result = await saveTool({
-        p_tool_id: toolId.trim() || null,
+        p_tool_id: selectedToolId || null,
         p_name: selectedTemplate.label,
         p_category: getToolCategoryLabel(categoryCode),
         p_description: buildToolDescription(selectedTemplate, operatorNotes),
         p_is_active: toolIsActive,
-        p_asset_id: assetId.trim() || null,
+        p_asset_id: selectedTool?.asset_id ?? null,
         p_asset_name: (assetName.trim() || selectedTemplate.defaultAssetName).trim(),
         p_asset_status: assetStatus,
         p_asset_notes: assetNotes.trim() || null,
       });
 
-      if (result.tool_id) {
-        setToolId(result.tool_id);
-      }
-
-      if (result.asset_id) {
-        setAssetId(result.asset_id);
-        setReserveAssetId(result.asset_id);
-      }
-
       setLocalMessage(
-        `Outil enregistré : ${selectedTemplate.label} · asset ${result.asset_id ?? "—"}`
+        `Outil enregistré : ${selectedTemplate.label} · asset ${result.asset_id ?? "—"}`,
       );
+
+      if (!selectedToolId) {
+        resetCreationState();
+      }
     } catch {
-      // erreur déjà gérée par le hook
+      // erreur gérée par le hook
     }
   };
 
@@ -259,14 +258,13 @@ export default function ToolsPage() {
         reserveAssetId.trim(),
         fromDateTimeLocalToIso(reserveStartsAt),
         fromDateTimeLocalToIso(reserveEndsAt),
-        reserveTaskInstanceId.trim() || null,
-        reserveNotes.trim() || null
+        reserveNotes.trim() || null,
       );
 
       setReleaseReservationId(reservationId);
       setLocalMessage(`Réservation créée : ${reservationId}`);
     } catch {
-      // erreur déjà gérée par le hook
+      // erreur gérée par le hook
     }
   };
 
@@ -274,18 +272,19 @@ export default function ToolsPage() {
     setLocalMessage(null);
 
     if (!releaseReservationId.trim()) {
-      setLocalMessage("Reservation ID requis.");
+      setLocalMessage("Sélectionne une réservation à libérer.");
       return;
     }
 
     try {
       const reservationId = await releaseToolReservation(
         releaseReservationId.trim(),
-        releaseStatus
+        releaseStatus,
       );
+
       setLocalMessage(`Réservation libérée : ${reservationId}`);
     } catch {
-      // erreur déjà gérée par le hook
+      // erreur gérée par le hook
     }
   };
 
@@ -295,85 +294,111 @@ export default function ToolsPage() {
     nextCategory: string,
     nextDescription: string,
     nextIsActive: boolean,
-    nextAssetId: string | null,
     nextAssetName: string,
     nextAssetStatus: string,
-    nextAssetNotes: string
+    nextAssetNotes: string,
   ) => {
     const inferredCategoryCode = inferToolCategoryCodeFromLabel(nextCategory);
     const inferredTemplateCode = inferToolTemplateCodeFromDraft(
       nextName,
-      nextCategory
+      nextCategory,
     );
 
-    setToolId(nextToolId);
+    setSelectedToolId(nextToolId);
     setCategoryCode(inferredCategoryCode);
     setTemplateCode(inferredTemplateCode);
     setOperatorNotes(extractToolOperatorNotes(nextDescription));
     setToolIsActive(nextIsActive);
-
-    setAssetId(nextAssetId ?? "");
     setAssetName(nextAssetName);
     setAssetStatus((nextAssetStatus as ToolAssetStatusCode) || "AVAILABLE");
     setAssetNotes(nextAssetNotes);
-
-    if (nextAssetId) {
-      setReserveAssetId(nextAssetId);
-    }
-
     setLocalMessage(`Édition outil : ${nextToolId}`);
   };
 
   return (
-    <main className="min-h-screen bg-black px-6 py-8 text-white">
+    <div className="min-h-screen bg-black px-6 py-10 text-white">
       <div className="mx-auto max-w-7xl">
-        <div className="mb-8 flex items-start justify-between gap-4">
-          <div>
-            <button
-              type="button"
-              onClick={() => navigateTo("/dashboard")}
-              className="mt-1 inline-flex h-10 w-10 items-center justify-center border border-white/10 transition-colors hover:border-gold/40"
-              aria-label="Retour"
-            >
-              <ArrowLeft className="h-4 w-4" />
-            </button>
+        <div className="grid gap-6 lg:grid-cols-[1.08fr_0.92fr]">
+          <section className="rounded-[28px] border border-white/10 bg-white/5 p-8 backdrop-blur">
+            <div className="flex items-start justify-between gap-4">
+              <button
+                type="button"
+                onClick={() => navigateTo(ROUTES.DASHBOARD)}
+                className="mt-1 inline-flex h-10 w-10 items-center justify-center border border-white/10 transition-colors hover:border-gold/40"
+                aria-label="Retour"
+              >
+                <ArrowLeft className="h-4 w-4" />
+              </button>
 
-            <div className="mt-6 text-xs uppercase tracking-[0.35em] text-gold/80">
-              DOMYLI
-            </div>
-            <h1 className="mt-3 text-4xl font-semibold">Tools</h1>
-            <p className="mt-3 max-w-3xl text-white/65">
-              Ici, les outils ne sont pas de simples objets libres. Ce sont des
-              ressources gouvernées du foyer, réservables, libérables et
-              rattachées à l’exécution réelle.
-            </p>
-          </div>
-        </div>
-
-        <div className="grid gap-8 lg:grid-cols-[1.3fr_0.7fr]">
-          <section className="rounded-[2rem] border border-gold/20 bg-black/40 p-8">
-            <div className="mb-6 flex items-center gap-3 text-gold/85">
-              <Wrench className="h-5 w-5" />
-              <span className="text-xs uppercase tracking-[0.35em]">
-                Gouvernance matériel
-              </span>
+              <div className="flex-1">
+                <p className="text-xs uppercase tracking-[0.24em] text-gold">
+                  DOMYLI
+                </p>
+                <h1 className="mt-4 text-3xl font-semibold">Tools</h1>
+                <p className="mt-3 max-w-3xl text-sm leading-7 text-white/70">
+                  Ici, les outils ne sont pas de simples objets libres. Ce sont
+                  des ressources gouvernées du foyer, réservables, libérables et
+                  rattachées à l’exécution réelle.
+                </p>
+              </div>
             </div>
 
-            <h2 className="text-3xl font-semibold">
+            <div className="mt-8 inline-flex items-center gap-2 rounded-full border border-gold/20 bg-gold/10 px-4 py-2 text-xs uppercase tracking-[0.24em] text-gold">
+              <Wrench className="h-4 w-4" />
+              Gouvernance matériel
+            </div>
+
+            <h2 className="mt-6 text-2xl font-semibold">
               Créer, réserver et libérer un outil gouverné
             </h2>
 
-            <p className="mt-6 max-w-3xl text-lg leading-9 text-white/65">
+            <p className="mt-3 max-w-3xl text-sm leading-7 text-white/70">
               Sélectionne une catégorie métier puis un outil canonique DOMYLI.
-              L’asset est ensuite piloté par statut et peut être réservé dans une
-              fenêtre temporelle traçable.
+              L’asset est ensuite piloté par statut et peut être réservé dans
+              une fenêtre temporelle traçable.
             </p>
 
-            <div className="mt-10 grid gap-6 md:grid-cols-2">
-              <div>
-                <label className="mb-3 block text-xs uppercase tracking-[0.32em] text-gold/80">
-                  Catégorie métier
-                </label>
+            <div className="mt-8 grid gap-4 md:grid-cols-2">
+              <label className="block text-sm text-white/80">
+                <span className="mb-2 block">Outil existant</span>
+                <select
+                  value={selectedToolId}
+                  onChange={(e) => {
+                    const nextId = e.target.value;
+                    setSelectedToolId(nextId);
+
+                    const tool =
+                      tools.find((item) => item.tool_id === nextId) ?? null;
+
+                    if (!tool) {
+                      resetCreationState();
+                      return;
+                    }
+
+                    preloadTool(
+                      tool.tool_id,
+                      tool.name,
+                      tool.category,
+                      tool.description,
+                      tool.is_active,
+                      tool.asset_name,
+                      tool.asset_status,
+                      tool.asset_notes,
+                    );
+                  }}
+                  className="w-full border border-white/10 bg-black/20 px-4 py-4 text-sm outline-none focus:border-gold/50"
+                >
+                  <option value="">Créer un nouvel outil</option>
+                  {tools.map((tool) => (
+                    <option key={tool.tool_id} value={tool.tool_id}>
+                      {tool.name} · {tool.asset_name || "sans asset"}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <label className="block text-sm text-white/80">
+                <span className="mb-2 block">Catégorie métier</span>
                 <select
                   value={categoryCode}
                   onChange={(e) => handleCategoryChange(e.target.value)}
@@ -386,12 +411,10 @@ export default function ToolsPage() {
                     </option>
                   ))}
                 </select>
-              </div>
+              </label>
 
-              <div>
-                <label className="mb-3 block text-xs uppercase tracking-[0.32em] text-gold/80">
-                  Outil canonique
-                </label>
+              <label className="block text-sm text-white/80 md:col-span-2">
+                <span className="mb-2 block">Outil canonique</span>
                 <select
                   value={templateCode}
                   onChange={(e) => handleTemplateChange(e.target.value)}
@@ -409,70 +432,53 @@ export default function ToolsPage() {
                     </option>
                   ))}
                 </select>
-              </div>
+              </label>
 
-              <div className="md:col-span-2 rounded-[1.5rem] border border-white/10 bg-black/20 px-5 py-5">
-                <div className="text-xs uppercase tracking-[0.24em] text-gold/75">
+              <div className="rounded-3xl border border-white/10 bg-black/20 p-5 md:col-span-2">
+                <p className="text-xs uppercase tracking-[0.24em] text-white/45">
                   Lecture outil
-                </div>
-                <div className="mt-3 text-white/75">
+                </p>
+                <p className="mt-3 text-sm leading-7 text-white/80">
                   {selectedTemplate?.description ??
                     "Sélectionne un outil canonique pour afficher sa lecture métier DOMYLI."}
-                </div>
+                </p>
 
                 {selectedTemplate?.flows?.length ? (
                   <div className="mt-4 flex flex-wrap gap-2">
                     {selectedTemplate.flows.map((flow) => (
-                      <FlowBadge key={flow} label={getToolFlowLabel(flow)} />
+                      <FlowBadge
+                        key={flow}
+                        label={getToolFlowLabel(flow)}
+                      />
                     ))}
                   </div>
                 ) : null}
               </div>
 
-              <div>
-                <label className="mb-3 block text-xs uppercase tracking-[0.32em] text-gold/80">
-                  Actif
-                </label>
+              <label className="block text-sm text-white/80">
+                <span className="mb-2 block">Actif</span>
                 <select
-                  value={String(toolIsActive)}
+                  value={toolIsActive ? "true" : "false"}
                   onChange={(e) => setToolIsActive(e.target.value === "true")}
                   className="w-full border border-white/10 bg-black/20 px-4 py-4 text-sm outline-none focus:border-gold/50"
                 >
                   <option value="true">Actif</option>
                   <option value="false">Inactif</option>
                 </select>
-              </div>
+              </label>
 
-              <div>
-                <label className="mb-3 block text-xs uppercase tracking-[0.32em] text-gold/80">
-                  Asset ID
-                </label>
+              <label className="block text-sm text-white/80">
+                <span className="mb-2 block">Nom asset</span>
                 <input
-                  type="text"
-                  value={assetId}
-                  onChange={(e) => setAssetId(e.target.value)}
-                  placeholder="uuid optionnel"
-                  className="w-full border border-white/10 bg-black/20 px-4 py-4 text-sm outline-none focus:border-gold/50"
-                />
-              </div>
-
-              <div>
-                <label className="mb-3 block text-xs uppercase tracking-[0.32em] text-gold/80">
-                  Nom asset
-                </label>
-                <input
-                  type="text"
                   value={assetName}
                   onChange={(e) => setAssetName(e.target.value)}
                   placeholder={selectedTemplate?.defaultAssetName ?? "Nom asset"}
                   className="w-full border border-white/10 bg-black/20 px-4 py-4 text-sm outline-none focus:border-gold/50"
                 />
-              </div>
+              </label>
 
-              <div>
-                <label className="mb-3 block text-xs uppercase tracking-[0.32em] text-gold/80">
-                  Statut asset
-                </label>
+              <label className="block text-sm text-white/80">
+                <span className="mb-2 block">Statut asset</span>
                 <select
                   value={assetStatus}
                   onChange={(e) =>
@@ -486,178 +492,161 @@ export default function ToolsPage() {
                     </option>
                   ))}
                 </select>
-              </div>
+              </label>
 
-              <div className="md:col-span-2">
-                <label className="mb-3 block text-xs uppercase tracking-[0.32em] text-gold/80">
-                  Note foyer outil
-                </label>
+              <label className="block text-sm text-white/80">
+                <span className="mb-2 block">Notes asset</span>
+                <input
+                  value={assetNotes}
+                  onChange={(e) => setAssetNotes(e.target.value)}
+                  placeholder="Commentaire opérateur asset"
+                  className="w-full border border-white/10 bg-black/20 px-4 py-4 text-sm outline-none focus:border-gold/50"
+                />
+              </label>
+
+              <label className="block text-sm text-white/80 md:col-span-2">
+                <span className="mb-2 block">Notes opérateur outil</span>
                 <textarea
                   value={operatorNotes}
                   onChange={(e) => setOperatorNotes(e.target.value)}
-                  rows={3}
-                  placeholder="Ex: à privilégier pour le nettoyage du salon."
+                  rows={4}
+                  placeholder="Ex. utiliser uniquement pour entretien salle de bain."
                   className="w-full resize-none border border-white/10 bg-black/20 px-4 py-4 text-sm outline-none focus:border-gold/50"
                 />
-              </div>
-
-              <div className="md:col-span-2">
-                <label className="mb-3 block text-xs uppercase tracking-[0.32em] text-gold/80">
-                  Note asset
-                </label>
-                <input
-                  type="text"
-                  value={assetNotes}
-                  onChange={(e) => setAssetNotes(e.target.value)}
-                  placeholder="Ex: câble neuf, batterie faible, bac remplacé."
-                  className="w-full border border-white/10 bg-black/20 px-4 py-4 text-sm outline-none focus:border-gold/50"
-                />
-              </div>
+              </label>
             </div>
 
-            <div className="mt-8 flex flex-wrap gap-4">
+            <div className="mt-8 flex flex-col gap-3 sm:flex-row">
               <button
                 type="button"
                 onClick={handleSaveTool}
                 disabled={saving}
-                className="inline-flex items-center justify-center gap-3 bg-gold px-6 py-4 text-sm uppercase tracking-[0.24em] text-black transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+                className="inline-flex items-center justify-center gap-3 bg-gold px-6 py-4 text-sm uppercase tracking-[0.25em] text-black transition hover:opacity-90 disabled:opacity-50"
               >
                 <Save className="h-4 w-4" />
-                {saving ? "Enregistrement..." : "Créer / mettre à jour l’outil"}
+                {saving ? "Enregistrement..." : "Enregistrer l’outil"}
               </button>
 
               <button
                 type="button"
                 onClick={resetCreationState}
-                className="inline-flex items-center justify-center gap-3 border border-white/10 px-6 py-4 text-sm uppercase tracking-[0.24em] text-white transition-colors hover:border-gold/40 hover:text-gold"
+                className="inline-flex items-center justify-center gap-3 border border-white/10 px-6 py-4 text-sm uppercase tracking-[0.25em] text-white transition-colors hover:border-gold/40 hover:text-gold"
               >
-                Reset création
-              </button>
-
-              <button
-                type="button"
-                onClick={() => navigateTo("/dashboard")}
-                className="inline-flex items-center justify-center gap-3 border border-white/10 px-6 py-4 text-sm uppercase tracking-[0.24em] text-white transition-colors hover:border-gold/40 hover:text-gold"
-              >
-                Dashboard
-                <ArrowRight className="h-4 w-4" />
+                Reset
               </button>
             </div>
 
-            <div className="mt-10 rounded-[1.5rem] border border-white/10 bg-black/20 p-6">
-              <h3 className="mb-4 text-xl italic">Réservation d’un asset</h3>
+            <div className="mt-10 rounded-[28px] border border-white/10 bg-black/20 p-6">
+              <div className="flex items-center gap-3 text-gold/85">
+                <CalendarClock className="h-5 w-5" />
+                <span className="text-xs uppercase tracking-[0.35em]">
+                  Réservation contrôlée
+                </span>
+              </div>
 
-              <div className="grid gap-6 md:grid-cols-2">
-                <div className="md:col-span-2">
-                  <label className="mb-3 block text-xs uppercase tracking-[0.32em] text-gold/80">
-                    Asset à réserver
-                  </label>
+              <div className="mt-6 grid gap-4 md:grid-cols-2">
+                <label className="block text-sm text-white/80 md:col-span-2">
+                  <span className="mb-2 block">Asset à réserver</span>
                   <select
                     value={reserveAssetId}
                     onChange={(e) => setReserveAssetId(e.target.value)}
                     className="w-full border border-white/10 bg-black/20 px-4 py-4 text-sm outline-none focus:border-gold/50"
                   >
-                    <option value="">Sélectionner un asset connu</option>
-                    {sessionAssets.map((asset) => (
+                    <option value="">Sélectionner un asset contrôlé</option>
+                    {assets.map((asset) => (
                       <option key={asset.asset_id} value={asset.asset_id}>
-                        {asset.asset_name || asset.tool_name} · {getToolAssetStatusLabel(asset.asset_status)} · {asset.asset_id.slice(0, 8)}
+                        {asset.asset_name} · {asset.tool_name} ·{" "}
+                        {getToolAssetStatusLabel(asset.asset_status)}
                       </option>
                     ))}
                   </select>
-                </div>
+                </label>
 
-                <div>
-                  <label className="mb-3 block text-xs uppercase tracking-[0.32em] text-gold/80">
-                    Début
-                  </label>
+                <label className="block text-sm text-white/80">
+                  <span className="mb-2 block">Début</span>
                   <input
                     type="datetime-local"
                     value={reserveStartsAt}
                     onChange={(e) => setReserveStartsAt(e.target.value)}
                     className="w-full border border-white/10 bg-black/20 px-4 py-4 text-sm outline-none focus:border-gold/50"
                   />
-                </div>
+                </label>
 
-                <div>
-                  <label className="mb-3 block text-xs uppercase tracking-[0.32em] text-gold/80">
-                    Fin
-                  </label>
+                <label className="block text-sm text-white/80">
+                  <span className="mb-2 block">Fin</span>
                   <input
                     type="datetime-local"
                     value={reserveEndsAt}
                     onChange={(e) => setReserveEndsAt(e.target.value)}
                     className="w-full border border-white/10 bg-black/20 px-4 py-4 text-sm outline-none focus:border-gold/50"
                   />
-                </div>
+                </label>
 
-                <div>
-                  <label className="mb-3 block text-xs uppercase tracking-[0.32em] text-gold/80">
-                    Task Instance ID
-                  </label>
-                  <input
-                    type="text"
-                    value={reserveTaskInstanceId}
-                    onChange={(e) => setReserveTaskInstanceId(e.target.value)}
-                    placeholder="uuid optionnel"
-                    className="w-full border border-white/10 bg-black/20 px-4 py-4 text-sm outline-none focus:border-gold/50"
-                  />
-                </div>
-
-                <div>
-                  <label className="mb-3 block text-xs uppercase tracking-[0.32em] text-gold/80">
-                    Note réservation
-                  </label>
-                  <input
-                    type="text"
+                <label className="block text-sm text-white/80 md:col-span-2">
+                  <span className="mb-2 block">Notes réservation</span>
+                  <textarea
                     value={reserveNotes}
                     onChange={(e) => setReserveNotes(e.target.value)}
-                    placeholder="Ex: réservé pour tâche cuisine."
-                    className="w-full border border-white/10 bg-black/20 px-4 py-4 text-sm outline-none focus:border-gold/50"
+                    rows={3}
+                    placeholder="Commentaire opérateur réservation"
+                    className="w-full resize-none border border-white/10 bg-black/20 px-4 py-4 text-sm outline-none focus:border-gold/50"
                   />
-                </div>
+                </label>
               </div>
 
-              {selectedReserveAsset && (
-                <div className="mt-6 rounded-[1.25rem] border border-white/10 bg-black/30 px-5 py-4 text-sm text-white/75">
-                  Asset sélectionné : {selectedReserveAsset.asset_name || selectedReserveAsset.tool_name} ·{" "}
+              {selectedReserveAsset ? (
+                <div className="mt-5 rounded-2xl border border-white/10 bg-white/[0.03] p-4 text-sm text-white/80">
+                  Asset sélectionné : {selectedReserveAsset.asset_name} ·{" "}
+                  {selectedReserveAsset.tool_name} ·{" "}
                   {getToolAssetStatusLabel(selectedReserveAsset.asset_status)}
                 </div>
-              )}
+              ) : null}
 
-              <div className="mt-6">
+              <div className="mt-6 flex flex-col gap-3 sm:flex-row">
                 <button
                   type="button"
                   onClick={handleReserve}
                   disabled={reserving}
-                  className="inline-flex items-center justify-center gap-3 border border-white/10 px-6 py-4 text-sm uppercase tracking-[0.24em] text-white transition-colors hover:border-gold/40 hover:text-gold disabled:cursor-not-allowed disabled:opacity-50"
+                  className="inline-flex items-center justify-center gap-3 border border-gold/30 px-6 py-4 text-sm uppercase tracking-[0.25em] text-gold transition-colors hover:bg-gold/10 disabled:opacity-50"
                 >
-                  <CalendarClock className="h-4 w-4" />
-                  {reserving ? "Réservation..." : "Réserver l’asset"}
+                  <CheckCircle2 className="h-4 w-4" />
+                  {reserving ? "Réservation..." : "Réserver"}
                 </button>
               </div>
             </div>
 
-            <div className="mt-10 rounded-[1.5rem] border border-white/10 bg-black/20 p-6">
-              <h3 className="mb-4 text-xl italic">Libération d’une réservation</h3>
+            <div className="mt-10 rounded-[28px] border border-white/10 bg-black/20 p-6">
+              <div className="flex items-center gap-3 text-gold/85">
+                <ClipboardList className="h-5 w-5" />
+                <span className="text-xs uppercase tracking-[0.35em]">
+                  Libération contrôlée
+                </span>
+              </div>
 
-              <div className="grid gap-6 md:grid-cols-2">
-                <div>
-                  <label className="mb-3 block text-xs uppercase tracking-[0.32em] text-gold/80">
-                    Reservation ID
-                  </label>
-                  <input
-                    type="text"
+              <div className="mt-6 grid gap-4 md:grid-cols-2">
+                <label className="block text-sm text-white/80 md:col-span-2">
+                  <span className="mb-2 block">Réservation à libérer</span>
+                  <select
                     value={releaseReservationId}
                     onChange={(e) => setReleaseReservationId(e.target.value)}
-                    placeholder="uuid réservation"
                     className="w-full border border-white/10 bg-black/20 px-4 py-4 text-sm outline-none focus:border-gold/50"
-                  />
-                </div>
+                  >
+                    <option value="">Sélectionner une réservation contrôlée</option>
+                    {openReservations.map((reservation) => (
+                      <option
+                        key={reservation.reservation_id}
+                        value={reservation.reservation_id}
+                      >
+                        {reservation.asset_name} · {reservation.tool_name} ·{" "}
+                        {toIsoDateTimeLocal(reservation.starts_at)} →{" "}
+                        {toIsoDateTimeLocal(reservation.ends_at)}
+                      </option>
+                    ))}
+                  </select>
+                </label>
 
-                <div>
-                  <label className="mb-3 block text-xs uppercase tracking-[0.32em] text-gold/80">
-                    Statut de libération
-                  </label>
+                <label className="block text-sm text-white/80">
+                  <span className="mb-2 block">Statut de libération</span>
                   <select
                     value={releaseStatus}
                     onChange={(e) =>
@@ -671,18 +660,26 @@ export default function ToolsPage() {
                       </option>
                     ))}
                   </select>
-                </div>
+                </label>
               </div>
 
-              <div className="mt-6">
+              {selectedReleaseReservation ? (
+                <div className="mt-5 rounded-2xl border border-white/10 bg-white/[0.03] p-4 text-sm text-white/80">
+                  Réservation sélectionnée : {selectedReleaseReservation.tool_name} ·{" "}
+                  {selectedReleaseReservation.asset_name} · statut actuel{" "}
+                  {selectedReleaseReservation.status}
+                </div>
+              ) : null}
+
+              <div className="mt-6 flex flex-col gap-3 sm:flex-row">
                 <button
                   type="button"
                   onClick={handleRelease}
                   disabled={releasing}
-                  className="inline-flex items-center justify-center gap-3 border border-gold/30 px-6 py-4 text-sm uppercase tracking-[0.24em] text-gold transition-colors hover:bg-gold/10 disabled:cursor-not-allowed disabled:opacity-50"
+                  className="inline-flex items-center justify-center gap-3 border border-white/10 px-6 py-4 text-sm uppercase tracking-[0.25em] text-white transition-colors hover:border-gold/40 hover:text-gold disabled:opacity-50"
                 >
                   <CheckCircle2 className="h-4 w-4" />
-                  {releasing ? "Libération..." : "Libérer la réservation"}
+                  {releasing ? "Libération..." : "Libérer"}
                 </button>
               </div>
             </div>
@@ -695,13 +692,13 @@ export default function ToolsPage() {
               <div className="mt-8 border border-gold/20 bg-gold/10 px-5 py-4 text-base text-gold">
                 {localMessage ??
                   error?.message ??
-                  (lastUpsertResult
-                    ? `Outil enregistré : ${lastUpsertResult.tool_id ?? "—"} / Asset : ${lastUpsertResult.asset_id ?? "—"}`
-                    : lastReservationId
-                    ? `Réservation créée : ${lastReservationId}`
-                    : lastReleaseId
+                  (lastReleaseId
                     ? `Réservation libérée : ${lastReleaseId}`
-                    : null)}
+                    : lastReservationId
+                      ? `Réservation créée : ${lastReservationId}`
+                      : lastUpsertResult?.tool_id
+                        ? `Outil enregistré : ${lastUpsertResult.tool_id}`
+                        : null)}
               </div>
             )}
           </section>
@@ -709,7 +706,7 @@ export default function ToolsPage() {
           <aside className="space-y-6">
             <section className="rounded-[2rem] border border-gold/20 bg-black/40 p-8">
               <div className="mb-6 flex items-center gap-3 text-gold/85">
-                <ClipboardList className="h-5 w-5" />
+                <ShieldCheck className="h-5 w-5" />
                 <span className="text-xs uppercase tracking-[0.35em]">
                   Lecture métier DOMYLI
                 </span>
@@ -736,154 +733,92 @@ export default function ToolsPage() {
                   <div className="text-xs uppercase tracking-[0.28em] text-gold/75">
                     Rôle
                   </div>
-                  <div className="mt-3 text-2xl">{activeMembership?.role ?? "—"}</div>
+                  <div className="mt-3 text-2xl">
+                    {activeMembership?.role ?? "—"}
+                  </div>
                 </div>
 
                 <div className="rounded-[1.5rem] border border-white/10 bg-black/20 px-5 py-5">
                   <div className="text-xs uppercase tracking-[0.28em] text-gold/75">
-                    Catégorie
+                    Super Admin
                   </div>
-                  <div className="mt-3 text-2xl">{getToolCategoryLabel(categoryCode)}</div>
+                  <div className="mt-3 text-2xl">
+                    {bootstrap?.is_super_admin ? "Oui" : "Non"}
+                  </div>
                 </div>
 
                 <div className="rounded-[1.5rem] border border-white/10 bg-black/20 px-5 py-5">
                   <div className="text-xs uppercase tracking-[0.28em] text-gold/75">
-                    Outil canonique
+                    Outils session
                   </div>
-                  <div className="mt-3 text-lg">{selectedTemplate?.label ?? "—"}</div>
+                  <div className="mt-3 text-2xl">{tools.length}</div>
                 </div>
 
                 <div className="rounded-[1.5rem] border border-white/10 bg-black/20 px-5 py-5">
                   <div className="text-xs uppercase tracking-[0.28em] text-gold/75">
-                    Statut asset
+                    Assets contrôlés
                   </div>
-                  <div className="mt-3 text-lg">{getToolAssetStatusLabel(assetStatus)}</div>
+                  <div className="mt-3 text-2xl">{assets.length}</div>
                 </div>
 
-                {selectedTemplate?.flows?.length ? (
-                  <div className="rounded-[1.5rem] border border-white/10 bg-black/20 px-5 py-5">
-                    <div className="text-xs uppercase tracking-[0.28em] text-gold/75">
-                      Flux impactés
-                    </div>
-                    <div className="mt-3 flex flex-wrap gap-2">
-                      {selectedTemplate.flows.map((flow) => (
-                        <FlowBadge key={flow} label={getToolFlowLabel(flow)} />
-                      ))}
-                    </div>
+                <div className="rounded-[1.5rem] border border-white/10 bg-black/20 px-5 py-5">
+                  <div className="text-xs uppercase tracking-[0.28em] text-gold/75">
+                    Réservations ouvertes
                   </div>
-                ) : null}
-              </div>
-
-              <div className="mt-6 flex items-center gap-3 text-white/45">
-                <ShieldCheck className="h-4 w-4 text-gold/80" />
-                <span className="text-sm">
-                  Tools gouvernés DOMYLI : outil canonique, asset lisible, réservation traçable.
-                </span>
+                  <div className="mt-3 text-2xl">{openReservations.length}</div>
+                </div>
               </div>
             </section>
 
             <section className="rounded-[2rem] border border-gold/20 bg-black/40 p-8">
               <div className="mb-6 flex items-center gap-3 text-gold/85">
-                <Wrench className="h-5 w-5" />
+                <ClipboardList className="h-5 w-5" />
                 <span className="text-xs uppercase tracking-[0.35em]">
-                  Outils manipulés
+                  Éléments contrôlés
                 </span>
               </div>
 
-              {tools.length === 0 ? (
-                <div className="rounded-[1.5rem] border border-white/10 bg-black/20 px-5 py-5 text-white/70">
-                  Aucun outil créé ou modifié dans cette session.
-                </div>
-              ) : (
-                <div className="space-y-4">
-                  {tools.map((tool) => (
+              <div className="space-y-4">
+                {assets.length === 0 ? (
+                  <div className="rounded-[1.5rem] border border-white/10 bg-black/20 px-5 py-5 text-white/70">
+                    Aucun asset contrôlé pour le moment.
+                  </div>
+                ) : (
+                  assets.map((asset) => (
                     <div
-                      key={tool.tool_id}
+                      key={asset.asset_id}
                       className="rounded-[1.5rem] border border-white/10 bg-black/20 p-5"
                     >
-                      <div className="flex items-start justify-between gap-4">
-                        <div>
-                          <div className="text-xs uppercase tracking-[0.22em] text-gold/80">
-                            {tool.category || "Outil"}
-                          </div>
-                          <div className="mt-2 text-lg">{tool.name}</div>
-                          <div className="mt-2 text-xs text-white/60">
-                            {tool.is_active ? "Actif" : "Inactif"} · asset{" "}
-                            {getToolAssetStatusLabel(tool.asset_status)}
-                          </div>
-                        </div>
-
-                        <button
-                          type="button"
-                          onClick={() =>
-                            preloadTool(
-                              tool.tool_id,
-                              tool.name,
-                              tool.category,
-                              tool.description,
-                              tool.is_active,
-                              tool.asset_id,
-                              tool.asset_name,
-                              tool.asset_status,
-                              tool.asset_notes
-                            )
-                          }
-                          className="inline-flex items-center justify-center gap-2 border border-white/10 px-4 py-3 text-xs uppercase tracking-[0.18em] text-white transition-colors hover:border-gold/40 hover:text-gold"
-                        >
-                          Éditer
-                        </button>
+                      <div className="text-sm text-white">{asset.asset_name}</div>
+                      <div className="mt-2 text-xs text-white/60">
+                        {asset.tool_name} · {asset.category} ·{" "}
+                        {getToolAssetStatusLabel(asset.asset_status)}
                       </div>
-
-                      <div className="mt-4 grid gap-4 md:grid-cols-2">
-                        <div>
-                          <div className="text-xs uppercase tracking-[0.22em] text-gold/70">
-                            Asset
-                          </div>
-                          <div className="mt-2 text-sm text-white/75">
-                            {tool.asset_name || "—"}
-                          </div>
-                        </div>
-
-                        <div>
-                          <div className="text-xs uppercase tracking-[0.22em] text-gold/70">
-                            Asset ID
-                          </div>
-                          <div className="mt-2 break-all text-sm text-white/75">
-                            {tool.asset_id ?? "—"}
-                          </div>
-                        </div>
-                      </div>
-
-                      {tool.asset_id && (
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setReserveAssetId(tool.asset_id ?? "");
-                            setLocalMessage(`Asset sélectionné : ${tool.asset_name || tool.name}`);
-                          }}
-                          className="mt-4 inline-flex items-center justify-center gap-2 border border-gold/30 px-4 py-3 text-xs uppercase tracking-[0.18em] text-gold transition-colors hover:bg-gold/10"
-                        >
-                          Utiliser pour réservation
-                        </button>
-                      )}
                     </div>
-                  ))}
-                </div>
-              )}
-
-              <div className="mt-6 rounded-[1.5rem] border border-white/10 bg-black/20 px-5 py-5 text-sm text-white/75">
-                <div>Dernière réservation : {lastReservationId ?? "—"}</div>
-                <div className="mt-2">
-                  Dernière libération :{" "}
-                  {lastReleaseId
-                    ? `${lastReleaseId} · ${getToolReleaseStatusLabel(releaseStatus)}`
-                    : "—"}
-                </div>
+                  ))
+                )}
               </div>
+
+              <button
+                type="button"
+                onClick={() => navigateTo(ROUTES.TASKS)}
+                className="mt-8 inline-flex w-full items-center justify-center gap-3 border border-white/10 px-5 py-4 text-sm uppercase tracking-[0.24em] text-white transition-colors hover:border-gold/40 hover:text-gold"
+              >
+                Continuer vers Tasks
+                <ArrowRight className="h-4 w-4" />
+              </button>
+
+              {selectedReleaseReservation ? (
+                <div className="mt-6 rounded-[1.5rem] border border-white/10 bg-black/20 p-5 text-sm text-white/80">
+                  Libération préparée : {selectedReleaseReservation.tool_name} ·{" "}
+                  {selectedReleaseReservation.asset_name} · futur statut{" "}
+                  {getToolReleaseStatusLabel(releaseStatus)}
+                </div>
+              ) : null}
             </section>
           </aside>
         </div>
       </div>
-    </main>
+    </div>
   );
 }
