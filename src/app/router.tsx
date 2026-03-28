@@ -17,6 +17,7 @@ import CapacityPage from "@/src/pages/CapacityPage";
 import HouseholdActivationPage from "@/src/pages/HouseholdActivationPage";
 import PricingPage from "@/src/pages/PricingPage";
 import SubscriptionPage from "@/src/pages/SubscriptionPage";
+import ReadinessPage from "@/src/pages/ReadinessPage";
 import AdminCatalogPage from "@/src/pages/AdminCatalogPage";
 
 function withSession(element: React.ReactElement) {
@@ -80,6 +81,10 @@ export const router = createBrowserRouter([
   {
     path: ROUTES.subscription,
     element: withHousehold(<SubscriptionPage />),
+  },
+  {
+    path: ROUTES.readiness,
+    element: withHousehold(<ReadinessPage />),
   },
   {
     path: ROUTES.pricing,
