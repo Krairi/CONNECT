@@ -4,6 +4,14 @@ import { reportMonitoringEvent } from "@/src/lib/monitoring";
 
 type RpcPayload = Record<string, unknown>;
 
+type RpcOptions = {
+  requireAuth?: boolean;
+  timeoutMs?: number;
+  unwrap?: boolean;
+  retries?: number;
+  retryDelayMs?: number;
+};
+
 function unwrapSingle<T>(input: T | T[] | null | undefined): T | null {
   if (Array.isArray(input)) {
     return input[0] ?? null;
@@ -26,7 +34,7 @@ async function runWithTimeout<T>(
   let timeoutId: number | undefined;
 
   try {
-    return await Promise.race<T>([
+    return await Promise.race([
       promise,
       new Promise<T>((_, reject) => {
         timeoutId = window.setTimeout(() => {
@@ -47,16 +55,22 @@ async function runWithTimeout<T>(
   }
 }
 
+async function ensureAuthenticated(): Promise<void> {
+  const { data, error } = await supabase.auth.getSession();
+
+  if (error || !data.session) {
+    throw createDomyliError({
+      message: "Aucune session valide pour exécuter la RPC DOMYLI.",
+      code: "DOMYLI_RPC_UNAUTHENTICATED",
+      hint: "Connecte-toi puis relance l’action.",
+    });
+  }
+}
+
 export async function callRpc<TOutput>(
   name: string,
   payload: RpcPayload = {},
-  options?: {
-    requireAuth?: boolean;
-    timeoutMs?: number;
-    unwrap?: boolean;
-    retries?: number;
-    retryDelayMs?: number;
-  },
+  options?: RpcOptions,
 ): Promise<TOutput> {
   const requireAuth = options?.requireAuth ?? true;
   const timeoutMs = options?.timeoutMs ?? 10_000;
@@ -65,15 +79,7 @@ export async function callRpc<TOutput>(
   const retryDelayMs = options?.retryDelayMs ?? 900;
 
   if (requireAuth) {
-    const { data, error } = await supabase.auth.getSession();
-
-    if (error || !data.session) {
-      throw createDomyliError({
-        message: "Aucune session valide pour exécuter la RPC DOMYLI.",
-        code: "DOMYLI_RPC_UNAUTHENTICATED",
-        hint: "Connecte-toi puis relance l’action.",
-      });
-    }
+    await ensureAuthenticated();
   }
 
   let lastError: unknown = null;
@@ -95,9 +101,11 @@ export async function callRpc<TOutput>(
         throw error;
       }
 
-      return (unwrap
-        ? unwrapSingle(data as TOutput | TOutput[] | null)
-        : data) as TOutput;
+      return (
+        unwrap
+          ? unwrapSingle(data as TOutput | TOutput[] | null)
+          : data
+      ) as TOutput;
     } catch (error) {
       const normalized = toDomyliError(error);
 

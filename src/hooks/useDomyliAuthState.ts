@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { Session } from "@supabase/supabase-js";
-
 import { supabase } from "@/src/lib/supabase";
 import { callRpc } from "@/src/services/rpc";
 import {
@@ -102,7 +101,9 @@ function mergeMemberships(
   }
 
   return current.map((membership) =>
-    membership.household_id === incoming.household_id ? incoming : membership,
+    membership.household_id === incoming.household_id
+      ? incoming
+      : membership,
   );
 }
 
@@ -137,23 +138,16 @@ export function useDomyliAuthState() {
 
       for (let attempt = 0; attempt <= retries; attempt += 1) {
         try {
-          const rawBootstrap = await callRpc<RawBootstrap>(
-            "rpc_user_bootstrap",
-            {},
-            {
+          const [rawBootstrap, rawActive] = await Promise.all([
+            callRpc<RawBootstrap>("rpc_user_bootstrap", {}, {
               unwrap: true,
               timeoutMs: bootstrapTimeoutMs,
-            },
-          );
-
-          const rawActive = await callRpc<RawActiveHousehold>(
-            "rpc_user_active_household",
-            {},
-            {
+            }),
+            callRpc<RawActiveHousehold>("rpc_user_active_household", {}, {
               unwrap: true,
               timeoutMs: activeTimeoutMs,
-            },
-          );
+            }),
+          ]);
 
           const memberships = Array.isArray(rawBootstrap?.memberships)
             ? rawBootstrap.memberships
@@ -171,9 +165,7 @@ export function useDomyliAuthState() {
 
           const activeMembership = normalizeMembership({
             household_id:
-              rawActive?.active_household_id ??
-              rawActive?.household_id ??
-              null,
+              rawActive?.active_household_id ?? rawActive?.household_id ?? null,
             household_name:
               rawActive?.household_name ?? rawActive?.name ?? null,
             role: rawActive?.role ?? null,
@@ -205,9 +197,7 @@ export function useDomyliAuthState() {
         } catch (error) {
           lastError = toDomyliError(error);
 
-          const isLastAttempt = attempt >= retries;
-
-          if (isLastAttempt) {
+          if (attempt >= retries) {
             setState((prev) => ({
               ...prev,
               bootstrapLoading: false,

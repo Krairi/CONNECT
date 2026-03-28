@@ -5,7 +5,6 @@ import {
   useState,
   type PropsWithChildren,
 } from "react";
-
 import { useDomyliAuthState } from "@/src/hooks/useDomyliAuthState";
 import SessionExpiredModal from "@/src/components/system/SessionExpiredModal";
 
@@ -28,15 +27,16 @@ export function AuthProvider({ children }: PropsWithChildren) {
       openSessionExpiredModal: () => setSessionExpired(true),
       closeSessionExpiredModal: () => setSessionExpired(false),
     }),
-    [auth, sessionExpired]
+    [auth, sessionExpired],
   );
 
   return (
     <AuthContext.Provider value={value}>
       {children}
+
       <SessionExpiredModal
-        open={sessionExpired}
-        onReconnect={() => {
+        isOpen={sessionExpired}
+        onClose={() => {
           setSessionExpired(false);
           void auth.signOut().finally(() => {
             window.location.assign("/");
@@ -51,7 +51,7 @@ export function useAuth(): AuthValue {
   const context = useContext(AuthContext);
 
   if (!context) {
-    throw new Error("useAuth must be used within <AuthProvider>.");
+    throw new Error("useAuth must be used within <AuthProvider />.");
   }
 
   return context;

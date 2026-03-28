@@ -1,6 +1,5 @@
 import type { ReactNode } from "react";
 import { Navigate } from "react-router-dom";
-
 import { useAuth } from "@/src/providers/AuthProvider";
 import { ROUTES } from "@/src/constants/routes";
 
@@ -20,16 +19,11 @@ export default function ProtectedRoute({
 
   if (authLoading || bootstrapLoading) {
     return (
-      <main className="min-h-screen bg-black px-6 py-10 text-white">
-        <div className="mx-auto flex max-w-3xl items-center justify-center rounded-[2rem] border border-gold/20 bg-black/40 px-8 py-16">
-          <div className="text-center">
-            <div className="mx-auto h-10 w-10 animate-spin rounded-full border-2 border-white/20 border-t-gold" />
-            <p className="mt-4 text-xs uppercase tracking-[0.3em] text-gold">
-              Vérification DOMYLI
-            </p>
-          </div>
+      <div className="flex min-h-screen items-center justify-center bg-white">
+        <div className="rounded-2xl border border-slate-200 bg-white px-6 py-4 text-sm font-medium text-slate-700 shadow-sm">
+          Vérification DOMYLI…
         </div>
-      </main>
+      </div>
     );
   }
 
@@ -38,7 +32,7 @@ export default function ProtectedRoute({
   }
 
   if (requireHousehold && !hasHousehold) {
-    return <Navigate to={fallbackPath} replace />;
+    return <Navigate to={ROUTES.home} replace />;
   }
 
   return <>{children}</>;
