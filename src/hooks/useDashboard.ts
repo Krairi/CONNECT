@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useState } from "react";
 
-import { toDomyliError, type DomyliAppError } from ".../src/lib/errors";
+import { toDomyliError, type DomyliAppError } from "@/src/lib/errors";
 import {
   getTodayHealth,
   getTodayLoadFeed,
   type TodayHealth,
   type TodayLoadFeed,
-} from ".../src/services/dashboard/dashboardService";
+} from "@/src/services/dashboard/dashboardService";
 
 type DashboardState = {
   loading: boolean;

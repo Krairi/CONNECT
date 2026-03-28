@@ -1,10 +1,6 @@
 import { useCallback, useState } from "react";
-import {
-  upsertHumanProfile,
-  type HumanProfileUpsertInput,
-  type HumanProfileUpsertOutput,
-} from "@/src/services/profiles/profileService";
-import { toDomyliError, type DomyliAppError } from "@/src/lib/errors";
+import { upsertHumanProfile, type HumanProfileUpsertInput, type HumanProfileUpsertOutput } from "../services/profiles/profileService";
+import { toDomyliError, type DomyliAppError } from "../lib/errors";
 
 type UseProfilesState = {
   saving: boolean;

@@ -1,89 +1,73 @@
-import React from "react";
-
-type Props = {
-  children: React.ReactNode;
-};
+import React, { type PropsWithChildren } from "react";
+import { reportMonitoringEvent } from "@/src/lib/monitoring";
 
 type State = {
   hasError: boolean;
-  error?: Error;
+  errorMessage: string | null;
 };
 
-export default class AppErrorBoundary extends React.Component<Props, State> {
-  public constructor(props: Props) {
+export class AppErrorBoundary extends React.Component<PropsWithChildren, State> {
+  constructor(props: PropsWithChildren) {
     super(props);
-    this.state = { hasError: false };
-  }
-
-  public static getDerivedStateFromError(error: Error): State {
-    return {
-      hasError: true,
-      error,
+    this.state = {
+      hasError: false,
+      errorMessage: null,
     };
   }
 
-  public componentDidCatch(error: Error, errorInfo: React.ErrorInfo): void {
-    console.error("DOMYLI AppErrorBoundary captured an error:", error, errorInfo);
+  static getDerivedStateFromError(error: Error): State {
+    return {
+      hasError: true,
+      errorMessage: error?.message ?? "Erreur inattendue",
+    };
   }
 
-  private handleReload = (): void => {
-    window.location.reload();
-  };
+  componentDidCatch(error: Error, info: React.ErrorInfo) {
+    reportMonitoringEvent({
+      level: "error",
+      event: "frontend_crash",
+      message: error.message,
+      meta: {
+        componentStack: info.componentStack,
+      },
+    });
+  }
 
-  public render(): React.ReactNode {
-    if (!this.state.hasError) {
-      return this.props.children;
-    }
-
-    return (
-      <div className="domyli-page-shell">
-        <div className="domyli-container flex min-h-screen items-center justify-center py-10">
-          <div className="domyli-error-state relative max-w-2xl overflow-hidden">
-            <div className="domyli-grain absolute inset-0" />
-            <div className="relative z-10 flex w-full flex-col gap-5">
-              <div className="flex items-center gap-3">
-                <div className="domyli-orbit-dot animate-domyli-pulse" />
-                <span className="domyli-eyebrow">DOMYLI • Continuité de service</span>
-              </div>
-
-              <div className="space-y-3">
-                <h1 className="text-balance text-3xl font-semibold tracking-[-0.05em] text-white sm:text-4xl">
-                  Une erreur a interrompu l’interface.
-                </h1>
-                <p className="max-w-xl text-sm leading-6 text-slate-300 sm:text-base">
-                  DOMYLI a détecté une anomalie inattendue. L’objectif est de restaurer rapidement une
-                  expérience stable sans compromettre votre parcours.
-                </p>
-              </div>
-
-              {this.state.error?.message ? (
-                <div className="domyli-alert domyli-alert-danger">
-                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-red-200/80">
-                    Diagnostic technique
-                  </p>
-                  <p className="mt-2 text-sm leading-6 text-red-50/90">{this.state.error.message}</p>
-                </div>
-              ) : null}
-
-              <div className="flex flex-col gap-3 pt-1 sm:flex-row">
-                <button type="button" onClick={this.handleReload} className="domyli-button-primary">
-                  Recharger DOMYLI
-                </button>
-                <a href="/" className="domyli-button-secondary">
-                  Revenir à l’accueil
-                </a>
-              </div>
-
-              <div className="domyli-divider" />
-
-              <p className="text-xs leading-5 text-slate-400">
-                Si le problème persiste, reprenez le parcours depuis l’accueil puis reconnectez-vous à votre
-                foyer.
-              </p>
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="min-h-screen bg-obsidian text-alabaster flex items-center justify-center px-6">
+          <div className="max-w-xl text-center">
+            <div className="text-xs uppercase tracking-[0.35em] text-gold">
+              DOMYLI
             </div>
+
+            <h1 className="mt-4 text-3xl font-semibold">
+              Une erreur a interrompu l’application
+            </h1>
+
+            <p className="mt-4 text-alabaster/70 leading-7">
+              Recharge la page pour relancer le service.
+            </p>
+
+            {this.state.errorMessage ? (
+              <div className="mt-6 border border-red-500/30 bg-red-500/10 px-4 py-4 text-sm text-red-300">
+                {this.state.errorMessage}
+              </div>
+            ) : null}
+
+            <button
+              type="button"
+              onClick={() => window.location.reload()}
+              className="mt-8 border border-gold/40 px-6 py-3 text-sm uppercase tracking-[0.25em] text-gold hover:bg-gold hover:text-obsidian transition-colors"
+            >
+              Recharger l’application
+            </button>
           </div>
         </div>
-      </div>
-    );
+      );
+    }
+
+    return this.props.children;
   }
 }
