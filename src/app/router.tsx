@@ -14,6 +14,8 @@ import CapacityPage from "@/src/pages/CapacityPage";
 import ToolsPage from "@/src/pages/ToolsPage";
 import StatusPage from "@/src/pages/StatusPage";
 import HouseholdActivationPage from "@/src/pages/HouseholdActivationPage";
+import RecipesPage from "@/src/pages/RecipesPage";
+import AdminCatalogPage from "@/src/pages/AdminCatalogPage";
 
 function withSession(element: React.ReactElement) {
   return <ProtectedRoute>{element}</ProtectedRoute>;
@@ -50,6 +52,10 @@ export const router = createBrowserRouter([
     element: withHousehold(<ShoppingPage />),
   },
   {
+    path: ROUTES.recipes,
+    element: withHousehold(<RecipesPage />),
+  },
+  {
     path: ROUTES.meals,
     element: withHousehold(<MealsPage />),
   },
@@ -68,6 +74,10 @@ export const router = createBrowserRouter([
   {
     path: ROUTES.status,
     element: withHousehold(<StatusPage />),
+  },
+  {
+    path: ROUTES.adminCatalog,
+    element: withHousehold(<AdminCatalogPage />),
   },
   {
     path: ROUTES.notFound,
