@@ -1,41 +1,90 @@
-import { useState } from "react";
-
+import { useCallback, useEffect, useState } from "react";
 import { toDomyliError, type DomyliAppError } from "@/src/lib/errors";
 import {
-  buildSessionMealDraft,
   confirmMealSlot,
   createMeal,
+  listMealProfiles,
+  listMealRecipes,
+  listMeals,
   updateMeal,
   type CreateMealInput,
   type MealConfirmResult,
-  type MealDraft,
+  type MealItem,
+  type MealProfile,
+  type MealRecipe,
   type UpdateMealInput,
 } from "@/src/services/meals/mealService";
 
 type MealsState = {
+  loading: boolean;
   saving: boolean;
   confirming: boolean;
   error: DomyliAppError | null;
-  items: MealDraft[];
+  items: MealItem[];
+  profiles: MealProfile[];
+  recipes: MealRecipe[];
   lastCreatedMealSlotId: string | null;
   lastUpdatedMealSlotId: string | null;
   lastConfirmResult: MealConfirmResult | null;
 };
 
 const initialState: MealsState = {
+  loading: false,
   saving: false,
   confirming: false,
   error: null,
   items: [],
+  profiles: [],
+  recipes: [],
   lastCreatedMealSlotId: null,
   lastUpdatedMealSlotId: null,
   lastConfirmResult: null,
 };
 
 export function useMeals() {
-  const [state, setState] = useState<MealsState>(initialState);
+  const [state, setState] = useState(initialState);
 
-  const createMealAction = async (payload: CreateMealInput) => {
+  const refresh = useCallback(async () => {
+    setState((prev) => ({
+      ...prev,
+      loading: true,
+      error: null,
+    }));
+
+    try {
+      const [items, profiles, recipes] = await Promise.all([
+        listMeals(),
+        listMealProfiles(),
+        listMealRecipes(),
+      ]);
+
+      setState((prev) => ({
+        ...prev,
+        loading: false,
+        items,
+        profiles,
+        recipes,
+      }));
+
+      return { items, profiles, recipes };
+    } catch (error) {
+      const normalized = toDomyliError(error);
+
+      setState((prev) => ({
+        ...prev,
+        loading: false,
+        error: normalized,
+      }));
+
+      throw normalized;
+    }
+  }, []);
+
+  useEffect(() => {
+    void refresh();
+  }, [refresh]);
+
+  const createMealAction = useCallback(async (payload: CreateMealInput) => {
     setState((prev) => ({
       ...prev,
       saving: true,
@@ -46,21 +95,13 @@ export function useMeals() {
 
     try {
       const mealSlotId = await createMeal(payload);
+      const items = await listMeals();
 
       setState((prev) => ({
         ...prev,
         saving: false,
+        items,
         lastCreatedMealSlotId: mealSlotId,
-        items: mealSlotId
-          ? [
-              buildSessionMealDraft({
-                ...payload,
-                meal_slot_id: mealSlotId,
-                status: "DRAFT",
-              }),
-              ...prev.items.filter((item) => item.meal_slot_id !== mealSlotId),
-            ]
-          : prev.items,
       }));
 
       return mealSlotId;
@@ -75,9 +116,9 @@ export function useMeals() {
 
       throw normalized;
     }
-  };
+  }, []);
 
-  const updateMealAction = async (payload: UpdateMealInput) => {
+  const updateMealAction = useCallback(async (payload: UpdateMealInput) => {
     setState((prev) => ({
       ...prev,
       saving: true,
@@ -88,24 +129,13 @@ export function useMeals() {
 
     try {
       const mealSlotId = await updateMeal(payload);
+      const items = await listMeals();
 
       setState((prev) => ({
         ...prev,
         saving: false,
+        items,
         lastUpdatedMealSlotId: mealSlotId,
-        items: prev.items.map((item) =>
-          item.meal_slot_id === mealSlotId
-            ? {
-                ...item,
-                planned_for: payload.p_planned_for,
-                meal_type: payload.p_meal_type,
-                profile_id: payload.p_profile_id ?? null,
-                recipe_id: payload.p_recipe_id ?? null,
-                title: payload.p_title ?? null,
-                notes: payload.p_notes ?? null,
-              }
-            : item
-        ),
       }));
 
       return mealSlotId;
@@ -120,9 +150,9 @@ export function useMeals() {
 
       throw normalized;
     }
-  };
+  }, []);
 
-  const confirmMealSlotAction = async (mealSlotId: string) => {
+  const confirmMealSlotAction = useCallback(async (mealSlotId: string) => {
     setState((prev) => ({
       ...prev,
       confirming: true,
@@ -132,16 +162,13 @@ export function useMeals() {
 
     try {
       const result = await confirmMealSlot(mealSlotId);
+      const items = await listMeals();
 
       setState((prev) => ({
         ...prev,
         confirming: false,
+        items,
         lastConfirmResult: result,
-        items: prev.items.map((item) =>
-          item.meal_slot_id === mealSlotId
-            ? { ...item, status: result.status }
-            : item
-        ),
       }));
 
       return result;
@@ -156,10 +183,11 @@ export function useMeals() {
 
       throw normalized;
     }
-  };
+  }, []);
 
   return {
     ...state,
+    refresh,
     createMeal: createMealAction,
     updateMeal: updateMealAction,
     confirmMealSlot: confirmMealSlotAction,
