@@ -1,6 +1,7 @@
 export const ROUTES = {
   home: "/",
   landing: "/",
+  activateHousehold: "/activate-household",
   dashboard: "/dashboard",
   profiles: "/profiles",
   inventory: "/inventory",
@@ -10,23 +11,21 @@ export const ROUTES = {
   capacity: "/capacity",
   tools: "/tools",
   status: "/status",
-
   recipes: "/recipes",
   pricing: "/pricing",
   subscription: "/subscription",
   selfService: "/self-service",
   integrations: "/integrations",
-
   admin: "/admin",
   adminHouseholds: "/admin/households",
   adminCatalog: "/admin/catalog",
   adminStatus: "/admin/status",
   adminOverruns: "/admin/overruns",
-
   notFound: "*",
 
   HOME: "/",
   LANDING: "/",
+  ACTIVATE_HOUSEHOLD: "/activate-household",
   DASHBOARD: "/dashboard",
   PROFILES: "/profiles",
   INVENTORY: "/inventory",
@@ -36,19 +35,16 @@ export const ROUTES = {
   CAPACITY: "/capacity",
   TOOLS: "/tools",
   STATUS: "/status",
-
   RECIPES: "/recipes",
   PRICING: "/pricing",
   SUBSCRIPTION: "/subscription",
   SELF_SERVICE: "/self-service",
   INTEGRATIONS: "/integrations",
-
   ADMIN: "/admin",
   ADMIN_HOUSEHOLDS: "/admin/households",
   ADMIN_CATALOG: "/admin/catalog",
   ADMIN_STATUS: "/admin/status",
   ADMIN_OVERRUNS: "/admin/overruns",
-
   NOT_FOUND: "*",
 } as const;
 

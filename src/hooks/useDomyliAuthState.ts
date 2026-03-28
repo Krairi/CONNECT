@@ -56,6 +56,13 @@ type RawHouseholdCreate = {
   role?: string | null;
 };
 
+type RawSetActiveHousehold = {
+  active_household_id?: string | null;
+  household_name?: string | null;
+  role?: string | null;
+  plan_tier?: string | null;
+};
+
 const initialState: AuthState = {
   authLoading: true,
   bootstrapLoading: false,
@@ -402,6 +409,38 @@ export function useDomyliAuthState() {
     [refreshBootstrap],
   );
 
+  const setActiveHousehold = useCallback(
+    async (householdId: string) => {
+      if (!householdId) {
+        throw createDomyliError({
+          message: "Le foyer cible est obligatoire.",
+          code: "DOMYLI_VALIDATION_ERROR",
+        });
+      }
+
+      await callRpc<RawSetActiveHousehold>(
+        "rpc_household_set_active",
+        { p_household_id: householdId },
+        {
+          unwrap: true,
+          timeoutMs: 15_000,
+          retries: 1,
+          retryDelayMs: 1_000,
+        },
+      );
+
+      const refreshed = await refreshBootstrap({
+        retries: 2,
+        retryDelayMs: 800,
+        bootstrapTimeoutMs: 12_000,
+        activeTimeoutMs: 12_000,
+      });
+
+      return refreshed.active_household_id;
+    },
+    [refreshBootstrap],
+  );
+
   const derived = useMemo(() => {
     const memberships = state.bootstrap?.memberships ?? [];
 
@@ -409,15 +448,12 @@ export function useDomyliAuthState() {
       memberships.find(
         (membership) =>
           membership.household_id === state.bootstrap?.active_household_id,
-      ) ??
-      memberships[0] ??
-      null;
+      ) ?? null;
 
     return {
       isAuthenticated: Boolean(state.sessionEmail),
-      hasHousehold: Boolean(
-        state.bootstrap?.active_household_id ?? activeMembership?.household_id,
-      ),
+      hasHousehold: Boolean(state.bootstrap?.active_household_id),
+      hasMemberships: memberships.length > 0,
       activeMembership,
     };
   }, [state.bootstrap, state.sessionEmail]);
@@ -430,5 +466,6 @@ export function useDomyliAuthState() {
     signUpWithPassword,
     signOut,
     createFirstHousehold,
+    setActiveHousehold,
   };
 }

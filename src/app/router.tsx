@@ -1,5 +1,4 @@
 import { createBrowserRouter } from "react-router-dom";
-
 import ProtectedRoute from "@/src/components/common/ProtectedRoute";
 import { ROUTES } from "@/src/constants/routes";
 
@@ -14,6 +13,11 @@ import TasksPage from "@/src/pages/TasksPage";
 import CapacityPage from "@/src/pages/CapacityPage";
 import ToolsPage from "@/src/pages/ToolsPage";
 import StatusPage from "@/src/pages/StatusPage";
+import HouseholdActivationPage from "@/src/pages/HouseholdActivationPage";
+
+function withSession(element: React.ReactElement) {
+  return <ProtectedRoute>{element}</ProtectedRoute>;
+}
 
 function withHousehold(element: React.ReactElement) {
   return <ProtectedRoute requireHousehold>{element}</ProtectedRoute>;
@@ -25,7 +29,10 @@ export const router = createBrowserRouter([
     element: <LandingPage />,
     errorElement: <NotFoundPage />,
   },
-
+  {
+    path: ROUTES.activateHousehold,
+    element: withSession(<HouseholdActivationPage />),
+  },
   {
     path: ROUTES.dashboard,
     element: withHousehold(<DashboardPage />),
@@ -62,7 +69,6 @@ export const router = createBrowserRouter([
     path: ROUTES.status,
     element: withHousehold(<StatusPage />),
   },
-
   {
     path: ROUTES.notFound,
     element: <NotFoundPage />,

@@ -32,7 +32,7 @@ export default function ProtectedRoute({
   }
 
   if (requireHousehold && !hasHousehold) {
-    return <Navigate to={ROUTES.home} replace />;
+    return <Navigate to={ROUTES.ACTIVATE_HOUSEHOLD} replace />;
   }
 
   return <>{children}</>;

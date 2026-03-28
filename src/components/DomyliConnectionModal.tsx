@@ -1,8 +1,7 @@
 import React, { useMemo, useState } from "react";
 import { Check, LoaderCircle, X, LogOut } from "lucide-react";
-
-import { useDomyliConnection } from "../hooks/useDomyliConnection";
-import { navigateTo } from "../lib/navigation";
+import { useAuth } from "@/src/providers/AuthProvider";
+import { navigateTo } from "@/src/lib/navigation";
 import { ROUTES } from "@/src/constants/routes";
 
 type Props = {
@@ -25,18 +24,12 @@ function getErrorMessage(err: unknown): string {
   return "Une erreur est survenue.";
 }
 
-export default function DomyliConnectionModal({
-  isOpen,
-  onClose,
-}: Props) {
+export default function DomyliConnectionModal({ isOpen, onClose }: Props) {
   const [mode, setMode] = useState<"login" | "signup">("login");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [householdName, setHouseholdName] = useState("");
   const [localMessage, setLocalMessage] = useState<string | null>(null);
-  const [busy, setBusy] = useState<
-    "login" | "signup" | "household" | "logout" | null
-  >(null);
+  const [busy, setBusy] = useState<"login" | "signup" | "logout" | null>(null);
 
   const {
     authLoading,
@@ -50,19 +43,16 @@ export default function DomyliConnectionModal({
     signInWithPassword,
     signUpWithPassword,
     signOut,
-    createFirstHousehold,
-  } = useDomyliConnection();
+  } = useAuth();
 
   const title = useMemo(() => {
     if (authLoading) return "Connexion DOMYLI";
     if (!isAuthenticated) {
-      return mode === "login"
-        ? "Connexion DOMYLI"
-        : "Créer votre accès DOMYLI";
+      return mode === "login" ? "Connexion DOMYLI" : "Créer votre accès DOMYLI";
     }
-    if (!hasHousehold) return "Créer votre foyer";
+    if (!hasHousehold) return "Activer votre foyer";
     return "DOMYLI connecté";
-  }, [authLoading, isAuthenticated, hasHousehold, mode]);
+  }, [authLoading, hasHousehold, isAuthenticated, mode]);
 
   if (!isOpen) return null;
 
@@ -74,6 +64,9 @@ export default function DomyliConnectionModal({
     try {
       await signInWithPassword(email, password);
       setPassword("");
+      setLocalMessage(
+        "Connexion réussie. DOMYLI synchronise maintenant votre contexte.",
+      );
     } catch (err) {
       setLocalMessage(getErrorMessage(err));
     } finally {
@@ -88,27 +81,9 @@ export default function DomyliConnectionModal({
 
     try {
       await signUpWithPassword(email, password);
-      setLocalMessage("Compte créé.\nVous pouvez maintenant vous connecter.");
+      setLocalMessage("Compte créé. Vous pouvez maintenant vous connecter.");
       setMode("login");
       setPassword("");
-    } catch (err) {
-      setLocalMessage(getErrorMessage(err));
-    } finally {
-      setBusy(null);
-    }
-  };
-
-  const handleHouseholdCreate = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setLocalMessage(null);
-    setBusy("household");
-
-    try {
-      const created = await createFirstHousehold(householdName);
-      setLocalMessage(`Foyer créé : ${created.household_name}`);
-      setHouseholdName("");
-      onClose();
-      navigateTo(ROUTES.PROFILES, true);
     } catch (err) {
       setLocalMessage(getErrorMessage(err));
     } finally {
@@ -124,7 +99,6 @@ export default function DomyliConnectionModal({
       await signOut();
       setEmail("");
       setPassword("");
-      setHouseholdName("");
       onClose();
       navigateTo(ROUTES.HOME, true);
     } catch (err) {
@@ -134,41 +108,58 @@ export default function DomyliConnectionModal({
     }
   };
 
-  return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 px-4 backdrop-blur-sm">
-      <div className="relative w-full max-w-5xl rounded-[2.5rem] border border-gold/20 bg-black px-8 py-10 text-white shadow-[0_0_80px_rgba(212,175,55,0.08)]">
-        <button
-          type="button"
-          onClick={onClose}
-          className="absolute right-5 top-5 inline-flex h-12 w-12 items-center justify-center rounded-full border border-white/10 text-white/70 transition-colors hover:border-gold/40 hover:text-gold"
-          aria-label="Fermer"
-        >
-          <X className="h-5 w-5" />
-        </button>
+  const openActivation = () => {
+    onClose();
+    navigateTo(ROUTES.ACTIVATE_HOUSEHOLD, true);
+  };
 
-        <div className="text-xs uppercase tracking-[0.35em] text-gold/80">
-          DOMYLI
+  const openDashboard = () => {
+    onClose();
+    navigateTo(ROUTES.DASHBOARD, true);
+  };
+
+  const openProfiles = () => {
+    onClose();
+    navigateTo(ROUTES.PROFILES, true);
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4">
+      <div className="w-full max-w-2xl rounded-[28px] border border-white/10 bg-[#0b1020] p-8 text-white shadow-2xl">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <p className="text-xs uppercase tracking-[0.24em] text-gold">
+              DOMYLI
+            </p>
+            <h3 className="mt-3 text-2xl font-semibold">{title}</h3>
+            <p className="mt-3 text-sm text-white/65">
+              Connexion réelle à la base DOMYLI via Supabase, sans casser la landing.
+            </p>
+          </div>
+
+          <button
+            type="button"
+            onClick={onClose}
+            className="inline-flex h-10 w-10 items-center justify-center border border-white/10 text-white/70 transition-colors hover:border-gold/40 hover:text-gold"
+            aria-label="Fermer"
+          >
+            <X className="h-4 w-4" />
+          </button>
         </div>
 
-        <h3 className="mt-3 text-5xl font-semibold">{title}</h3>
-
-        <p className="mt-6 max-w-3xl text-2xl text-white/60">
-          Connexion réelle à la base DOMYLI via Supabase, sans casser la landing.
-        </p>
-
         {authLoading && (
-          <div className="mt-8 rounded-[1.5rem] border border-white/10 bg-white/[0.03] px-6 py-5 text-lg text-white/70">
+          <div className="mt-6 rounded-2xl border border-white/10 bg-white/5 p-4 text-sm text-white/70">
             Chargement de la session DOMYLI...
           </div>
         )}
 
         {!authLoading && isAuthenticated && (
-          <div className="mt-8 flex justify-end">
+          <div className="mt-6">
             <button
               type="button"
               onClick={handleLogout}
               disabled={busy === "logout"}
-              className="inline-flex items-center gap-3 border border-white/10 px-8 py-4 text-sm uppercase tracking-[0.25em] text-white transition-colors hover:border-gold/40 hover:text-gold disabled:opacity-50"
+              className="inline-flex items-center gap-3 border border-white/10 px-4 py-3 text-xs uppercase tracking-[0.24em] text-white/70 transition-colors hover:border-gold/40 hover:text-gold disabled:cursor-not-allowed disabled:opacity-60"
             >
               {busy === "logout" ? (
                 <LoaderCircle className="h-4 w-4 animate-spin" />
@@ -181,14 +172,14 @@ export default function DomyliConnectionModal({
         )}
 
         {bootstrapLoading && isAuthenticated && (
-          <div className="mt-6 rounded-[1.5rem] border border-gold/15 bg-gold/5 px-6 py-5 text-lg text-gold">
+          <div className="mt-6 rounded-2xl border border-white/10 bg-white/5 p-4 text-sm text-white/70">
             Synchronisation du contexte DOMYLI...
           </div>
         )}
 
         {!authLoading && !isAuthenticated && (
           <>
-            <div className="mt-8 flex overflow-hidden rounded-[1.2rem] border border-white/10">
+            <div className="mt-8 flex overflow-hidden rounded-2xl border border-white/10">
               <button
                 type="button"
                 onClick={() => setMode("login")}
@@ -200,7 +191,6 @@ export default function DomyliConnectionModal({
               >
                 Connexion
               </button>
-
               <button
                 type="button"
                 onClick={() => setMode("signup")}
@@ -216,12 +206,10 @@ export default function DomyliConnectionModal({
 
             <form
               onSubmit={mode === "login" ? handleLogin : handleSignup}
-              className="mt-8 space-y-6"
+              className="mt-6 space-y-4"
             >
-              <div>
-                <label className="mb-3 block text-xs uppercase tracking-[0.32em] text-gold/80">
-                  Email
-                </label>
+              <label className="block text-sm text-white/80">
+                <span className="mb-2 block">Email</span>
                 <input
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
@@ -229,26 +217,24 @@ export default function DomyliConnectionModal({
                   placeholder="vous@exemple.com"
                   className="w-full border border-white/10 bg-white/5 px-4 py-4 text-sm outline-none focus:border-gold/50"
                 />
-              </div>
+              </label>
 
-              <div>
-                <label className="mb-3 block text-xs uppercase tracking-[0.32em] text-gold/80">
-                  Mot de passe
-                </label>
+              <label className="block text-sm text-white/80">
+                <span className="mb-2 block">Mot de passe</span>
                 <input
-                  type="password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
+                  type="password"
                   required
                   placeholder="Votre mot de passe"
                   className="w-full border border-white/10 bg-white/5 px-4 py-4 text-sm outline-none focus:border-gold/50"
                 />
-              </div>
+              </label>
 
               <button
                 type="submit"
                 disabled={busy === "login" || busy === "signup"}
-                className="inline-flex w-full items-center justify-center gap-3 bg-gold px-6 py-5 text-sm uppercase tracking-[0.24em] text-black transition-opacity hover:opacity-90 disabled:opacity-50"
+                className="inline-flex w-full items-center justify-center gap-3 border border-gold bg-gold px-5 py-4 text-sm uppercase tracking-[0.24em] text-black disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {busy === "login" || busy === "signup" ? (
                   <LoaderCircle className="h-4 w-4 animate-spin" />
@@ -268,95 +254,59 @@ export default function DomyliConnectionModal({
         )}
 
         {!authLoading && isAuthenticated && !hasHousehold && (
-          <form onSubmit={handleHouseholdCreate} className="mt-8 space-y-6">
-            <div className="rounded-[1.5rem] border border-white/10 bg-white/[0.03] px-6 py-5 text-lg text-white/80">
-              Connecté en tant que {sessionEmail}
-            </div>
-
-            <div>
-              <label className="mb-3 block text-xs uppercase tracking-[0.32em] text-gold/80">
-                Nom du foyer
-              </label>
-              <input
-                value={householdName}
-                onChange={(e) => setHouseholdName(e.target.value)}
-                required
-                placeholder="Maison Krairi"
-                className="w-full border border-white/10 bg-white/5 px-4 py-4 text-sm outline-none focus:border-gold/50"
-              />
-            </div>
+          <div className="mt-8 rounded-2xl border border-gold/20 bg-gold/10 p-5">
+            <p className="text-sm text-gold">
+              Connecté en tant que {sessionEmail}. Aucun foyer actif n’est encore
+              résolu pour cette session.
+            </p>
 
             <button
-              type="submit"
-              disabled={busy === "household"}
-              className="inline-flex w-full items-center justify-center gap-3 bg-gold px-6 py-5 text-sm uppercase tracking-[0.24em] text-black transition-opacity hover:opacity-90 disabled:opacity-50"
+              type="button"
+              onClick={openActivation}
+              className="mt-5 inline-flex items-center gap-3 border border-gold/40 px-5 py-4 text-sm uppercase tracking-[0.24em] text-gold transition-colors hover:bg-gold hover:text-black"
             >
-              {busy === "household" ? (
-                <LoaderCircle className="h-4 w-4 animate-spin" />
-              ) : (
-                <Check className="h-4 w-4" />
-              )}
-              {busy === "household" ? "Création..." : "Créer mon foyer"}
+              Activer mon foyer
             </button>
-          </form>
+          </div>
         )}
 
         {!authLoading && isAuthenticated && hasHousehold && (
-          <div className="mt-8 space-y-6">
-            <div className="rounded-[1.5rem] border border-white/10 bg-white/[0.03] px-6 py-6">
-              <div className="text-xs uppercase tracking-[0.28em] text-gold/75">
-                Connexion active
+          <div className="mt-8 rounded-2xl border border-white/10 bg-white/5 p-5">
+            <p className="text-xs uppercase tracking-[0.24em] text-white/45">
+              Connexion active
+            </p>
+
+            <div className="mt-4 grid gap-4 md:grid-cols-3">
+              <div>
+                <p className="text-xs uppercase tracking-[0.24em] text-white/45">
+                  Email
+                </p>
+                <p className="mt-2 text-sm text-white/80">{sessionEmail}</p>
               </div>
 
-              <div className="mt-4 text-lg text-white/80">
-                {activeMembership?.household_name ? (
-                  <>
-                    {sessionEmail} est relié au foyer{" "}
-                    {activeMembership.household_name}.
-                  </>
-                ) : (
-                  <>
-                    {sessionEmail} est connecté à DOMYLI, mais aucun foyer
-                    exploitable n’a encore été résolu.
-                  </>
-                )}
+              <div>
+                <p className="text-xs uppercase tracking-[0.24em] text-white/45">
+                  Foyer actif
+                </p>
+                <p className="mt-2 text-sm text-white/80">
+                  {activeMembership?.household_name ?? "—"}
+                </p>
               </div>
 
-              <div className="mt-6 grid gap-4 md:grid-cols-3">
-                <div className="rounded-[1rem] border border-white/10 bg-black/30 px-4 py-4">
-                  <div className="text-xs uppercase tracking-[0.24em] text-gold/75">
-                    Foyer actif
-                  </div>
-                  <div className="mt-2 text-xl">
-                    {activeMembership?.household_name ?? "—"}
-                  </div>
-                </div>
-
-                <div className="rounded-[1rem] border border-white/10 bg-black/30 px-4 py-4">
-                  <div className="text-xs uppercase tracking-[0.24em] text-gold/75">
-                    Rôle
-                  </div>
-                  <div className="mt-2 text-xl">{activeMembership?.role ?? "—"}</div>
-                </div>
-
-                <div className="rounded-[1rem] border border-white/10 bg-black/30 px-4 py-4">
-                  <div className="text-xs uppercase tracking-[0.24em] text-gold/75">
-                    Super Admin
-                  </div>
-                  <div className="mt-2 text-xl">
-                    {bootstrap?.is_super_admin ? "Oui" : "Non"}
-                  </div>
-                </div>
+              <div>
+                <p className="text-xs uppercase tracking-[0.24em] text-white/45">
+                  Gouvernance
+                </p>
+                <p className="mt-2 text-sm text-white/80">
+                  {activeMembership?.role ?? "—"}
+                </p>
               </div>
             </div>
 
-            <div className="flex flex-wrap gap-4">
+            <div className="mt-6 flex flex-col gap-3 md:flex-row">
               <button
                 type="button"
-                onClick={() => {
-                  onClose();
-                  navigateTo(ROUTES.PROFILES, true);
-                }}
+                onClick={openProfiles}
                 className="border border-gold/40 px-5 py-4 text-sm uppercase tracking-[0.25em] text-gold transition-colors hover:bg-gold hover:text-black"
               >
                 Ouvrir Profiles
@@ -364,20 +314,21 @@ export default function DomyliConnectionModal({
 
               <button
                 type="button"
-                onClick={() => {
-                  onClose();
-                  navigateTo(ROUTES.DASHBOARD, true);
-                }}
+                onClick={openDashboard}
                 className="border border-white/10 px-5 py-4 text-sm uppercase tracking-[0.25em] text-white transition-colors hover:border-gold/40 hover:text-gold"
               >
                 Ouvrir Dashboard
               </button>
             </div>
+
+            <p className="mt-4 text-xs uppercase tracking-[0.22em] text-white/45">
+              Super Admin : {bootstrap?.is_super_admin ? "Oui" : "Non"}
+            </p>
           </div>
         )}
 
         {(localMessage || error) && (
-          <div className="mt-8 border border-gold/20 bg-gold/10 px-6 py-5 text-lg text-gold whitespace-pre-line">
+          <div className="mt-6 rounded-2xl border border-white/10 bg-white/5 p-4 text-sm text-white/80">
             {localMessage ?? error?.message}
           </div>
         )}
