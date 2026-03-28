@@ -8,13 +8,15 @@ import DashboardPage from "@/src/pages/DashboardPage";
 import ProfilesPage from "@/src/pages/ProfilesPage";
 import InventoryPage from "@/src/pages/InventoryPage";
 import ShoppingPage from "@/src/pages/ShoppingPage";
-import MealsPage from "@/src/pages/MealsPage";
-import TasksPage from "@/src/pages/TasksPage";
-import CapacityPage from "@/src/pages/CapacityPage";
-import ToolsPage from "@/src/pages/ToolsPage";
-import StatusPage from "@/src/pages/StatusPage";
-import HouseholdActivationPage from "@/src/pages/HouseholdActivationPage";
 import RecipesPage from "@/src/pages/RecipesPage";
+import MealsPage from "@/src/pages/MealsPage";
+import ToolsPage from "@/src/pages/ToolsPage";
+import TasksPage from "@/src/pages/TasksPage";
+import StatusPage from "@/src/pages/StatusPage";
+import CapacityPage from "@/src/pages/CapacityPage";
+import HouseholdActivationPage from "@/src/pages/HouseholdActivationPage";
+import PricingPage from "@/src/pages/PricingPage";
+import SubscriptionPage from "@/src/pages/SubscriptionPage";
 import AdminCatalogPage from "@/src/pages/AdminCatalogPage";
 
 function withSession(element: React.ReactElement) {
@@ -60,20 +62,28 @@ export const router = createBrowserRouter([
     element: withHousehold(<MealsPage />),
   },
   {
+    path: ROUTES.tools,
+    element: withHousehold(<ToolsPage />),
+  },
+  {
     path: ROUTES.tasks,
     element: withHousehold(<TasksPage />),
+  },
+  {
+    path: ROUTES.status,
+    element: withHousehold(<StatusPage />),
   },
   {
     path: ROUTES.capacity,
     element: withHousehold(<CapacityPage />),
   },
   {
-    path: ROUTES.tools,
-    element: withHousehold(<ToolsPage />),
+    path: ROUTES.subscription,
+    element: withHousehold(<SubscriptionPage />),
   },
   {
-    path: ROUTES.status,
-    element: withHousehold(<StatusPage />),
+    path: ROUTES.pricing,
+    element: <PricingPage />,
   },
   {
     path: ROUTES.adminCatalog,
