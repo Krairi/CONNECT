@@ -1,22 +1,35 @@
 import { callRpc } from "@/src/services/rpc";
+import { toDomyliError } from "@/src/lib/errors";
 
 export type TaskDraft = {
   task_id: string;
   title: string;
   description: string | null;
   effort_points: number | null;
-  duration_min: number | null;
-  status: string | null;
-  task_instance_id: string | null;
-  task_execution_id: string | null;
+  estimated_minutes: number | null;
+  is_active: boolean;
 };
 
-type RawTaskCreateOutput = {
+export type TaskInstanceDraft = {
+  task_instance_id: string;
+  task_id: string;
+  scheduled_for: string | null;
+  status: string | null;
+};
+
+type RawTaskListRow = {
   task_id?: string | null;
   title?: string | null;
   description?: string | null;
   effort_points?: number | null;
-  duration_min?: number | null;
+  estimated_minutes?: number | null;
+  is_active?: boolean | null;
+};
+
+type RawTaskInstanceRow = {
+  task_instance_id?: string | null;
+  task_id?: string | null;
+  scheduled_for?: string | null;
   status?: string | null;
 };
 
@@ -25,15 +38,42 @@ type RawGenerateInstancesOutput = {
   first_instance_id?: string | null;
 };
 
-type RawTaskStartOutput = {
-  task_execution_id?: string | null;
+type RawTaskDoneV2Output = {
   task_instance_id?: string | null;
+  task_execution_id?: string | null;
   status?: string | null;
+  proof_id?: string | null;
 };
 
-type RawTaskDoneOutput = {
-  task_execution_id?: string | null;
-  status?: string | null;
+export type CreateTaskInput = {
+  p_task_id?: string | null;
+  p_title: string;
+  p_description?: string | null;
+  p_effort_points?: number | null;
+  p_estimated_minutes?: number | null;
+  p_start_on?: string | null;
+  p_recurrence_rule?: Record<string, unknown> | null;
+  p_required_tools?: unknown[] | null;
+  p_checklist?: unknown[] | null;
+  p_is_active?: boolean | null;
+};
+
+export type GenerateTaskInstancesInput = {
+  p_task_id: string;
+  p_date_from: string;
+  p_date_to: string;
+};
+
+export type TaskStartInput = {
+  p_task_instance_id: string;
+  p_idempotency_key?: string | null;
+};
+
+export type TaskDoneInput = {
+  p_task_instance_id: string;
+  p_notes?: string | null;
+  p_proof_payload?: Record<string, unknown> | null;
+  p_idempotency_key?: string | null;
 };
 
 export type TaskGenerateResult = {
@@ -48,96 +88,161 @@ export type TaskStartResult = {
 };
 
 export type TaskDoneResult = {
+  task_instance_id: string | null;
   task_execution_id: string | null;
   status: string | null;
+  proof_id: string | null;
 };
 
-export type CreateTaskInput = {
-  p_household_id: string;
-  p_title: string;
-  p_description?: string | null;
-  p_effort_points?: number | null;
-  p_duration_min?: number | null;
-};
+function pickRows<T>(value: T[] | T | null | undefined): T[] {
+  if (Array.isArray(value)) return value;
+  if (!value) return [];
+  return [value];
+}
 
-export type GenerateTaskInstancesInput = {
-  p_task_id: string;
-  p_date_from: string;
-  p_date_to: string;
-};
+function extractUuid(raw: unknown, fallback = ""): string {
+  if (typeof raw === "string") {
+    return raw;
+  }
 
-export type TaskStartInput = {
-  p_task_instance_id: string;
-};
+  if (Array.isArray(raw) && typeof raw[0] === "string") {
+    return raw[0];
+  }
 
-export type TaskDoneInput = {
-  p_task_execution_id: string;
-  p_proof_note?: string | null;
-};
+  if (raw && typeof raw === "object") {
+    const direct =
+      ("task_id" in raw && typeof (raw as { task_id?: unknown }).task_id === "string"
+        ? (raw as { task_id?: string }).task_id
+        : null) ??
+      ("task_execution_id" in raw &&
+      typeof (raw as { task_execution_id?: unknown }).task_execution_id === "string"
+        ? (raw as { task_execution_id?: string }).task_execution_id
+        : null) ??
+      ("id" in raw && typeof (raw as { id?: unknown }).id === "string"
+        ? (raw as { id?: string }).id
+        : null);
+
+    return direct ?? fallback;
+  }
+
+  return fallback;
+}
+
+export async function listTasks(): Promise<TaskDraft[]> {
+  try {
+    const raw = (await callRpc("rpc_task_list", {})) as
+      | RawTaskListRow[]
+      | RawTaskListRow
+      | null;
+
+    return pickRows(raw).map((row) => ({
+      task_id: row.task_id ?? "",
+      title: row.title ?? "Tâche DOMYLI",
+      description: row.description ?? null,
+      effort_points: row.effort_points ?? null,
+      estimated_minutes: row.estimated_minutes ?? null,
+      is_active: Boolean(row.is_active ?? true),
+    }));
+  } catch (error) {
+    throw toDomyliError(error);
+  }
+}
+
+export async function listTaskInstances(): Promise<TaskInstanceDraft[]> {
+  try {
+    const raw = (await callRpc("rpc_task_instance_list", {})) as
+      | RawTaskInstanceRow[]
+      | RawTaskInstanceRow
+      | null;
+
+    return pickRows(raw).map((row) => ({
+      task_instance_id: row.task_instance_id ?? "",
+      task_id: row.task_id ?? "",
+      scheduled_for: row.scheduled_for ?? null,
+      status: row.status ?? null,
+    }));
+  } catch (error) {
+    throw toDomyliError(error);
+  }
+}
 
 export async function createTask(
-  payload: CreateTaskInput
-): Promise<TaskDraft> {
-  const raw = await callRpc<RawTaskCreateOutput | null>(
-    "rpc_task_create",
-    payload,
-    { unwrap: true }
-  );
+  payload: CreateTaskInput,
+): Promise<string> {
+  try {
+    const raw = await callRpc("rpc_task_create", {
+      p_task_id: payload.p_task_id ?? null,
+      p_title: payload.p_title,
+      p_description: payload.p_description ?? null,
+      p_effort_points: payload.p_effort_points ?? null,
+      p_estimated_minutes: payload.p_estimated_minutes ?? null,
+      p_start_on: payload.p_start_on ?? null,
+      p_recurrence_rule: payload.p_recurrence_rule ?? null,
+      p_required_tools: payload.p_required_tools ?? [],
+      p_checklist: payload.p_checklist ?? [],
+      p_is_active: payload.p_is_active ?? true,
+    }, { unwrap: true });
 
-  return {
-    task_id: raw?.task_id ?? "",
-    title: raw?.title ?? payload.p_title,
-    description: raw?.description ?? payload.p_description ?? null,
-    effort_points: raw?.effort_points ?? payload.p_effort_points ?? null,
-    duration_min: raw?.duration_min ?? payload.p_duration_min ?? null,
-    status: raw?.status ?? "CREATED",
-    task_instance_id: null,
-    task_execution_id: null,
-  };
+    return extractUuid(raw, "");
+  } catch (error) {
+    throw toDomyliError(error);
+  }
 }
 
 export async function generateTaskInstances(
-  payload: GenerateTaskInstancesInput
+  payload: GenerateTaskInstancesInput,
 ): Promise<TaskGenerateResult> {
-  const raw = await callRpc<RawGenerateInstancesOutput | null>(
-    "rpc_task_generate_instances",
-    payload,
-    { unwrap: true }
-  );
+  try {
+    const raw = (await callRpc("rpc_task_generate_instances", payload, {
+      unwrap: true,
+    })) as RawGenerateInstancesOutput | null;
 
-  return {
-    generated_count: Number(raw?.generated_count ?? 0),
-    first_instance_id: raw?.first_instance_id ?? null,
-  };
+    return {
+      generated_count: Number(raw?.generated_count ?? 0),
+      first_instance_id: raw?.first_instance_id ?? null,
+    };
+  } catch (error) {
+    throw toDomyliError(error);
+  }
 }
 
 export async function startTaskExecution(
-  payload: TaskStartInput
+  payload: TaskStartInput,
 ): Promise<TaskStartResult> {
-  const raw = await callRpc<RawTaskStartOutput | null>(
-    "rpc_task_start",
-    payload,
-    { unwrap: true }
-  );
+  try {
+    const executionId = await callRpc("rpc_task_start", {
+      p_task_instance_id: payload.p_task_instance_id,
+      p_idempotency_key: payload.p_idempotency_key ?? crypto.randomUUID(),
+    }, { unwrap: true });
 
-  return {
-    task_execution_id: raw?.task_execution_id ?? null,
-    task_instance_id: raw?.task_instance_id ?? payload.p_task_instance_id,
-    status: raw?.status ?? "STARTED",
-  };
+    return {
+      task_execution_id: extractUuid(executionId, ""),
+      task_instance_id: payload.p_task_instance_id,
+      status: "STARTED",
+    };
+  } catch (error) {
+    throw toDomyliError(error);
+  }
 }
 
 export async function completeTaskExecution(
-  payload: TaskDoneInput
+  payload: TaskDoneInput,
 ): Promise<TaskDoneResult> {
-  const raw = await callRpc<RawTaskDoneOutput | null>(
-    "rpc_task_done_v2",
-    payload,
-    { unwrap: true }
-  );
+  try {
+    const raw = (await callRpc("rpc_task_done_v2", {
+      p_task_instance_id: payload.p_task_instance_id,
+      p_notes: payload.p_notes ?? null,
+      p_proof_payload: payload.p_proof_payload ?? null,
+      p_idempotency_key: payload.p_idempotency_key ?? crypto.randomUUID(),
+    }, { unwrap: true })) as RawTaskDoneV2Output | null;
 
-  return {
-    task_execution_id: raw?.task_execution_id ?? payload.p_task_execution_id,
-    status: raw?.status ?? "DONE",
-  };
+    return {
+      task_instance_id: raw?.task_instance_id ?? payload.p_task_instance_id,
+      task_execution_id: raw?.task_execution_id ?? null,
+      status: raw?.status ?? "DONE",
+      proof_id: raw?.proof_id ?? null,
+    };
+  } catch (error) {
+    throw toDomyliError(error);
+  }
 }
