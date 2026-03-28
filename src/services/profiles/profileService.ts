@@ -3,7 +3,6 @@ import { unwrapRpcRow } from "../unwrapRpcRow";
 
 export type HumanProfileUpsertInput = {
   p_household_id: string;
-  p_member_user_id?: string | null;
   p_display_name: string;
   p_birth_date?: string | null;
   p_sex?: string | null;
@@ -33,12 +32,10 @@ type RawHumanProfileUpsertOutput = {
 };
 
 export async function upsertHumanProfile(
-  payload: HumanProfileUpsertInput
+  payload: HumanProfileUpsertInput,
 ): Promise<HumanProfileUpsertOutput> {
-  const rawResult = await callRpc<RawHumanProfileUpsertOutput | RawHumanProfileUpsertOutput[]
-  >("rpc_human_profile_upsert", payload);
-
-  const raw = unwrapRpcRow(rawResult);
+  const rawResult = await callRpc("rpc_human_profile_upsert", payload);
+  const raw = unwrapRpcRow<RawHumanProfileUpsertOutput>(rawResult);
 
   console.log("DOMYLI rpc_human_profile_upsert raw =>", rawResult);
   console.log("DOMYLI rpc_human_profile_upsert normalized =>", raw);
