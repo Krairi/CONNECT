@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useState } from "react";
-
 import { toDomyliError, type DomyliAppError } from "@/src/lib/errors";
 import {
   readShoppingList,
@@ -24,19 +23,10 @@ const initialState: ShoppingState = {
   lastRebuild: null,
 };
 
-export function useShopping(householdId: string | null) {
-  const [state, setState] = useState<ShoppingState>(initialState);
+export function useShopping() {
+  const [state, setState] = useState(initialState);
 
   const refresh = useCallback(async () => {
-    if (!householdId) {
-      setState((prev) => ({
-        ...prev,
-        loading: false,
-        items: [],
-      }));
-      return [];
-    }
-
     setState((prev) => ({
       ...prev,
       loading: true,
@@ -44,7 +34,7 @@ export function useShopping(householdId: string | null) {
     }));
 
     try {
-      const items = await readShoppingList(householdId);
+      const items = await readShoppingList();
 
       setState((prev) => ({
         ...prev,
@@ -64,17 +54,13 @@ export function useShopping(householdId: string | null) {
 
       throw normalized;
     }
-  }, [householdId]);
+  }, []);
 
   useEffect(() => {
     void refresh();
   }, [refresh]);
 
   const rebuild = useCallback(async () => {
-    if (!householdId) {
-      return null;
-    }
-
     setState((prev) => ({
       ...prev,
       rebuilding: true,
@@ -82,8 +68,8 @@ export function useShopping(householdId: string | null) {
     }));
 
     try {
-      const rebuilt = await rebuildShoppingList(householdId);
-      const items = await readShoppingList(householdId);
+      const rebuilt = await rebuildShoppingList();
+      const items = await readShoppingList();
 
       setState((prev) => ({
         ...prev,
@@ -104,7 +90,7 @@ export function useShopping(householdId: string | null) {
 
       throw normalized;
     }
-  }, [householdId]);
+  }, []);
 
   return {
     ...state,
