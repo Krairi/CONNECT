@@ -3,123 +3,155 @@ import {
   AlertTriangle,
   ArrowLeft,
   ArrowRight,
+  Boxes,
+  CheckCircle2,
   ClipboardList,
-  Package,
+  LayoutDashboard,
   RefreshCw,
   ShieldCheck,
-  TimerReset,
+  ShoppingCart,
+  Sparkles,
   Utensils,
   Wrench,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
-
 import { useAuth } from "@/src/providers/AuthProvider";
-import { useStatus } from "@/src/hooks/useStatus";
+import { useDashboard } from "@/src/hooks/useDashboard";
 import { ROUTES } from "@/src/constants/routes";
-import {
-  computeDomyliGlobalStatus,
-  formatStatusDate,
-  getDomyliPriorityAlerts,
-  getStatusFeedTypeLabel,
-  getStatusFlowLabel,
-  getStatusItemSeverityCode,
-  getStatusSignalMeta,
-  sortStatusFeedItems,
-  summarizeStatusFeedByType,
-} from "@/src/constants/statusCatalog";
+
+function formatDate(value: string | null) {
+  if (!value) return "—";
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+
+  return date.toLocaleString("fr-FR");
+}
+
+function getFeedSeverity(status: string) {
+  const upper = status.toUpperCase();
+
+  if (["BLOCKED", "CRITICAL", "OVERDUE", "FAILED"].includes(upper)) {
+    return {
+      code: "CRITICAL",
+      label: "Critique",
+      description: "À traiter en premier.",
+    };
+  }
+
+  if (["WARNING", "WATCH", "LOW", "OPEN", "PLANNED"].includes(upper)) {
+    return {
+      code: "WATCH",
+      label: "Sous surveillance",
+      description: "À suivre de près.",
+    };
+  }
+
+  if (["CONFIRMED", "DONE", "COMPLETED", "RESERVED"].includes(upper)) {
+    return {
+      code: "STABLE",
+      label: "Stable",
+      description: "Signal maîtrisé.",
+    };
+  }
+
+  return {
+    code: "ATTENTION",
+    label: "Attention",
+    description: "Signal à lire.",
+  };
+}
 
 function FlowBadge({ label }: { label: string }) {
   return (
-    <span className="inline-flex items-center border border-gold/30 bg-gold/10 px-3 py-1 text-xs uppercase tracking-[0.18em] text-gold">
+    <span className="inline-flex items-center rounded-full border border-gold/20 bg-gold/10 px-3 py-1 text-[11px] uppercase tracking-[0.2em] text-gold">
       {label}
     </span>
   );
 }
 
-function SignalBadge({ code }: { code: "STABLE" | "WATCH" | "ATTENTION" | "CRITICAL" }) {
-  const meta = getStatusSignalMeta(code);
-
-  return (
-    <span className="inline-flex items-center border border-gold/30 bg-gold/10 px-3 py-1 text-xs uppercase tracking-[0.18em] text-gold">
-      {meta.label}
-    </span>
-  );
-}
-
-export default function StatusPage() {
+export default function DashboardPage() {
   const navigate = useNavigate();
-
   const {
     sessionEmail,
-    activeMembership,
     bootstrap,
+    activeMembership,
     isAuthenticated,
     hasHousehold,
     authLoading,
     bootstrapLoading,
   } = useAuth();
 
-  const householdId = bootstrap?.active_household_id ?? null;
-  const { loading, error, health, feed, refresh } = useStatus(householdId);
+  const { loading, error, health, feed, activation, valueChain, refresh } =
+    useDashboard();
 
   const [localMessage, setLocalMessage] = useState<string | null>(null);
 
-  const globalStatus = useMemo(
-    () => computeDomyliGlobalStatus(health),
-    [health]
-  );
+  const priorityFeed = useMemo(() => {
+    return [...feed].sort((a, b) => {
+      const rank = (status: string) => {
+        const code = getFeedSeverity(status).code;
+        if (code === "CRITICAL") return 0;
+        if (code === "ATTENTION") return 1;
+        if (code === "WATCH") return 2;
+        return 3;
+      };
 
-  const sortedFeed = useMemo(() => sortStatusFeedItems(feed), [feed]);
+      return rank(a.status) - rank(b.status);
+    });
+  }, [feed]);
 
-  const priorityAlerts = useMemo(
-    () => getDomyliPriorityAlerts(health),
-    [health]
-  );
+  const nextRecommendedRoute = useMemo(() => {
+    if (!activation?.has_profiles) return ROUTES.PROFILES;
+    if (!activation?.has_inventory) return ROUTES.INVENTORY;
+    if ((valueChain?.shopping_open_count ?? 0) > 0) return ROUTES.SHOPPING;
+    if (!activation?.has_meals) return ROUTES.MEALS;
+    if (!activation?.has_tasks) return ROUTES.TASKS;
+    return ROUTES.STATUS;
+  }, [activation, valueChain]);
 
-  const feedSummary = useMemo(
-    () => summarizeStatusFeedByType(sortedFeed),
-    [sortedFeed]
-  );
+  const nextRecommendedLabel = useMemo(() => {
+    switch (nextRecommendedRoute) {
+      case ROUTES.PROFILES:
+        return "Continuer vers Profiles";
+      case ROUTES.INVENTORY:
+        return "Continuer vers Inventory";
+      case ROUTES.SHOPPING:
+        return "Continuer vers Shopping";
+      case ROUTES.MEALS:
+        return "Continuer vers Meals";
+      case ROUTES.TASKS:
+        return "Continuer vers Tasks";
+      default:
+        return "Continuer vers Status";
+    }
+  }, [nextRecommendedRoute]);
 
-  const flowLabels = useMemo(
-    () =>
-      [
-        getStatusFlowLabel("INVENTORY"),
-        getStatusFlowLabel("TASKS"),
-        getStatusFlowLabel("MEALS"),
-        getStatusFlowLabel("TOOLS"),
-        getStatusFlowLabel("HOUSEHOLD"),
-      ] as const,
-    []
-  );
-
-  if (authLoading || bootstrapLoading) {
+  if (authLoading || bootstrapLoading || loading) {
     return (
       <main className="min-h-screen bg-black px-6 py-10 text-white">
-        <div className="mx-auto max-w-3xl border border-gold/20 bg-black/40 p-8">
-          <div className="text-xs uppercase tracking-[0.35em] text-gold/80">
-            DOMYLI
-          </div>
+        <div className="mx-auto max-w-6xl rounded-[28px] border border-white/10 bg-white/5 p-8 backdrop-blur">
+          <p className="text-xs uppercase tracking-[0.24em] text-gold">DOMYLI</p>
           <h1 className="mt-4 text-3xl font-semibold">
-            Chargement du statut...
+            Chargement du dashboard...
           </h1>
+          <p className="mt-3 text-white/70">
+            Synchronisation des signaux métier, activation et chaîne de valeur.
+          </p>
         </div>
       </main>
     );
   }
 
-  if (!isAuthenticated || !hasHousehold || !householdId) {
+  if (!isAuthenticated || !hasHousehold) {
     return (
       <main className="min-h-screen bg-black px-6 py-10 text-white">
-        <div className="mx-auto max-w-3xl border border-gold/20 bg-black/40 p-8">
-          <div className="text-xs uppercase tracking-[0.35em] text-gold/80">
-            DOMYLI
-          </div>
-          <h1 className="mt-4 text-3xl font-semibold">Foyer requis</h1>
-          <p className="mt-4 text-white/70">
-            Il faut une session authentifiée et un foyer actif pour accéder au status.
+        <div className="mx-auto max-w-6xl rounded-[28px] border border-white/10 bg-white/5 p-8 backdrop-blur">
+          <p className="text-xs uppercase tracking-[0.24em] text-gold">DOMYLI</p>
+          <h1 className="mt-4 text-3xl font-semibold">Contexte insuffisant</h1>
+          <p className="mt-3 text-white/70">
+            Le dashboard métier nécessite une session authentifiée et un foyer actif.
           </p>
-
           <button
             type="button"
             onClick={() => navigate(ROUTES.HOME)}
@@ -137,230 +169,216 @@ export default function StatusPage() {
 
     try {
       await refresh();
-      setLocalMessage("Statut DOMYLI rafraîchi.");
+      setLocalMessage("Dashboard DOMYLI rafraîchi.");
     } catch {
-      // erreur déjà gérée par le hook
+      // erreur gérée par le hook
     }
   };
 
   return (
-    <main className="min-h-screen bg-black px-6 py-8 text-white">
+    <main className="min-h-screen bg-black px-6 py-10 text-white">
       <div className="mx-auto max-w-7xl">
-        <div className="mb-8 flex items-start justify-between gap-4">
-          <div>
-            <button
-              type="button"
-              onClick={() => navigate(ROUTES.DASHBOARD)}
-              className="mt-1 inline-flex h-10 w-10 items-center justify-center border border-white/10 transition-colors hover:border-gold/40"
-              aria-label="Retour"
-            >
-              <ArrowLeft className="h-4 w-4" />
-            </button>
+        <div className="grid gap-6 lg:grid-cols-[1.08fr_0.92fr]">
+          <section className="rounded-[28px] border border-white/10 bg-white/5 p-8 backdrop-blur">
+            <div className="flex items-start justify-between gap-4">
+              <button
+                type="button"
+                onClick={() => navigate(ROUTES.HOME)}
+                className="mt-1 inline-flex h-10 w-10 items-center justify-center border border-white/10 transition-colors hover:border-gold/40"
+                aria-label="Retour"
+              >
+                <ArrowLeft className="h-4 w-4" />
+              </button>
 
-            <div className="mt-6 text-xs uppercase tracking-[0.35em] text-gold/80">
-              DOMYLI
-            </div>
-            <h1 className="mt-3 text-4xl font-semibold">Status</h1>
-            <p className="mt-3 max-w-3xl text-white/65">
-              Ici, le statut n’est pas un simple tableau de bord. C’est la lecture
-              transverse de l’état du foyer à partir des signaux réels : stock,
-              tâches, repas, outils et charge quotidienne.
-            </p>
-          </div>
-        </div>
-
-        <div className="grid gap-8 lg:grid-cols-[1.3fr_0.7fr]">
-          <section className="rounded-[2rem] border border-gold/20 bg-black/40 p-8">
-            <div className="mb-6 flex items-center gap-3 text-gold/85">
-              <ClipboardList className="h-5 w-5" />
-              <span className="text-xs uppercase tracking-[0.35em]">
-                Pilotage transverse
-              </span>
+              <div className="flex-1">
+                <p className="text-xs uppercase tracking-[0.24em] text-gold">
+                  DOMYLI
+                </p>
+                <h1 className="mt-4 text-3xl font-semibold">Dashboard</h1>
+                <p className="mt-3 max-w-3xl text-sm leading-7 text-white/70">
+                  Ici, le dashboard n’est plus un simple point d’entrée. Il lit
+                  l’activation du foyer, la santé du jour, la chaîne de valeur
+                  et le flux prioritaire remonté par le système.
+                </p>
+              </div>
             </div>
 
-            <h2 className="text-3xl font-semibold">Centre de lecture opérationnelle</h2>
+            <div className="mt-8 inline-flex items-center gap-2 rounded-full border border-gold/20 bg-gold/10 px-4 py-2 text-xs uppercase tracking-[0.24em] text-gold">
+              <LayoutDashboard className="h-4 w-4" />
+              Cockpit métier
+            </div>
 
-            <p className="mt-6 max-w-3xl text-lg leading-9 text-white/65">
-              Le statut du jour consolide les signaux structurants du foyer et
-              hiérarchise le flux à regarder en premier.
-            </p>
-
-            <div className="mt-8 flex flex-wrap gap-4">
+            <div className="mt-8 flex flex-wrap gap-3">
               <button
                 type="button"
                 onClick={handleRefresh}
-                disabled={loading}
-                className="inline-flex items-center justify-center gap-3 border border-white/10 px-6 py-4 text-sm uppercase tracking-[0.24em] text-white transition-colors hover:border-gold/40 hover:text-gold disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                <RefreshCw className="h-4 w-4" />
-                {loading ? "Chargement..." : "Rafraîchir"}
-              </button>
-
-              <button
-                type="button"
-                onClick={() => navigate(ROUTES.INVENTORY)}
-                className="inline-flex items-center justify-center gap-3 border border-white/10 px-6 py-4 text-sm uppercase tracking-[0.24em] text-white transition-colors hover:border-gold/40 hover:text-gold"
-              >
-                <Package className="h-4 w-4" />
-                Inventory
-              </button>
-
-              <button
-                type="button"
-                onClick={() => navigate(ROUTES.TASKS)}
-                className="inline-flex items-center justify-center gap-3 border border-white/10 px-6 py-4 text-sm uppercase tracking-[0.24em] text-white transition-colors hover:border-gold/40 hover:text-gold"
-              >
-                <TimerReset className="h-4 w-4" />
-                Tasks
-              </button>
-
-              <button
-                type="button"
-                onClick={() => navigate(ROUTES.MEALS)}
-                className="inline-flex items-center justify-center gap-3 border border-white/10 px-6 py-4 text-sm uppercase tracking-[0.24em] text-white transition-colors hover:border-gold/40 hover:text-gold"
-              >
-                <Utensils className="h-4 w-4" />
-                Meals
-              </button>
-
-              <button
-                type="button"
-                onClick={() => navigate(ROUTES.TOOLS)}
-                className="inline-flex items-center justify-center gap-3 border border-white/10 px-6 py-4 text-sm uppercase tracking-[0.24em] text-white transition-colors hover:border-gold/40 hover:text-gold"
-              >
-                <Wrench className="h-4 w-4" />
-                Tools
-              </button>
-
-              <button
-                type="button"
-                onClick={() => navigate(ROUTES.DASHBOARD)}
                 className="inline-flex items-center justify-center gap-3 border border-gold/30 px-6 py-4 text-sm uppercase tracking-[0.24em] text-gold transition-colors hover:bg-gold/10"
               >
-                Dashboard
+                <RefreshCw className="h-4 w-4" />
+                Rafraîchir
+              </button>
+
+              <button
+                type="button"
+                onClick={() => navigate(nextRecommendedRoute)}
+                className="inline-flex items-center justify-center gap-3 bg-gold px-6 py-4 text-sm uppercase tracking-[0.24em] text-black transition-opacity hover:opacity-90"
+              >
                 <ArrowRight className="h-4 w-4" />
+                {nextRecommendedLabel}
+              </button>
+
+              <button
+                type="button"
+                onClick={() => navigate(ROUTES.STATUS)}
+                className="inline-flex items-center justify-center gap-3 border border-white/10 px-6 py-4 text-sm uppercase tracking-[0.24em] text-white transition-colors hover:border-gold/40 hover:text-gold"
+              >
+                Ouvrir Status
               </button>
             </div>
 
             {(localMessage || error) && (
-              <div className="mt-8 border border-gold/20 bg-gold/10 px-5 py-4 text-lg text-gold">
+              <div className="mt-6 rounded-3xl border border-white/10 bg-white/5 p-5 text-sm text-white/85">
                 {localMessage ?? error?.message}
               </div>
             )}
 
+            <div className="mt-8 grid gap-4 md:grid-cols-3">
+              <div className="rounded-3xl border border-white/10 bg-black/20 p-5">
+                <p className="text-xs uppercase tracking-[0.24em] text-white/45">
+                  Score d’activation
+                </p>
+                <p className="mt-3 text-3xl font-semibold">
+                  {activation?.activation_score ?? 0}
+                </p>
+                <p className="mt-2 text-sm text-white/60">
+                  {activation?.is_operational ? "Foyer opérationnel" : "Foyer en montée"}
+                </p>
+              </div>
+
+              <div className="rounded-3xl border border-white/10 bg-black/20 p-5">
+                <p className="text-xs uppercase tracking-[0.24em] text-white/45">
+                  Alertes ouvertes
+                </p>
+                <p className="mt-3 text-3xl font-semibold">
+                  {health?.open_alert_count ?? 0}
+                </p>
+                <p className="mt-2 text-sm text-white/60">
+                  Vigilance quotidienne
+                </p>
+              </div>
+
+              <div className="rounded-3xl border border-white/10 bg-black/20 p-5">
+                <p className="text-xs uppercase tracking-[0.24em] text-white/45">
+                  Charges ouvertes
+                </p>
+                <p className="mt-3 text-3xl font-semibold">
+                  {(valueChain?.shopping_open_count ?? 0) +
+                    (health?.overdue_tasks_count ?? 0)}
+                </p>
+                <p className="mt-2 text-sm text-white/60">
+                  Courses + tâches en retard
+                </p>
+              </div>
+            </div>
+
             <div className="mt-8 grid gap-4 md:grid-cols-5">
-              <div className="rounded-[1.5rem] border border-white/10 bg-black/20 px-5 py-5">
-                <div className="text-xs uppercase tracking-[0.24em] text-gold/75">
-                  Stock manquant
-                </div>
-                <div className="mt-3 text-3xl font-semibold">
+              <div className="rounded-3xl border border-white/10 bg-black/20 p-5">
+                <Boxes className="h-5 w-5 text-gold" />
+                <p className="mt-3 text-2xl font-semibold">
                   {health?.missing_stock_count ?? 0}
-                </div>
+                </p>
+                <p className="mt-2 text-xs uppercase tracking-[0.22em] text-white/50">
+                  Stock manquant
+                </p>
               </div>
 
-              <div className="rounded-[1.5rem] border border-white/10 bg-black/20 px-5 py-5">
-                <div className="text-xs uppercase tracking-[0.24em] text-gold/75">
-                  Tâches en retard
-                </div>
-                <div className="mt-3 text-3xl font-semibold">
-                  {health?.overdue_tasks_count ?? 0}
-                </div>
+              <div className="rounded-3xl border border-white/10 bg-black/20 p-5">
+                <ShoppingCart className="h-5 w-5 text-gold" />
+                <p className="mt-3 text-2xl font-semibold">
+                  {valueChain?.shopping_open_count ?? 0}
+                </p>
+                <p className="mt-2 text-xs uppercase tracking-[0.22em] text-white/50">
+                  Shopping open
+                </p>
               </div>
 
-              <div className="rounded-[1.5rem] border border-white/10 bg-black/20 px-5 py-5">
-                <div className="text-xs uppercase tracking-[0.24em] text-gold/75">
-                  Repas planifiés
-                </div>
-                <div className="mt-3 text-3xl font-semibold">
+              <div className="rounded-3xl border border-white/10 bg-black/20 p-5">
+                <Utensils className="h-5 w-5 text-gold" />
+                <p className="mt-3 text-2xl font-semibold">
                   {health?.planned_meals_count ?? 0}
-                </div>
+                </p>
+                <p className="mt-2 text-xs uppercase tracking-[0.22em] text-white/50">
+                  Repas planifiés
+                </p>
               </div>
 
-              <div className="rounded-[1.5rem] border border-white/10 bg-black/20 px-5 py-5">
-                <div className="text-xs uppercase tracking-[0.24em] text-gold/75">
-                  Repas confirmés
-                </div>
-                <div className="mt-3 text-3xl font-semibold">
-                  {health?.confirmed_meals_count ?? 0}
-                </div>
+              <div className="rounded-3xl border border-white/10 bg-black/20 p-5">
+                <ClipboardList className="h-5 w-5 text-gold" />
+                <p className="mt-3 text-2xl font-semibold">
+                  {health?.overdue_tasks_count ?? 0}
+                </p>
+                <p className="mt-2 text-xs uppercase tracking-[0.22em] text-white/50">
+                  Tâches en retard
+                </p>
               </div>
 
-              <div className="rounded-[1.5rem] border border-white/10 bg-black/20 px-5 py-5">
-                <div className="text-xs uppercase tracking-[0.24em] text-gold/75">
-                  Outils bloqués
-                </div>
-                <div className="mt-3 text-3xl font-semibold">
+              <div className="rounded-3xl border border-white/10 bg-black/20 p-5">
+                <Wrench className="h-5 w-5 text-gold" />
+                <p className="mt-3 text-2xl font-semibold">
                   {health?.blocked_tools_count ?? 0}
-                </div>
+                </p>
+                <p className="mt-2 text-xs uppercase tracking-[0.22em] text-white/50">
+                  Outils bloqués
+                </p>
               </div>
             </div>
 
-            <div className="mt-8 rounded-[1.5rem] border border-white/10 bg-black/20 px-5 py-5">
-              <div className="flex flex-wrap items-start justify-between gap-4">
-                <div>
-                  <div className="text-xs uppercase tracking-[0.24em] text-gold/75">
-                    État global DOMYLI
-                  </div>
-                  <div className="mt-3 text-2xl">{globalStatus.label}</div>
-                  <div className="mt-2 max-w-2xl text-white/70">
-                    {globalStatus.description}
-                  </div>
-                </div>
-
-                <SignalBadge code={globalStatus.code} />
-              </div>
-            </div>
-
-            <div className="mt-8">
-              <div className="mb-4 text-xs uppercase tracking-[0.24em] text-gold/75">
-                Flux priorisé du jour
+            <div className="mt-8 rounded-3xl border border-white/10 bg-black/20 p-6">
+              <div className="flex items-center gap-3">
+                <AlertTriangle className="h-5 w-5 text-gold" />
+                <h2 className="text-xl font-medium">Flux prioritaire du jour</h2>
               </div>
 
-              {loading && (
-                <div className="rounded-[1.5rem] border border-white/10 bg-black/20 px-5 py-5 text-white/70">
-                  Chargement du flux DOMYLI...
-                </div>
-              )}
-
-              {!loading && !error && sortedFeed.length === 0 && (
-                <div className="rounded-[1.5rem] border border-white/10 bg-black/20 px-5 py-5 text-white/70">
-                  Aucun élément de flux remonté pour le moment.
-                </div>
-              )}
-
-              {!loading && !error && sortedFeed.length > 0 && (
-                <div className="space-y-4">
-                  {sortedFeed.map((item) => {
-                    const severityCode = getStatusItemSeverityCode(item);
-                    const severity = getStatusSignalMeta(severityCode);
+              <div className="mt-6 space-y-4">
+                {priorityFeed.length === 0 ? (
+                  <div className="rounded-2xl border border-dashed border-white/10 p-5 text-sm text-white/60">
+                    Aucun signal remonté pour le moment.
+                  </div>
+                ) : (
+                  priorityFeed.slice(0, 8).map((item) => {
+                    const severity = getFeedSeverity(item.status);
 
                     return (
                       <article
                         key={`${item.item_type}-${item.item_id}`}
-                        className="rounded-[1.5rem] border border-white/10 bg-black/20 p-5"
+                        className="rounded-2xl border border-white/10 bg-white/[0.03] p-5"
                       >
-                        <div className="flex flex-wrap items-start justify-between gap-4">
+                        <div className="flex items-start justify-between gap-4">
                           <div>
-                            <div className="text-xs uppercase tracking-[0.22em] text-gold/80">
-                              {getStatusFeedTypeLabel(item.item_type)}
-                            </div>
-                            <div className="mt-2 text-xl">{item.title}</div>
-                            <div className="mt-2 text-sm text-white/60">
-                              {item.status || "UNKNOWN"} · {formatStatusDate(item.scheduled_at)}
-                            </div>
+                            <p className="text-xs uppercase tracking-[0.22em] text-white/45">
+                              {item.item_type}
+                            </p>
+                            <h3 className="mt-2 text-lg font-medium">
+                              {item.title}
+                            </h3>
+                            <p className="mt-2 text-sm text-white/60">
+                              {item.status} · {formatDate(item.scheduled_at)}
+                            </p>
                           </div>
 
-                          <SignalBadge code={severity.code} />
+                          <div className="rounded-full border border-gold/20 bg-gold/10 px-3 py-1 text-[11px] uppercase tracking-[0.2em] text-gold">
+                            {severity.label}
+                          </div>
                         </div>
 
-                        <div className="mt-4 text-sm text-white/70">
+                        <p className="mt-4 text-sm text-white/65">
                           {severity.description}
-                        </div>
+                        </p>
                       </article>
                     );
-                  })}
-                </div>
-              )}
+                  })
+                )}
+              </div>
             </div>
           </section>
 
@@ -383,18 +401,26 @@ export default function StatusPage() {
 
                 <div className="rounded-[1.5rem] border border-white/10 bg-black/20 px-5 py-5">
                   <div className="text-xs uppercase tracking-[0.28em] text-gold/75">
-                    Foyer
+                    Foyer actif
                   </div>
                   <div className="mt-3 text-2xl">
                     {activeMembership?.household_name ?? "—"}
+                  </div>
+                  <div className="mt-2 text-sm text-white/60">
+                    Household ID : {bootstrap?.active_household_id ?? "—"}
                   </div>
                 </div>
 
                 <div className="rounded-[1.5rem] border border-white/10 bg-black/20 px-5 py-5">
                   <div className="text-xs uppercase tracking-[0.28em] text-gold/75">
-                    Rôle
+                    Gouvernance
                   </div>
-                  <div className="mt-3 text-2xl">{activeMembership?.role ?? "—"}</div>
+                  <div className="mt-3 text-2xl">
+                    {activeMembership?.role ?? "—"}
+                  </div>
+                  <div className="mt-2 text-sm text-white/60">
+                    Super Admin : {bootstrap?.is_super_admin ? "Oui" : "Non"}
+                  </div>
                 </div>
 
                 <div className="rounded-[1.5rem] border border-white/10 bg-black/20 px-5 py-5">
@@ -406,86 +432,55 @@ export default function StatusPage() {
 
                 <div className="rounded-[1.5rem] border border-white/10 bg-black/20 px-5 py-5">
                   <div className="text-xs uppercase tracking-[0.28em] text-gold/75">
-                    Super Admin
+                    Chaîne de valeur
                   </div>
-                  <div className="mt-3 text-2xl">
-                    {bootstrap?.is_super_admin ? "Oui" : "Non"}
+                  <div className="mt-4 flex flex-wrap gap-2">
+                    <FlowBadge label={`Members ${valueChain?.members_count ?? 0}`} />
+                    <FlowBadge label={`Profiles ${valueChain?.profiles_count ?? 0}`} />
+                    <FlowBadge label={`Inventory ${valueChain?.inventory_items_count ?? 0}`} />
+                    <FlowBadge label={`Meals ${valueChain?.meal_slots_count ?? 0}`} />
+                    <FlowBadge label={`Tasks ${valueChain?.tasks_count ?? 0}`} />
                   </div>
-                </div>
-              </div>
-
-              <div className="mt-8">
-                <div className="text-xs uppercase tracking-[0.24em] text-gold/75">
-                  Flux surveillés
-                </div>
-
-                <div className="mt-3 flex flex-wrap gap-2">
-                  {flowLabels.map((label) => (
-                    <FlowBadge key={label} label={label} />
-                  ))}
                 </div>
               </div>
             </section>
 
             <section className="rounded-[2rem] border border-gold/20 bg-black/40 p-8">
               <div className="mb-6 flex items-center gap-3 text-gold/85">
-                <AlertTriangle className="h-5 w-5" />
+                <CheckCircle2 className="h-5 w-5" />
                 <span className="text-xs uppercase tracking-[0.35em]">
-                  Alertes prioritaires
+                  Activation pilotée
                 </span>
               </div>
 
-              {priorityAlerts.length === 0 ? (
-                <div className="rounded-[1.5rem] border border-white/10 bg-black/20 px-5 py-5 text-white/70">
-                  Aucun signal prioritaire remonté aujourd’hui.
-                </div>
-              ) : (
-                <div className="space-y-4">
-                  {priorityAlerts.map((alert) => (
-                    <div
-                      key={alert.code}
-                      className="rounded-[1.5rem] border border-white/10 bg-black/20 p-5"
-                    >
-                      <div className="flex items-start justify-between gap-4">
-                        <div>
-                          <div className="text-xs uppercase tracking-[0.22em] text-gold/80">
-                            {alert.label}
-                          </div>
-                          <div className="mt-2 text-2xl">{alert.value}</div>
-                          <div className="mt-2 text-sm text-white/70">
-                            {alert.description}
-                          </div>
-                        </div>
-
-                        <SignalBadge code={alert.severity as any} />
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-
-              <div className="mt-6 rounded-[1.5rem] border border-white/10 bg-black/20 px-5 py-5">
-                <div className="text-xs uppercase tracking-[0.24em] text-gold/75">
-                  Répartition du flux
-                </div>
-
-                <div className="mt-4 space-y-3">
-                  {feedSummary.map((entry) => (
-                    <div
-                      key={entry.code}
-                      className="flex items-center justify-between gap-3 text-sm"
-                    >
-                      <span className="text-white/75">{entry.label}</span>
-                      <span className="text-gold">{entry.count}</span>
-                    </div>
-                  ))}
-                </div>
+              <div className="space-y-4">
+                {[
+                  ["Membres", activation?.has_members],
+                  ["Profils", activation?.has_profiles],
+                  ["Inventaire", activation?.has_inventory],
+                  ["Tâches", activation?.has_tasks],
+                  ["Repas", activation?.has_meals],
+                ].map(([label, ok]) => (
+                  <div
+                    key={label}
+                    className="flex items-center justify-between rounded-[1.5rem] border border-white/10 bg-black/20 px-5 py-4"
+                  >
+                    <span className="text-sm text-white/80">{label}</span>
+                    <span className="text-sm text-gold">
+                      {ok ? "OK" : "À construire"}
+                    </span>
+                  </div>
+                ))}
               </div>
 
-              <div className="mt-6 text-sm text-white/45">
-                RPC surveillées : <code>app.rpc_today_health</code> /{" "}
-                <code>app.rpc_today_load_feed</code>
-              </div>
+              <button
+                type="button"
+                onClick={() => navigate(nextRecommendedRoute)}
+                className="mt-8 inline-flex w-full items-center justify-center gap-3 border border-white/10 px-5 py-4 text-sm uppercase tracking-[0.24em] text-white transition-colors hover:border-gold/40 hover:text-gold"
+              >
+                {nextRecommendedLabel}
+                <ArrowRight className="h-4 w-4" />
+              </button>
             </section>
           </aside>
         </div>

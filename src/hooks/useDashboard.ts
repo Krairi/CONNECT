@@ -1,29 +1,36 @@
 import { useCallback, useEffect, useState } from "react";
-
 import { toDomyliError, type DomyliAppError } from "@/src/lib/errors";
 import {
+  getActivationStatus,
   getTodayHealth,
   getTodayLoadFeed,
+  getValueChainStatus,
+  type ActivationStatus,
+  type DashboardFeedItem,
   type TodayHealth,
-  type TodayLoadFeed,
+  type ValueChainStatus,
 } from "@/src/services/dashboard/dashboardService";
 
 type DashboardState = {
   loading: boolean;
   error: DomyliAppError | null;
   health: TodayHealth | null;
-  feed: TodayLoadFeed;
+  feed: DashboardFeedItem[];
+  activation: ActivationStatus | null;
+  valueChain: ValueChainStatus | null;
 };
 
 const initialState: DashboardState = {
   loading: false,
   error: null,
   health: null,
-  feed: { members: [] },
+  feed: [],
+  activation: null,
+  valueChain: null,
 };
 
 export function useDashboard() {
-  const [state, setState] = useState<DashboardState>(initialState);
+  const [state, setState] = useState(initialState);
 
   const refresh = useCallback(async () => {
     setState((prev) => ({
@@ -33,9 +40,11 @@ export function useDashboard() {
     }));
 
     try {
-      const [health, feed] = await Promise.all([
+      const [health, feed, activation, valueChain] = await Promise.all([
         getTodayHealth(),
         getTodayLoadFeed(),
+        getActivationStatus(),
+        getValueChainStatus(),
       ]);
 
       setState({
@@ -43,7 +52,11 @@ export function useDashboard() {
         error: null,
         health,
         feed,
+        activation,
+        valueChain,
       });
+
+      return { health, feed, activation, valueChain };
     } catch (error) {
       const normalized = toDomyliError(error);
 
@@ -52,6 +65,8 @@ export function useDashboard() {
         loading: false,
         error: normalized,
       }));
+
+      throw normalized;
     }
   }, []);
 

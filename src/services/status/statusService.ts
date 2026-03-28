@@ -1,88 +1,81 @@
-import { callRpc } from "../rpc";
-import { unwrapRpcRow } from "../unwrapRpcRow";
+import { useCallback, useEffect, useState } from "react";
+import { toDomyliError, type DomyliAppError } from "@/src/lib/errors";
+import {
+  getActivationStatus,
+  getTodayHealth,
+  getTodayLoadFeed,
+  getValueChainStatus,
+  type ActivationStatus,
+  type DashboardFeedItem,
+  type TodayHealth,
+  type ValueChainStatus,
+} from "@/src/services/dashboard/dashboardService";
 
-export type TodayHealthInput = {
-  p_household_id: string;
+type DashboardState = {
+  loading: boolean;
+  error: DomyliAppError | null;
+  health: TodayHealth | null;
+  feed: DashboardFeedItem[];
+  activation: ActivationStatus | null;
+  valueChain: ValueChainStatus | null;
 };
 
-export type TodayHealthOutput = {
-  day: string;
-  missing_stock_count: number;
-  overdue_tasks_count: number;
-  planned_meals_count: number;
-  confirmed_meals_count: number;
-  blocked_tools_count: number;
+const initialState: DashboardState = {
+  loading: false,
+  error: null,
+  health: null,
+  feed: [],
+  activation: null,
+  valueChain: null,
 };
 
-type RawTodayHealthOutput = {
-  day?: string | null;
-  missing_stock_count?: number | null;
-  overdue_tasks_count?: number | null;
-  planned_meals_count?: number | null;
-  confirmed_meals_count?: number | null;
-  blocked_tools_count?: number | null;
-};
+export function useDashboard() {
+  const [state, setState] = useState(initialState);
 
-export type TodayLoadFeedInput = {
-  p_household_id: string;
-};
+  const refresh = useCallback(async () => {
+    setState((prev) => ({
+      ...prev,
+      loading: true,
+      error: null,
+    }));
 
-export type TodayLoadFeedItem = {
-  item_type: "TASK" | "MEAL" | "ALERT" | "TOOL" | string;
-  item_id: string;
-  title: string;
-  status: string;
-  scheduled_at?: string | null;
-};
+    try {
+      const [health, feed, activation, valueChain] = await Promise.all([
+        getTodayHealth(),
+        getTodayLoadFeed(),
+        getActivationStatus(),
+        getValueChainStatus(),
+      ]);
 
-type RawTodayLoadFeedItem = {
-  item_type?: string | null;
-  item_id?: string | null;
-  title?: string | null;
-  status?: string | null;
-  scheduled_at?: string | null;
-};
+      setState({
+        loading: false,
+        error: null,
+        health,
+        feed,
+        activation,
+        valueChain,
+      });
 
-export async function getTodayHealth(
-  payload: TodayHealthInput
-): Promise<TodayHealthOutput> {
-  const rawResult = await callRpc<RawTodayHealthOutput | RawTodayHealthOutput[]
-  >("rpc_today_health", payload);
+      return { health, feed, activation, valueChain };
+    } catch (error) {
+      const normalized = toDomyliError(error);
 
-  const raw = unwrapRpcRow(rawResult);
+      setState((prev) => ({
+        ...prev,
+        loading: false,
+        error: normalized,
+      }));
 
-  console.log("DOMYLI status rpc_today_health raw =>", rawResult);
-  console.log("DOMYLI status rpc_today_health normalized =>", raw);
+      throw normalized;
+    }
+  }, []);
+
+  useEffect(() => {
+    void refresh();
+  }, [refresh]);
 
   return {
-    day: raw?.day ?? new Date().toISOString().slice(0, 10),
-    missing_stock_count: Number(raw?.missing_stock_count ?? 0),
-    overdue_tasks_count: Number(raw?.overdue_tasks_count ?? 0),
-    planned_meals_count: Number(raw?.planned_meals_count ?? 0),
-    confirmed_meals_count: Number(raw?.confirmed_meals_count ?? 0),
-    blocked_tools_count: Number(raw?.blocked_tools_count ?? 0),
+    ...state,
+    refresh,
   };
-}
-
-export async function getTodayLoadFeed(
-  payload: TodayLoadFeedInput
-): Promise<TodayLoadFeedItem[]> {
-  const rawResult = await callRpc<RawTodayLoadFeedItem[] | RawTodayLoadFeedItem | null
-  >("rpc_today_load_feed", payload);
-
-  console.log("DOMYLI status rpc_today_load_feed raw =>", rawResult);
-
-  const rows = Array.isArray(rawResult)
-    ? rawResult
-    : rawResult
-      ? [rawResult]
-      : [];
-
-  return rows.map((row) => ({
-    item_type: row.item_type ?? "ALERT",
-    item_id: row.item_id ?? "",
-    title: row.title ?? "Élément DOMYLI",
-    status: row.status ?? "UNKNOWN",
-    scheduled_at: row.scheduled_at ?? null,
-  }));
 }
