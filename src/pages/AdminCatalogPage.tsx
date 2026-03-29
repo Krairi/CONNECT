@@ -8,7 +8,6 @@ import {
   Save,
   ShieldCheck,
   Sparkles,
-  Upload,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 
@@ -16,19 +15,10 @@ import { useAuth } from "@/src/providers/AuthProvider";
 import { useCatalog } from "@/src/hooks/useCatalog";
 import { ROUTES } from "@/src/constants/routes";
 import {
-  DOMYLI_RECIPE_DIFFICULTY_OPTIONS,
-  DOMYLI_RECIPE_FIT_OPTIONS,
-  DOMYLI_RECIPE_MEAL_TYPE_OPTIONS,
-  DOMYLI_RECIPE_STOCK_INTENSITY_OPTIONS,
-  getRecipeBlueprintByKey,
   getRecipeDifficultyLabel,
-  getRecipeFitLabel,
+  getRecipeFitStatusLabel,
   getRecipeMealTypeLabel,
   getRecipeStockIntensityLabel,
-  type DomyliRecipeDifficulty,
-  type DomyliRecipeFit,
-  type DomyliRecipeMealType,
-  type DomyliRecipeStockIntensity,
 } from "@/src/constants/recipeCatalog";
 
 function MetaBadge({ label }: { label: string }) {
@@ -52,21 +42,6 @@ function getErrorMessage(error: unknown): string {
   return "Une erreur est survenue.";
 }
 
-function linesToMultiline(values: string[]): string {
-  return values.join("\n");
-}
-
-function multilineToList(value: string): string[] {
-  return value
-    .split("\n")
-    .map((item) => item.trim())
-    .filter(Boolean);
-}
-
-const DEFAULT_BLUEPRINT_KEY = "breakfast-protein-omelet";
-const DEFAULT_BLUEPRINT =
-  getRecipeBlueprintByKey(DEFAULT_BLUEPRINT_KEY) ?? null;
-
 export default function AdminCatalogPage() {
   const navigate = useNavigate();
   const {
@@ -81,45 +56,17 @@ export default function AdminCatalogPage() {
   const {
     loading,
     saving,
-    publishingPack,
     error,
     recipes,
-    blueprints,
+    taskTemplates,
     recipeCount,
-    blueprintCount,
+    taskTemplateCount,
     saveRecipe,
-    publishBlueprintPack,
     lastSavedRecipeId,
-    lastPublishedCount,
   } = useCatalog();
 
-  const [blueprintKey, setBlueprintKey] = useState(DEFAULT_BLUEPRINT_KEY);
-  const [title, setTitle] = useState(DEFAULT_BLUEPRINT?.title ?? "");
-  const [description, setDescription] = useState(DEFAULT_BLUEPRINT?.description ?? "");
-  const [mealType, setMealType] = useState<DomyliRecipeMealType>(
-    DEFAULT_BLUEPRINT?.mealType ?? "BREAKFAST",
-  );
-  const [difficulty, setDifficulty] = useState<DomyliRecipeDifficulty>(
-    DEFAULT_BLUEPRINT?.difficulty ?? "EASY",
-  );
-  const [stockIntensity, setStockIntensity] =
-    useState<DomyliRecipeStockIntensity>(DEFAULT_BLUEPRINT?.stockIntensity ?? "LOW");
-  const [fit, setFit] = useState<DomyliRecipeFit>(
-    DEFAULT_BLUEPRINT?.fit ?? "FAMILY_BALANCED",
-  );
-  const [prepMinutes, setPrepMinutes] = useState(
-    String(DEFAULT_BLUEPRINT?.prepMinutes ?? 15),
-  );
-  const [servings, setServings] = useState(String(DEFAULT_BLUEPRINT?.servings ?? 2));
-  const [tagsText, setTagsText] = useState(
-    linesToMultiline(DEFAULT_BLUEPRINT?.tags ?? []),
-  );
-  const [ingredientsText, setIngredientsText] = useState(
-    linesToMultiline(DEFAULT_BLUEPRINT?.ingredients ?? []),
-  );
-  const [stepsText, setStepsText] = useState(
-    linesToMultiline(DEFAULT_BLUEPRINT?.steps ?? []),
-  );
+  const [title, setTitle] = useState("");
+  const [description, setDescription] = useState("");
   const [operatorNotes, setOperatorNotes] = useState(
     "Publication starter DOMYLI depuis le cockpit Super Admin.",
   );
@@ -129,27 +76,17 @@ export default function AdminCatalogPage() {
   const isSuperAdmin = Boolean(bootstrap?.is_super_admin);
 
   const publishedPreview = useMemo(() => recipes.slice(0, 8), [recipes]);
-  const blueprintPreview = useMemo(() => blueprints.slice(0, 6), [blueprints]);
+  const templatePreview = useMemo(() => taskTemplates.slice(0, 6), [taskTemplates]);
 
-  const applyBlueprint = (targetKey: string) => {
-    const blueprint = getRecipeBlueprintByKey(targetKey);
+  const applyTemplate = (templateCode: string) => {
+    const template = taskTemplates.find((t) => t.code === templateCode);
 
-    if (!blueprint) {
+    if (!template) {
       return;
     }
 
-    setBlueprintKey(blueprint.key);
-    setTitle(blueprint.title);
-    setDescription(blueprint.description);
-    setMealType(blueprint.mealType);
-    setDifficulty(blueprint.difficulty);
-    setStockIntensity(blueprint.stockIntensity);
-    setFit(blueprint.fit);
-    setPrepMinutes(String(blueprint.prepMinutes));
-    setServings(String(blueprint.servings));
-    setTagsText(linesToMultiline(blueprint.tags));
-    setIngredientsText(linesToMultiline(blueprint.ingredients));
-    setStepsText(linesToMultiline(blueprint.steps));
+    setTitle(template.label);
+    setDescription(template.description ?? "");
     setOperatorNotes(
       "Publication starter DOMYLI depuis le cockpit Super Admin.",
     );
@@ -157,22 +94,10 @@ export default function AdminCatalogPage() {
   };
 
   const resetForm = () => {
-    applyBlueprint(DEFAULT_BLUEPRINT_KEY);
-  };
-
-  const handlePublishPack = async () => {
-    setLocalMessage(null);
-
-    try {
-      const ids = await publishBlueprintPack();
-      setLocalMessage(
-        ids.length > 0
-          ? `${ids.length} recettes starter publiées dans la bibliothèque.`
-          : "Aucune recette n’a été publiée.",
-      );
-    } catch (publishError) {
-      setLocalMessage(getErrorMessage(publishError));
-    }
+    setTitle("");
+    setDescription("");
+    setOperatorNotes("Publication starter DOMYLI depuis le cockpit Super Admin.");
+    setIsActive(true);
   };
 
   const handleSave = async (event: React.FormEvent) => {
@@ -185,15 +110,6 @@ export default function AdminCatalogPage() {
         p_description: description,
         p_instructions: operatorNotes,
         p_is_active: isActive,
-        p_meal_type: mealType,
-        p_difficulty: difficulty,
-        p_stock_intensity: stockIntensity,
-        p_fit: fit,
-        p_prep_minutes: Number(prepMinutes || 15),
-        p_servings: Number(servings || 2),
-        p_tags: multilineToList(tagsText),
-        p_ingredients: multilineToList(ingredientsText),
-        p_steps: multilineToList(stepsText),
       });
 
       setLocalMessage(
@@ -342,19 +258,10 @@ export default function AdminCatalogPage() {
 
           <div className="rounded-3xl border border-white/10 bg-white/5 p-5 backdrop-blur">
             <p className="text-xs uppercase tracking-[0.24em] text-white/45">
-              Blueprints starter
+              Templates de tâches
             </p>
             <p className="mt-3 text-3xl font-semibold text-white">
-              {blueprintCount}
-            </p>
-          </div>
-
-          <div className="rounded-3xl border border-white/10 bg-white/5 p-5 backdrop-blur">
-            <p className="text-xs uppercase tracking-[0.24em] text-white/45">
-              Dernier lot publié
-            </p>
-            <p className="mt-3 text-3xl font-semibold text-white">
-              {lastPublishedCount}
+              {taskTemplateCount}
             </p>
           </div>
 
@@ -385,18 +292,6 @@ export default function AdminCatalogPage() {
                   </p>
                 </div>
               </div>
-
-              <button
-                type="button"
-                onClick={handlePublishPack}
-                disabled={publishingPack || saving}
-                className="inline-flex items-center gap-3 border border-gold bg-gold px-5 py-3 text-xs uppercase tracking-[0.24em] text-black transition-opacity disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                <Upload className="h-4 w-4" />
-                {publishingPack
-                  ? "Publication du starter pack..."
-                  : "Publier le starter pack DOMYLI"}
-              </button>
             </div>
 
             <div className="mb-6 rounded-3xl border border-white/10 bg-black/20 p-5">
@@ -409,27 +304,19 @@ export default function AdminCatalogPage() {
 
               <div className="mt-4 grid gap-4 md:grid-cols-[1fr_auto_auto]">
                 <label className="block text-sm text-white/80">
-                  <span className="mb-2 block">Blueprint starter</span>
+                  <span className="mb-2 block">Template starter</span>
                   <select
-                    value={blueprintKey}
-                    onChange={(event) => setBlueprintKey(event.target.value)}
+                    onChange={(event) => applyTemplate(event.target.value)}
                     className="w-full border border-white/10 bg-black/20 px-4 py-4 text-sm outline-none focus:border-gold/50"
                   >
-                    {blueprints.map((blueprint) => (
-                      <option key={blueprint.key} value={blueprint.key}>
-                        {blueprint.title}
+                    <option value="">Sélectionner un template...</option>
+                    {taskTemplates.map((template) => (
+                      <option key={template.code} value={template.code}>
+                        {template.label}
                       </option>
                     ))}
                   </select>
                 </label>
-
-                <button
-                  type="button"
-                  onClick={() => applyBlueprint(blueprintKey)}
-                  className="self-end border border-white/10 px-5 py-4 text-xs uppercase tracking-[0.24em] text-white/75 transition-colors hover:border-gold/40 hover:text-gold"
-                >
-                  Préremplir
-                </button>
 
                 <button
                   type="button"
@@ -463,128 +350,6 @@ export default function AdminCatalogPage() {
                   />
                 </label>
 
-                <label className="block text-sm text-white/80">
-                  <span className="mb-2 block">Type de repas</span>
-                  <select
-                    value={mealType}
-                    onChange={(event) =>
-                      setMealType(event.target.value as DomyliRecipeMealType)
-                    }
-                    className="w-full border border-white/10 bg-black/20 px-4 py-4 text-sm outline-none focus:border-gold/50"
-                  >
-                    {DOMYLI_RECIPE_MEAL_TYPE_OPTIONS.map((option) => (
-                      <option key={option.value} value={option.value}>
-                        {option.label}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-
-                <label className="block text-sm text-white/80">
-                  <span className="mb-2 block">Difficulté</span>
-                  <select
-                    value={difficulty}
-                    onChange={(event) =>
-                      setDifficulty(event.target.value as DomyliRecipeDifficulty)
-                    }
-                    className="w-full border border-white/10 bg-black/20 px-4 py-4 text-sm outline-none focus:border-gold/50"
-                  >
-                    {DOMYLI_RECIPE_DIFFICULTY_OPTIONS.map((option) => (
-                      <option key={option.value} value={option.value}>
-                        {option.label}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-
-                <label className="block text-sm text-white/80">
-                  <span className="mb-2 block">Impact stock</span>
-                  <select
-                    value={stockIntensity}
-                    onChange={(event) =>
-                      setStockIntensity(
-                        event.target.value as DomyliRecipeStockIntensity,
-                      )
-                    }
-                    className="w-full border border-white/10 bg-black/20 px-4 py-4 text-sm outline-none focus:border-gold/50"
-                  >
-                    {DOMYLI_RECIPE_STOCK_INTENSITY_OPTIONS.map((option) => (
-                      <option key={option.value} value={option.value}>
-                        {option.label}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-
-                <label className="block text-sm text-white/80">
-                  <span className="mb-2 block">Fit DOMYLI</span>
-                  <select
-                    value={fit}
-                    onChange={(event) =>
-                      setFit(event.target.value as DomyliRecipeFit)
-                    }
-                    className="w-full border border-white/10 bg-black/20 px-4 py-4 text-sm outline-none focus:border-gold/50"
-                  >
-                    {DOMYLI_RECIPE_FIT_OPTIONS.map((option) => (
-                      <option key={option.value} value={option.value}>
-                        {option.label}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-
-                <label className="block text-sm text-white/80">
-                  <span className="mb-2 block">Temps préparation (min)</span>
-                  <input
-                    value={prepMinutes}
-                    onChange={(event) => setPrepMinutes(event.target.value)}
-                    type="number"
-                    min={1}
-                    className="w-full border border-white/10 bg-black/20 px-4 py-4 text-sm outline-none focus:border-gold/50"
-                  />
-                </label>
-
-                <label className="block text-sm text-white/80">
-                  <span className="mb-2 block">Portions</span>
-                  <input
-                    value={servings}
-                    onChange={(event) => setServings(event.target.value)}
-                    type="number"
-                    min={1}
-                    className="w-full border border-white/10 bg-black/20 px-4 py-4 text-sm outline-none focus:border-gold/50"
-                  />
-                </label>
-
-                <label className="block text-sm text-white/80 md:col-span-2">
-                  <span className="mb-2 block">Tags (une ligne = un tag)</span>
-                  <textarea
-                    value={tagsText}
-                    onChange={(event) => setTagsText(event.target.value)}
-                    rows={4}
-                    className="w-full resize-none border border-white/10 bg-black/20 px-4 py-4 text-sm outline-none focus:border-gold/50"
-                  />
-                </label>
-
-                <label className="block text-sm text-white/80 md:col-span-2">
-                  <span className="mb-2 block">Ingrédients (une ligne = un ingrédient)</span>
-                  <textarea
-                    value={ingredientsText}
-                    onChange={(event) => setIngredientsText(event.target.value)}
-                    rows={6}
-                    className="w-full resize-none border border-white/10 bg-black/20 px-4 py-4 text-sm outline-none focus:border-gold/50"
-                  />
-                </label>
-
-                <label className="block text-sm text-white/80 md:col-span-2">
-                  <span className="mb-2 block">Étapes (une ligne = une étape)</span>
-                  <textarea
-                    value={stepsText}
-                    onChange={(event) => setStepsText(event.target.value)}
-                    rows={7}
-                    className="w-full resize-none border border-white/10 bg-black/20 px-4 py-4 text-sm outline-none focus:border-gold/50"
-                  />
-                </label>
-
                 <label className="block text-sm text-white/80 md:col-span-2">
                   <span className="mb-2 block">Note opérateur / publication</span>
                   <textarea
@@ -608,7 +373,7 @@ export default function AdminCatalogPage() {
 
               <button
                 type="submit"
-                disabled={saving || publishingPack}
+                disabled={saving}
                 className="inline-flex w-full items-center justify-center gap-3 border border-gold bg-gold px-5 py-4 text-sm uppercase tracking-[0.24em] text-black transition-opacity disabled:cursor-not-allowed disabled:opacity-60"
               >
                 <Save className="h-4 w-4" />
@@ -629,43 +394,33 @@ export default function AdminCatalogPage() {
                 <div className="inline-flex items-center gap-2 text-white">
                   <BookMarked className="h-4 w-4" />
                   <p className="text-xs uppercase tracking-[0.24em]">
-                    Blueprints starter
+                    Templates de tâches
                   </p>
                 </div>
 
                 <div className="mt-5 space-y-4">
-                  {blueprintPreview.map((blueprint) => (
+                  {templatePreview.map((template) => (
                     <div
-                      key={blueprint.key}
+                      key={template.code}
                       className="rounded-2xl border border-white/10 bg-white/[0.03] p-4"
                     >
                       <div className="flex items-start justify-between gap-3">
                         <div>
                           <p className="text-sm font-medium text-white">
-                            {blueprint.title}
+                            {template.label}
                           </p>
                           <p className="mt-2 text-xs leading-6 text-white/60">
-                            {blueprint.description}
+                            {template.description}
                           </p>
                         </div>
 
                         <button
                           type="button"
-                          onClick={() => applyBlueprint(blueprint.key)}
+                          onClick={() => applyTemplate(template.code)}
                           className="border border-white/10 px-3 py-2 text-[10px] uppercase tracking-[0.22em] text-white/70 transition-colors hover:border-gold/40 hover:text-gold"
                         >
                           Utiliser
                         </button>
-                      </div>
-
-                      <div className="mt-3 flex flex-wrap gap-2">
-                        <MetaBadge label={getRecipeMealTypeLabel(blueprint.mealType)} />
-                        <MetaBadge label={getRecipeFitLabel(blueprint.fit)} />
-                        <MetaBadge
-                          label={getRecipeStockIntensityLabel(
-                            blueprint.stockIntensity,
-                          )}
-                        />
                       </div>
                     </div>
                   ))}
@@ -699,9 +454,11 @@ export default function AdminCatalogPage() {
                         </p>
 
                         <div className="mt-3 flex flex-wrap gap-2">
-                          <MetaBadge label={getRecipeMealTypeLabel(recipe.meal_type)} />
+                          {recipe.meal_types.map((type) => (
+                            <MetaBadge key={type} label={getRecipeMealTypeLabel(type)} />
+                          ))}
                           <MetaBadge label={getRecipeDifficultyLabel(recipe.difficulty)} />
-                          <MetaBadge label={getRecipeFitLabel(recipe.fit)} />
+                          <MetaBadge label={getRecipeFitStatusLabel(recipe.fit?.fit_status)} />
                         </div>
                       </div>
                     ))

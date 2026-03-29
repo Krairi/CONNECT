@@ -1,41 +1,42 @@
 import { useCallback, useEffect, useState } from "react";
 import { toDomyliError, type DomyliAppError } from "@/src/lib/errors";
 import {
+  buildSessionMealDraft,
   confirmMealSlot,
   createMeal,
-  listMealProfiles,
-  listMealRecipes,
-  listMeals,
+  readRecipeCandidatesForMeal,
   updateMeal,
   type CreateMealInput,
   type MealConfirmResult,
-  type MealItem,
-  type MealProfile,
-  type MealRecipe,
+  type MealDraft,
+  type MealType,
+  type RecipeCandidate,
   type UpdateMealInput,
 } from "@/src/services/meals/mealService";
 
 type MealsState = {
-  loading: boolean;
   saving: boolean;
   confirming: boolean;
+  candidatesLoading: boolean;
   error: DomyliAppError | null;
-  items: MealItem[];
-  profiles: MealProfile[];
-  recipes: MealRecipe[];
+  items: MealDraft[];
+  recipeCandidates: RecipeCandidate[];
+  selectedMealType: MealType;
+  selectedProfileId: string;
   lastCreatedMealSlotId: string | null;
   lastUpdatedMealSlotId: string | null;
   lastConfirmResult: MealConfirmResult | null;
 };
 
 const initialState: MealsState = {
-  loading: false,
   saving: false,
   confirming: false,
+  candidatesLoading: false,
   error: null,
   items: [],
-  profiles: [],
-  recipes: [],
+  recipeCandidates: [],
+  selectedMealType: "LUNCH",
+  selectedProfileId: "",
   lastCreatedMealSlotId: null,
   lastUpdatedMealSlotId: null,
   lastConfirmResult: null,
@@ -44,47 +45,53 @@ const initialState: MealsState = {
 export function useMeals() {
   const [state, setState] = useState(initialState);
 
-  const refresh = useCallback(async () => {
-    setState((prev) => ({
-      ...prev,
-      loading: true,
-      error: null,
-    }));
-
-    try {
-      const [items, profiles, recipes] = await Promise.all([
-        listMeals(),
-        listMealProfiles(),
-        listMealRecipes(),
-      ]);
+  const refreshRecipeCandidates = useCallback(
+    async (mealType?: MealType, profileId?: string) => {
+      const nextMealType = mealType ?? state.selectedMealType;
+      const nextProfileId = profileId ?? state.selectedProfileId;
 
       setState((prev) => ({
         ...prev,
-        loading: false,
-        items,
-        profiles,
-        recipes,
+        candidatesLoading: true,
+        error: null,
+        selectedMealType: nextMealType,
+        selectedProfileId: nextProfileId,
       }));
 
-      return { items, profiles, recipes };
-    } catch (error) {
-      const normalized = toDomyliError(error);
+      try {
+        const recipeCandidates = await readRecipeCandidatesForMeal(
+          nextMealType,
+          nextProfileId.trim() || null,
+          60,
+        );
 
-      setState((prev) => ({
-        ...prev,
-        loading: false,
-        error: normalized,
-      }));
+        setState((prev) => ({
+          ...prev,
+          candidatesLoading: false,
+          recipeCandidates,
+        }));
 
-      throw normalized;
-    }
-  }, []);
+        return recipeCandidates;
+      } catch (error) {
+        const normalized = toDomyliError(error);
+
+        setState((prev) => ({
+          ...prev,
+          candidatesLoading: false,
+          error: normalized,
+        }));
+
+        throw normalized;
+      }
+    },
+    [state.selectedMealType, state.selectedProfileId],
+  );
 
   useEffect(() => {
-    void refresh();
-  }, [refresh]);
+    void refreshRecipeCandidates(initialState.selectedMealType, "");
+  }, [refreshRecipeCandidates]);
 
-  const createMealAction = useCallback(async (payload: CreateMealInput) => {
+  const createMealAction = async (payload: CreateMealInput) => {
     setState((prev) => ({
       ...prev,
       saving: true,
@@ -95,13 +102,21 @@ export function useMeals() {
 
     try {
       const mealSlotId = await createMeal(payload);
-      const items = await listMeals();
 
       setState((prev) => ({
         ...prev,
         saving: false,
-        items,
         lastCreatedMealSlotId: mealSlotId,
+        items: mealSlotId
+          ? [
+              buildSessionMealDraft({
+                ...payload,
+                meal_slot_id: mealSlotId,
+                status: "DRAFT",
+              }),
+              ...prev.items.filter((item) => item.meal_slot_id !== mealSlotId),
+            ]
+          : prev.items,
       }));
 
       return mealSlotId;
@@ -116,9 +131,9 @@ export function useMeals() {
 
       throw normalized;
     }
-  }, []);
+  };
 
-  const updateMealAction = useCallback(async (payload: UpdateMealInput) => {
+  const updateMealAction = async (payload: UpdateMealInput) => {
     setState((prev) => ({
       ...prev,
       saving: true,
@@ -129,13 +144,24 @@ export function useMeals() {
 
     try {
       const mealSlotId = await updateMeal(payload);
-      const items = await listMeals();
 
       setState((prev) => ({
         ...prev,
         saving: false,
-        items,
         lastUpdatedMealSlotId: mealSlotId,
+        items: prev.items.map((item) =>
+          item.meal_slot_id === mealSlotId
+            ? {
+                ...item,
+                planned_for: payload.p_planned_for,
+                meal_type: payload.p_meal_type,
+                profile_id: payload.p_profile_id ?? null,
+                recipe_id: payload.p_recipe_id ?? null,
+                title: payload.p_title ?? null,
+                notes: payload.p_notes ?? null,
+              }
+            : item,
+        ),
       }));
 
       return mealSlotId;
@@ -150,9 +176,9 @@ export function useMeals() {
 
       throw normalized;
     }
-  }, []);
+  };
 
-  const confirmMealSlotAction = useCallback(async (mealSlotId: string) => {
+  const confirmMealSlotAction = async (mealSlotId: string) => {
     setState((prev) => ({
       ...prev,
       confirming: true,
@@ -162,13 +188,19 @@ export function useMeals() {
 
     try {
       const result = await confirmMealSlot(mealSlotId);
-      const items = await listMeals();
 
       setState((prev) => ({
         ...prev,
         confirming: false,
-        items,
         lastConfirmResult: result,
+        items: prev.items.map((item) =>
+          item.meal_slot_id === mealSlotId
+            ? {
+                ...item,
+                status: result.status,
+              }
+            : item,
+        ),
       }));
 
       return result;
@@ -183,13 +215,13 @@ export function useMeals() {
 
       throw normalized;
     }
-  }, []);
+  };
 
   return {
     ...state,
-    refresh,
     createMeal: createMealAction,
     updateMeal: updateMealAction,
     confirmMealSlot: confirmMealSlotAction,
+    refreshRecipeCandidates,
   };
 }

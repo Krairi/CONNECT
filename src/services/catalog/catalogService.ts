@@ -1,35 +1,70 @@
 import { callRpc } from "@/src/services/rpc";
 import { toDomyliError } from "@/src/lib/errors";
-import {
-  DOMYLI_RECIPE_BLUEPRINTS,
-  type DomyliRecipeBlueprint,
-  type DomyliRecipeDifficulty,
-  type DomyliRecipeFit,
-  type DomyliRecipeMealType,
-  type DomyliRecipeStockIntensity,
+import { TASK_TEMPLATES, type TaskTemplate } from "@/src/constants/taskCatalog";
+import type {
+  RecipeDifficulty,
+  RecipeFitStatus,
+  RecipeMealType,
 } from "@/src/constants/recipeCatalog";
+
+export type RecipeLibraryTag = {
+  code: string;
+  label: string;
+};
+
+export type RecipeLibraryFit = {
+  fit_status: RecipeFitStatus;
+  fit_score: number;
+  warnings: string[];
+  fit_reasons: string[];
+  blocked_reasons: string[];
+};
 
 export type RecipeLibraryItem = {
   recipe_id: string;
+  recipe_code: string;
   title: string;
+  short_description: string;
   description: string;
+  difficulty: RecipeDifficulty | string;
+  meal_types: RecipeMealType[];
+  prep_minutes: number;
+  cook_minutes: number;
+  stock_intensity: string;
+  default_servings: number;
+  tags: RecipeLibraryTag[];
+  fit: RecipeLibraryFit;
   instructions: string;
   is_active: boolean;
-  meal_type: DomyliRecipeMealType;
-  difficulty: DomyliRecipeDifficulty;
-  stock_intensity: DomyliRecipeStockIntensity;
-  fit: DomyliRecipeFit;
-  prep_minutes: number;
-  servings: number;
-  tags: string[];
-  ingredients: string[];
-  steps: string[];
+};
+
+type RawRecipeLibraryTag = {
+  code?: string | null;
+  label?: string | null;
+};
+
+type RawRecipeLibraryFit = {
+  fit_status?: string | null;
+  fit_score?: number | null;
+  warnings?: string[] | null;
+  fit_reasons?: string[] | null;
+  blocked_reasons?: string[] | null;
 };
 
 type RawRecipeLibraryItem = {
   recipe_id?: string | null;
+  recipe_code?: string | null;
   title?: string | null;
+  short_description?: string | null;
   description?: string | null;
+  difficulty?: string | null;
+  meal_types?: string[] | null;
+  prep_minutes?: number | null;
+  cook_minutes?: number | null;
+  stock_intensity?: string | null;
+  default_servings?: number | null;
+  tags?: RawRecipeLibraryTag[] | null;
+  fit?: RawRecipeLibraryFit | null;
   instructions?: string | null;
   is_active?: boolean | null;
 };
@@ -40,21 +75,13 @@ export type AdminRecipeUpsertInput = {
   p_description?: string | null;
   p_instructions?: string | null;
   p_is_active?: boolean | null;
-  p_meal_type?: DomyliRecipeMealType | null;
-  p_difficulty?: DomyliRecipeDifficulty | null;
-  p_stock_intensity?: DomyliRecipeStockIntensity | null;
-  p_fit?: DomyliRecipeFit | null;
-  p_prep_minutes?: number | null;
-  p_servings?: number | null;
-  p_tags?: string[] | null;
-  p_ingredients?: string[] | null;
-  p_steps?: string[] | null;
 };
 
-const DEFAULT_MEAL_TYPE: DomyliRecipeMealType = "DINNER";
-const DEFAULT_DIFFICULTY: DomyliRecipeDifficulty = "EASY";
-const DEFAULT_STOCK_INTENSITY: DomyliRecipeStockIntensity = "LOW";
-const DEFAULT_FIT: DomyliRecipeFit = "FAMILY_BALANCED";
+export type ReadRecipeLibraryInput = {
+  mealType?: RecipeMealType | null;
+  profileId?: string | null;
+  limit?: number;
+};
 
 function pickRows<T>(value: T[] | T | null | undefined): T[] {
   if (Array.isArray(value)) return value;
@@ -62,150 +89,68 @@ function pickRows<T>(value: T[] | T | null | undefined): T[] {
   return [value];
 }
 
-function cleanList(values?: string[] | null): string[] {
-  return (values ?? [])
-    .map((item) => item.trim())
-    .filter(Boolean);
-}
-
-function parseNumber(value: string | undefined, fallback: number): number {
-  if (!value) return fallback;
-  const parsed = Number(value);
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
-}
-
-function splitBlockLines(value: string): string[] {
-  return value
-    .split("\n")
-    .map((item) => item.trim())
-    .filter(Boolean);
-}
-
-function serializeMeta(payload: AdminRecipeUpsertInput): string {
-  const tags = cleanList(payload.p_tags).join(" | ");
-
-  return [
-    "[DOMYLI_META]",
-    `meal_type=${payload.p_meal_type ?? DEFAULT_MEAL_TYPE}`,
-    `difficulty=${payload.p_difficulty ?? DEFAULT_DIFFICULTY}`,
-    `stock_intensity=${payload.p_stock_intensity ?? DEFAULT_STOCK_INTENSITY}`,
-    `fit=${payload.p_fit ?? DEFAULT_FIT}`,
-    `prep_minutes=${Math.max(1, Number(payload.p_prep_minutes ?? 15))}`,
-    `servings=${Math.max(1, Number(payload.p_servings ?? 2))}`,
-    `tags=${tags}`,
-    "[/DOMYLI_META]",
-  ].join("\n");
-}
-
-function serializeSection(marker: string, values?: string[] | null): string {
-  const cleaned = cleanList(values);
-
-  return [
-    `[${marker}]`,
-    ...(cleaned.length > 0 ? cleaned : ["A compléter"]),
-    `[/${marker}]`,
-  ].join("\n");
-}
-
-function buildStructuredInstructions(payload: AdminRecipeUpsertInput): string {
-  const steps = cleanList(payload.p_steps).map((step, index) => `${index + 1}. ${step}`);
-
-  return [
-    serializeMeta(payload),
-    "",
-    serializeSection("DOMYLI_INGREDIENTS", payload.p_ingredients),
-    "",
-    serializeSection("DOMYLI_STEPS", steps),
-    "",
-    payload.p_instructions?.trim() || "",
-  ]
-    .join("\n")
-    .trim();
-}
-
-function extractBlock(source: string, marker: string): string {
-  const startToken = `[${marker}]`;
-  const endToken = `[/${marker}]`;
-  const start = source.indexOf(startToken);
-  const end = source.indexOf(endToken);
-
-  if (start < 0 || end < 0 || end <= start) {
-    return "";
-  }
-
-  return source.slice(start + startToken.length, end).trim();
-}
-
-function extractMetaMap(source: string): Map<string, string> {
-  const rawMeta = extractBlock(source, "DOMYLI_META");
-  const map = new Map<string, string>();
-
-  splitBlockLines(rawMeta).forEach((line) => {
-    const separatorIndex = line.indexOf("=");
-    if (separatorIndex < 0) return;
-
-    const key = line.slice(0, separatorIndex).trim();
-    const value = line.slice(separatorIndex + 1).trim();
-
-    if (key) {
-      map.set(key, value);
-    }
-  });
-
-  return map;
-}
-
-function stripStructuredBlocks(source?: string | null): string {
-  if (!source) return "";
-
-  return source
-    .replace(/\[DOMYLI_META\][\s\S]*?\[\/DOMYLI_META\]/g, "")
-    .replace(/\[DOMYLI_INGREDIENTS\][\s\S]*?\[\/DOMYLI_INGREDIENTS\]/g, "")
-    .replace(/\[DOMYLI_STEPS\][\s\S]*?\[\/DOMYLI_STEPS\]/g, "")
-    .trim();
-}
-
-function parseStructuredRecipe(item: RawRecipeLibraryItem): RecipeLibraryItem {
-  const instructions = item.instructions ?? "";
-  const meta = extractMetaMap(instructions);
-  const rawIngredients = splitBlockLines(extractBlock(instructions, "DOMYLI_INGREDIENTS"));
-  const rawSteps = splitBlockLines(extractBlock(instructions, "DOMYLI_STEPS"));
-  const tags = (meta.get("tags") ?? "")
-    .split("|")
-    .map((tag) => tag.trim())
-    .filter(Boolean);
-
+function normalizeFit(raw?: RawRecipeLibraryFit | null): RecipeLibraryFit {
   return {
-    recipe_id: item.recipe_id ?? "",
-    title: item.title ?? "Recette DOMYLI",
-    description: item.description?.trim() ?? "",
-    instructions: stripStructuredBlocks(instructions),
-    is_active: Boolean(item.is_active),
-    meal_type: (meta.get("meal_type") as DomyliRecipeMealType | undefined) ?? DEFAULT_MEAL_TYPE,
-    difficulty: (meta.get("difficulty") as DomyliRecipeDifficulty | undefined) ?? DEFAULT_DIFFICULTY,
-    stock_intensity:
-      (meta.get("stock_intensity") as DomyliRecipeStockIntensity | undefined) ??
-      DEFAULT_STOCK_INTENSITY,
-    fit: (meta.get("fit") as DomyliRecipeFit | undefined) ?? DEFAULT_FIT,
-    prep_minutes: parseNumber(meta.get("prep_minutes"), 15),
-    servings: parseNumber(meta.get("servings"), 2),
-    tags,
-    ingredients: rawIngredients.filter((line) => line !== "A compléter"),
-    steps: rawSteps
-      .map((line) => line.replace(/^\d+\.\s*/, "").trim())
-      .filter((line) => line && line !== "A compléter"),
+    fit_status: (raw?.fit_status ?? "OK") as RecipeFitStatus,
+    fit_score: Number(raw?.fit_score ?? 100),
+    warnings: Array.isArray(raw?.warnings) ? raw!.warnings.filter(Boolean) : [],
+    fit_reasons: Array.isArray(raw?.fit_reasons)
+      ? raw!.fit_reasons.filter(Boolean)
+      : [],
+    blocked_reasons: Array.isArray(raw?.blocked_reasons)
+      ? raw!.blocked_reasons.filter(Boolean)
+      : [],
   };
 }
 
-export async function readRecipeLibrary(): Promise<RecipeLibraryItem[]> {
+function normalizeTags(raw?: RawRecipeLibraryTag[] | null): RecipeLibraryTag[] {
+  if (!Array.isArray(raw)) return [];
+
+  return raw
+    .map((tag) => ({
+      code: tag.code ?? "",
+      label: tag.label ?? tag.code ?? "",
+    }))
+    .filter((tag) => Boolean(tag.code || tag.label));
+}
+
+function normalizeRecipe(item: RawRecipeLibraryItem): RecipeLibraryItem {
+  const shortDescription =
+    item.short_description?.trim() ||
+    item.description?.trim() ||
+    "Description non renseignée.";
+
+  return {
+    recipe_id: item.recipe_id ?? "",
+    recipe_code: item.recipe_code ?? "",
+    title: item.title ?? "Recette DOMYLI",
+    short_description: shortDescription,
+    description: shortDescription,
+    difficulty: item.difficulty ?? "EASY",
+    meal_types: (item.meal_types ?? []).filter(Boolean) as RecipeMealType[],
+    prep_minutes: Number(item.prep_minutes ?? 0),
+    cook_minutes: Number(item.cook_minutes ?? 0),
+    stock_intensity: item.stock_intensity ?? "LOW",
+    default_servings: Number(item.default_servings ?? 1),
+    tags: normalizeTags(item.tags),
+    fit: normalizeFit(item.fit),
+    instructions: item.instructions ?? "",
+    is_active: Boolean(item.is_active ?? true),
+  };
+}
+
+export async function readRecipeLibrary(
+  input: ReadRecipeLibraryInput = {},
+): Promise<RecipeLibraryItem[]> {
   try {
-    const raw = (await callRpc("rpc_recipe_library_list", {})) as
-      | RawRecipeLibraryItem[]
-      | RawRecipeLibraryItem
-      | null;
+    const raw = (await callRpc("rpc_recipe_library_list", {
+      p_meal_type: input.mealType ?? null,
+      p_profile_id: input.profileId?.trim() || null,
+      p_limit: input.limit ?? 80,
+    })) as RawRecipeLibraryItem[] | RawRecipeLibraryItem | null;
 
     return pickRows(raw)
-      .map(parseStructuredRecipe)
+      .map(normalizeRecipe)
       .sort((a, b) => a.title.localeCompare(b.title, "fr"));
   } catch (error) {
     throw toDomyliError(error);
@@ -220,7 +165,7 @@ export async function adminUpsertRecipe(
       p_recipe_id: payload.p_recipe_id ?? null,
       p_title: payload.p_title.trim(),
       p_description: payload.p_description?.trim() || null,
-      p_instructions: buildStructuredInstructions(payload),
+      p_instructions: payload.p_instructions?.trim() || null,
       p_is_active: payload.p_is_active ?? true,
     });
 
@@ -243,29 +188,6 @@ export async function adminUpsertRecipe(
   }
 }
 
-export function buildAdminRecipePayloadFromBlueprint(
-  blueprint: DomyliRecipeBlueprint,
-): AdminRecipeUpsertInput {
-  return {
-    p_title: blueprint.title,
-    p_description: blueprint.description,
-    p_is_active: true,
-    p_meal_type: blueprint.mealType,
-    p_difficulty: blueprint.difficulty,
-    p_stock_intensity: blueprint.stockIntensity,
-    p_fit: blueprint.fit,
-    p_prep_minutes: blueprint.prepMinutes,
-    p_servings: blueprint.servings,
-    p_tags: blueprint.tags,
-    p_ingredients: blueprint.ingredients,
-    p_steps: blueprint.steps,
-    p_instructions:
-      "Recette DOMYLI publiée depuis le cockpit Super Admin pour alimenter la bibliothèque mondiale.",
-  };
-}
-
-export function readRecipeBlueprintLibrary(): DomyliRecipeBlueprint[] {
-  return [...DOMYLI_RECIPE_BLUEPRINTS].sort((a, b) =>
-    a.title.localeCompare(b.title, "fr"),
-  );
+export function readTaskLibrarySocle(): TaskTemplate[] {
+  return [...TASK_TEMPLATES].sort((a, b) => a.label.localeCompare(b.label, "fr"));
 }

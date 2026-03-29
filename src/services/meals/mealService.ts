@@ -1,67 +1,26 @@
 import { callRpc } from "@/src/services/rpc";
 import { toDomyliError } from "@/src/lib/errors";
+import type { RecipeFitStatus, RecipeMealType } from "@/src/constants/recipeCatalog";
 
-export type MealType = "BREAKFAST" | "LUNCH" | "SNACK" | "DINNER";
+export type MealType = RecipeMealType;
 
-export type MealProfile = {
-  profile_id: string;
-  display_name: string;
-  birth_date: string | null;
-  sex: string | null;
-  goal: string | null;
-  activity_level: string | null;
-  is_pregnant: boolean;
-  has_diabetes: boolean;
-};
-
-export type MealRecipe = {
-  recipe_id: string;
-  title: string;
-  description: string;
-  instructions: string;
-  is_active: boolean;
-};
-
-export type MealItem = {
+export type MealDraft = {
   meal_slot_id: string;
   planned_for: string;
   meal_type: MealType;
   profile_id: string | null;
   recipe_id: string | null;
-  profile_display_name: string | null;
-  recipe_title: string | null;
   title: string | null;
   notes: string | null;
   status: string | null;
 };
 
-type RawMealProfile = {
-  profile_id?: string | null;
-  display_name?: string | null;
-  birth_date?: string | null;
-  sex?: string | null;
-  goal?: string | null;
-  activity_level?: string | null;
-  is_pregnant?: boolean | null;
-  has_diabetes?: boolean | null;
-};
-
-type RawMealRecipe = {
-  recipe_id?: string | null;
-  title?: string | null;
-  description?: string | null;
-  instructions?: string | null;
-  is_active?: boolean | null;
-};
-
-type RawMealItem = {
+type RawMealOutput = {
   meal_slot_id?: string | null;
   planned_for?: string | null;
   meal_type?: MealType | null;
   profile_id?: string | null;
   recipe_id?: string | null;
-  profile_display_name?: string | null;
-  recipe_title?: string | null;
   title?: string | null;
   notes?: string | null;
   status?: string | null;
@@ -73,6 +32,48 @@ type RawConfirmOutput = {
   run_status?: string | null;
 };
 
+type RawRecipeCandidate = {
+  recipe_id?: string | null;
+  recipe_code?: string | null;
+  title?: string | null;
+  short_description?: string | null;
+  difficulty?: string | null;
+  meal_types?: string[] | null;
+  prep_minutes?: number | null;
+  cook_minutes?: number | null;
+  default_servings?: number | null;
+  stock_intensity?: string | null;
+  tags?: Array<{ code?: string | null; label?: string | null }> | null;
+  fit?: {
+    fit_status?: string | null;
+    fit_score?: number | null;
+    warnings?: string[] | null;
+    fit_reasons?: string[] | null;
+    blocked_reasons?: string[] | null;
+  } | null;
+};
+
+export type RecipeCandidate = {
+  recipe_id: string;
+  recipe_code: string;
+  title: string;
+  short_description: string;
+  difficulty: string;
+  meal_types: MealType[];
+  prep_minutes: number;
+  cook_minutes: number;
+  default_servings: number;
+  stock_intensity: string;
+  tags: Array<{ code: string; label: string }>;
+  fit: {
+    fit_status: RecipeFitStatus;
+    fit_score: number;
+    warnings: string[];
+    fit_reasons: string[];
+    blocked_reasons: string[];
+  };
+};
+
 export type MealConfirmResult = {
   meal_slot_id: string | null;
   status: string | null;
@@ -81,8 +82,8 @@ export type MealConfirmResult = {
 export type CreateMealInput = {
   p_planned_for: string;
   p_meal_type: MealType;
-  p_profile_id: string;
-  p_recipe_id: string;
+  p_profile_id?: string | null;
+  p_recipe_id?: string | null;
   p_title?: string | null;
   p_notes?: string | null;
 };
@@ -91,8 +92,8 @@ export type UpdateMealInput = {
   p_meal_slot_id: string;
   p_planned_for: string;
   p_meal_type: MealType;
-  p_profile_id: string;
-  p_recipe_id: string;
+  p_profile_id?: string | null;
+  p_recipe_id?: string | null;
   p_title?: string | null;
   p_notes?: string | null;
 };
@@ -103,147 +104,121 @@ function pickRows<T>(value: T[] | T | null | undefined): T[] {
   return [value];
 }
 
-function normalizeMealType(value?: string | null): MealType {
-  if (value === "BREAKFAST" || value === "LUNCH" || value === "SNACK" || value === "DINNER") {
-    return value;
-  }
-  return "LUNCH";
-}
-
-function normalizeMealItem(raw: RawMealItem): MealItem {
+function normalizeMeal(raw: RawMealOutput): MealDraft {
   return {
     meal_slot_id: raw.meal_slot_id ?? "",
     planned_for: raw.planned_for ?? "",
-    meal_type: normalizeMealType(raw.meal_type),
+    meal_type: (raw.meal_type ?? "LUNCH") as MealType,
     profile_id: raw.profile_id ?? null,
     recipe_id: raw.recipe_id ?? null,
-    profile_display_name: raw.profile_display_name ?? null,
-    recipe_title: raw.recipe_title ?? null,
     title: raw.title ?? null,
     notes: raw.notes ?? null,
     status: raw.status ?? null,
   };
 }
 
-export async function listMealProfiles(): Promise<MealProfile[]> {
-  try {
-    const raw = (await callRpc("rpc_human_profile_list", {})) as
-      | RawMealProfile[]
-      | RawMealProfile
-      | null;
+function normalizeRecipeCandidate(raw: RawRecipeCandidate): RecipeCandidate {
+  return {
+    recipe_id: raw.recipe_id ?? "",
+    recipe_code: raw.recipe_code ?? "",
+    title: raw.title ?? "Recette DOMYLI",
+    short_description: raw.short_description ?? "Description non renseignée.",
+    difficulty: raw.difficulty ?? "EASY",
+    meal_types: (raw.meal_types ?? []).filter(Boolean) as MealType[],
+    prep_minutes: Number(raw.prep_minutes ?? 0),
+    cook_minutes: Number(raw.cook_minutes ?? 0),
+    default_servings: Number(raw.default_servings ?? 1),
+    stock_intensity: raw.stock_intensity ?? "LOW",
+    tags: Array.isArray(raw.tags)
+      ? raw.tags
+          .map((tag) => ({
+            code: tag.code ?? "",
+            label: tag.label ?? tag.code ?? "",
+          }))
+          .filter((tag) => Boolean(tag.code || tag.label))
+      : [],
+    fit: {
+      fit_status: (raw.fit?.fit_status ?? "OK") as RecipeFitStatus,
+      fit_score: Number(raw.fit?.fit_score ?? 100),
+      warnings: Array.isArray(raw.fit?.warnings)
+        ? raw.fit!.warnings.filter(Boolean)
+        : [],
+      fit_reasons: Array.isArray(raw.fit?.fit_reasons)
+        ? raw.fit!.fit_reasons.filter(Boolean)
+        : [],
+      blocked_reasons: Array.isArray(raw.fit?.blocked_reasons)
+        ? raw.fit!.blocked_reasons.filter(Boolean)
+        : [],
+    },
+  };
+}
 
-    return pickRows(raw).map((item) => ({
-      profile_id: item.profile_id ?? "",
-      display_name: item.display_name ?? "Profil DOMYLI",
-      birth_date: item.birth_date ?? null,
-      sex: item.sex ?? null,
-      goal: item.goal ?? null,
-      activity_level: item.activity_level ?? null,
-      is_pregnant: Boolean(item.is_pregnant),
-      has_diabetes: Boolean(item.has_diabetes),
-    }));
+export async function readRecipeCandidatesForMeal(
+  mealType: MealType,
+  profileId?: string | null,
+  limit = 60,
+): Promise<RecipeCandidate[]> {
+  try {
+    const raw = (await callRpc("rpc_recipe_library_list", {
+      p_meal_type: mealType,
+      p_profile_id: profileId?.trim() || null,
+      p_limit: limit,
+    })) as RawRecipeCandidate[] | RawRecipeCandidate | null;
+
+    return pickRows(raw)
+      .map(normalizeRecipeCandidate)
+      .sort((a, b) => a.title.localeCompare(b.title, "fr"));
   } catch (error) {
     throw toDomyliError(error);
   }
-}
-
-export async function listMealRecipes(): Promise<MealRecipe[]> {
-  try {
-    const raw = (await callRpc("rpc_recipe_library_list", {})) as
-      | RawMealRecipe[]
-      | RawMealRecipe
-      | null;
-
-    return pickRows(raw).map((item) => ({
-      recipe_id: item.recipe_id ?? "",
-      title: item.title ?? "Recette DOMYLI",
-      description: item.description ?? "",
-      instructions: item.instructions ?? "",
-      is_active: Boolean(item.is_active),
-    }));
-  } catch (error) {
-    throw toDomyliError(error);
-  }
-}
-
-export async function listMeals(): Promise<MealItem[]> {
-  try {
-    const raw = (await callRpc("rpc_meal_slot_list", {})) as
-      | RawMealItem[]
-      | RawMealItem
-      | null;
-
-    return pickRows(raw).map(normalizeMealItem);
-  } catch (error) {
-    throw toDomyliError(error);
-  }
-}
-
-function extractUuid(raw: unknown, fallback = ""): string {
-  if (typeof raw === "string") {
-    return raw;
-  }
-
-  if (Array.isArray(raw) && typeof raw[0] === "string") {
-    return raw[0];
-  }
-
-  if (raw && typeof raw === "object") {
-    const candidate =
-      ("meal_slot_id" in raw && typeof (raw as { meal_slot_id?: unknown }).meal_slot_id === "string"
-        ? (raw as { meal_slot_id?: string }).meal_slot_id
-        : null) ??
-      ("id" in raw && typeof (raw as { id?: unknown }).id === "string"
-        ? (raw as { id?: string }).id
-        : null);
-
-    return candidate ?? fallback;
-  }
-
-  return fallback;
 }
 
 export async function createMeal(payload: CreateMealInput): Promise<string> {
-  try {
-    const raw = await callRpc(
-      "rpc_meal_plan_create",
-      payload,
-      { unwrap: true },
-    );
+  const raw = await callRpc<{ meal_slot_id?: string | null }>(
+    "rpc_meal_slot_upsert",
+    payload,
+    { unwrap: true },
+  );
 
-    return extractUuid(raw, "");
-  } catch (error) {
-    throw toDomyliError(error);
-  }
+  return raw?.meal_slot_id ?? "";
 }
 
 export async function updateMeal(payload: UpdateMealInput): Promise<string> {
-  try {
-    const raw = await callRpc(
-      "rpc_meal_slot_upsert",
-      payload,
-      { unwrap: true },
-    );
+  const raw = await callRpc<{ meal_slot_id?: string | null }>(
+    "rpc_meal_slot_upsert",
+    payload,
+    { unwrap: true },
+  );
 
-    return extractUuid(raw, payload.p_meal_slot_id);
-  } catch (error) {
-    throw toDomyliError(error);
-  }
+  return raw?.meal_slot_id ?? payload.p_meal_slot_id;
 }
 
-export async function confirmMealSlot(mealSlotId: string): Promise<MealConfirmResult> {
-  try {
-    const raw = (await callRpc(
-      "rpc_meal_confirm_v3",
-      { p_meal_slot_id: mealSlotId },
-      { unwrap: true },
-    )) as RawConfirmOutput | null;
+export async function confirmMealSlot(
+  mealSlotId: string,
+): Promise<MealConfirmResult> {
+  const raw = await callRpc<RawConfirmOutput>(
+    "rpc_meal_confirm_v3",
+    { p_meal_slot_id: mealSlotId },
+    { unwrap: true },
+  );
 
-    return {
-      meal_slot_id: raw?.meal_slot_id ?? mealSlotId,
-      status: raw?.status ?? raw?.run_status ?? "CONFIRMED",
-    };
-  } catch (error) {
-    throw toDomyliError(error);
-  }
+  return {
+    meal_slot_id: raw?.meal_slot_id ?? mealSlotId,
+    status: raw?.status ?? raw?.run_status ?? "CONFIRMED",
+  };
+}
+
+export function buildSessionMealDraft(
+  input: CreateMealInput & { meal_slot_id: string; status?: string | null },
+): MealDraft {
+  return normalizeMeal({
+    meal_slot_id: input.meal_slot_id,
+    planned_for: input.p_planned_for,
+    meal_type: input.p_meal_type,
+    profile_id: input.p_profile_id ?? null,
+    recipe_id: input.p_recipe_id ?? null,
+    title: input.p_title ?? null,
+    notes: input.p_notes ?? null,
+    status: input.status ?? "DRAFT",
+  });
 }

@@ -2,34 +2,29 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { toDomyliError, type DomyliAppError } from "@/src/lib/errors";
 import {
   adminUpsertRecipe,
-  buildAdminRecipePayloadFromBlueprint,
-  readRecipeBlueprintLibrary,
   readRecipeLibrary,
+  readTaskLibrarySocle,
   type AdminRecipeUpsertInput,
   type RecipeLibraryItem,
 } from "@/src/services/catalog/catalogService";
-import type { DomyliRecipeBlueprint } from "@/src/constants/recipeCatalog";
+import type { TaskTemplate } from "@/src/constants/taskCatalog";
 
 type CatalogState = {
   loading: boolean;
   saving: boolean;
-  publishingPack: boolean;
   error: DomyliAppError | null;
   recipes: RecipeLibraryItem[];
-  blueprints: DomyliRecipeBlueprint[];
+  taskTemplates: TaskTemplate[];
   lastSavedRecipeId: string | null;
-  lastPublishedCount: number;
 };
 
 const initialState: CatalogState = {
   loading: false,
   saving: false,
-  publishingPack: false,
   error: null,
   recipes: [],
-  blueprints: [],
+  taskTemplates: [],
   lastSavedRecipeId: null,
-  lastPublishedCount: 0,
 };
 
 export function useCatalog() {
@@ -43,19 +38,19 @@ export function useCatalog() {
     }));
 
     try {
-      const [recipes, blueprints] = await Promise.all([
-        readRecipeLibrary(),
-        Promise.resolve(readRecipeBlueprintLibrary()),
+      const [recipes, taskTemplates] = await Promise.all([
+        readRecipeLibrary({ limit: 60 }),
+        Promise.resolve(readTaskLibrarySocle()),
       ]);
 
       setState((prev) => ({
         ...prev,
         loading: false,
         recipes,
-        blueprints,
+        taskTemplates,
       }));
 
-      return { recipes, blueprints };
+      return { recipes, taskTemplates };
     } catch (error) {
       const normalized = toDomyliError(error);
 
@@ -79,12 +74,11 @@ export function useCatalog() {
       saving: true,
       error: null,
       lastSavedRecipeId: null,
-      lastPublishedCount: 0,
     }));
 
     try {
       const recipeId = await adminUpsertRecipe(payload);
-      const recipes = await readRecipeLibrary();
+      const recipes = await readRecipeLibrary({ limit: 60 });
 
       setState((prev) => ({
         ...prev,
@@ -107,65 +101,17 @@ export function useCatalog() {
     }
   }, []);
 
-  const publishBlueprintPack = useCallback(
-    async (blueprints?: DomyliRecipeBlueprint[]) => {
-      const library = blueprints?.length ? blueprints : state.blueprints;
-
-      setState((prev) => ({
-        ...prev,
-        publishingPack: true,
-        error: null,
-        lastSavedRecipeId: null,
-        lastPublishedCount: 0,
-      }));
-
-      try {
-        const ids: string[] = [];
-
-        for (const blueprint of library) {
-          const recipeId = await adminUpsertRecipe(
-            buildAdminRecipePayloadFromBlueprint(blueprint),
-          );
-
-          if (recipeId) {
-            ids.push(recipeId);
-          }
-        }
-
-        const recipes = await readRecipeLibrary();
-
-        setState((prev) => ({
-          ...prev,
-          publishingPack: false,
-          recipes,
-          lastPublishedCount: ids.length,
-        }));
-
-        return ids;
-      } catch (error) {
-        const normalized = toDomyliError(error);
-
-        setState((prev) => ({
-          ...prev,
-          publishingPack: false,
-          error: normalized,
-        }));
-
-        throw normalized;
-      }
-    },
-    [state.blueprints],
-  );
-
   const recipeCount = useMemo(() => state.recipes.length, [state.recipes]);
-  const blueprintCount = useMemo(() => state.blueprints.length, [state.blueprints]);
+  const taskTemplateCount = useMemo(
+    () => state.taskTemplates.length,
+    [state.taskTemplates],
+  );
 
   return {
     ...state,
     recipeCount,
-    blueprintCount,
+    taskTemplateCount,
     refresh,
     saveRecipe,
-    publishBlueprintPack,
   };
 }
