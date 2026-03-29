@@ -1,3 +1,4 @@
+import type { ReactElement } from "react";
 import { createBrowserRouter } from "react-router-dom";
 import ProtectedRoute from "@/src/components/common/ProtectedRoute";
 import { ROUTES } from "@/src/constants/routes";
@@ -19,12 +20,15 @@ import PricingPage from "@/src/pages/PricingPage";
 import SubscriptionPage from "@/src/pages/SubscriptionPage";
 import ReadinessPage from "@/src/pages/ReadinessPage";
 import AdminCatalogPage from "@/src/pages/AdminCatalogPage";
+import HouseholdMembersPage from "@/src/pages/HouseholdMembersPage";
+import InviteAcceptPage from "@/src/pages/InviteAcceptPage";
+import MyProfilePage from "@/src/pages/MyProfilePage";
 
-function withSession(element: React.ReactElement) {
+function withSession(element: ReactElement) {
   return <ProtectedRoute>{element}</ProtectedRoute>;
 }
 
-function withHousehold(element: React.ReactElement) {
+function withHousehold(element: ReactElement) {
   return <ProtectedRoute requireHousehold>{element}</ProtectedRoute>;
 }
 
@@ -41,6 +45,18 @@ export const router = createBrowserRouter([
   {
     path: ROUTES.dashboard,
     element: withHousehold(<DashboardPage />),
+  },
+  {
+    path: ROUTES.householdMembers,
+    element: withHousehold(<HouseholdMembersPage />),
+  },
+  {
+    path: ROUTES.inviteAccept,
+    element: withSession(<InviteAcceptPage />),
+  },
+  {
+    path: ROUTES.myProfile,
+    element: withHousehold(<MyProfilePage />),
   },
   {
     path: ROUTES.profiles,
