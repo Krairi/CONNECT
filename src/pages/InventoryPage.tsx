@@ -26,6 +26,29 @@ type DomyliFlowBadgeProps = {
   flow: "MEALS" | "SHOPPING" | "ALERTS" | "HOUSEHOLD";
 };
 
+type SelectOptionLike = {
+  code?: string;
+  value?: string;
+  label?: string;
+};
+
+type InventoryItemLike = {
+  code?: string;
+  value?: string;
+  label?: string;
+  defaultUnit?: string;
+  domain?: string;
+  domyliFlows?: Array<"MEALS" | "SHOPPING" | "ALERTS" | "HOUSEHOLD">;
+};
+
+function getOptionKey(option: SelectOptionLike, fallback: string) {
+  return option.code ?? option.value ?? fallback;
+}
+
+function getOptionValue(option: SelectOptionLike, fallback = "") {
+  return option.code ?? option.value ?? fallback;
+}
+
 function DomyliFlowBadge({ flow }: DomyliFlowBadgeProps) {
   const labels: Record<DomyliFlowBadgeProps["flow"], string> = {
     MEALS: "Repas",
@@ -72,17 +95,23 @@ export default function InventoryPage() {
   const [minQty, setMinQty] = useState("");
   const [localMessage, setLocalMessage] = useState<string | null>(null);
 
-  const categoryOptions = useMemo(() => getInventoryCategoryOptions(), []);
+  const categoryOptions = useMemo(
+    () => (getInventoryCategoryOptions() ?? []) as SelectOptionLike[],
+    [],
+  );
+
   const itemOptions = useMemo(
-    () => getInventoryItemsByCategory(categoryCode),
+    () => (getInventoryItemsByCategory(categoryCode) ?? []) as InventoryItemLike[],
     [categoryCode],
   );
+
   const selectedItem = useMemo(
-    () => getInventoryItemByCode(itemCode),
+    () => (getInventoryItemByCode(itemCode) ?? null) as InventoryItemLike | null,
     [itemCode],
   );
+
   const unitOptions = useMemo(
-    () => getInventoryUnitOptionsForItem(itemCode),
+    () => (getInventoryUnitOptionsForItem(itemCode) ?? []) as SelectOptionLike[],
     [itemCode],
   );
 
@@ -155,7 +184,7 @@ export default function InventoryPage() {
     setItemCode(nextItemCode);
     setLocalMessage(null);
 
-    const item = getInventoryItemByCode(nextItemCode);
+    const item = getInventoryItemByCode(nextItemCode) as InventoryItemLike | null;
     setUnitCode(item?.defaultUnit ?? "");
   };
 
@@ -163,13 +192,25 @@ export default function InventoryPage() {
     e.preventDefault();
     setLocalMessage(null);
 
-    if (!selectedItem || !categoryLabel) return;
+    if (!selectedItem || !categoryLabel) {
+      setLocalMessage(
+        "La catégorie ou l’article canonique sélectionné n’est pas reconnu par le catalogue DOMYLI.",
+      );
+      return;
+    }
 
     try {
+      const selectedItemCode = selectedItem.code ?? selectedItem.value ?? "";
+
+      if (!selectedItemCode) {
+        setLocalMessage("Le code de l’article canonique est introuvable.");
+        return;
+      }
+
       const result = await saveItem({
         p_household_id: householdId,
-        p_name: selectedItem.label,
-        p_item_code: selectedItem.code,
+        p_name: selectedItem.label ?? "Article DOMYLI",
+        p_item_code: selectedItemCode,
         p_category: categoryLabel,
         p_category_code: categoryCode,
         p_unit: unitCode,
@@ -260,11 +301,17 @@ export default function InventoryPage() {
                     className="w-full border border-white/10 bg-black/20 px-4 py-4 text-sm outline-none focus:border-gold/50"
                   >
                     <option value="">Sélectionner une famille métier</option>
-                    {categoryOptions.map((option) => (
-                      <option key={option.code} value={option.code}>
-                        {option.label}
-                      </option>
-                    ))}
+                    {categoryOptions.map((option, index) => {
+                      const optionValue = getOptionValue(option);
+                      return (
+                        <option
+                          key={`inventory-category-${getOptionKey(option, String(index))}-${index}`}
+                          value={optionValue}
+                        >
+                          {option.label ?? optionValue}
+                        </option>
+                      );
+                    })}
                   </select>
                 </label>
 
@@ -282,11 +329,17 @@ export default function InventoryPage() {
                         ? "Sélectionner un article canonique"
                         : "Choisir d’abord une catégorie"}
                     </option>
-                    {itemOptions.map((item) => (
-                      <option key={item.code} value={item.code}>
-                        {item.label}
-                      </option>
-                    ))}
+                    {itemOptions.map((item, index) => {
+                      const optionValue = getOptionValue(item);
+                      return (
+                        <option
+                          key={`inventory-item-${getOptionKey(item, String(index))}-${index}`}
+                          value={optionValue}
+                        >
+                          {item.label ?? optionValue}
+                        </option>
+                      );
+                    })}
                   </select>
                 </label>
 
@@ -304,11 +357,17 @@ export default function InventoryPage() {
                         ? "Sélectionner une unité autorisée"
                         : "Choisir d’abord un article"}
                     </option>
-                    {unitOptions.map((option) => (
-                      <option key={option.code} value={option.code}>
-                        {option.label}
-                      </option>
-                    ))}
+                    {unitOptions.map((option, index) => {
+                      const optionValue = getOptionValue(option);
+                      return (
+                        <option
+                          key={`inventory-unit-${getOptionKey(option, String(index))}-${index}`}
+                          value={optionValue}
+                        >
+                          {option.label ?? optionValue}
+                        </option>
+                      );
+                    })}
                   </select>
                 </label>
 
@@ -354,7 +413,9 @@ export default function InventoryPage() {
                   disabled={rebuilding}
                   className="inline-flex flex-1 items-center justify-center gap-3 border border-white/10 px-5 py-4 text-sm uppercase tracking-[0.24em] text-white transition-colors hover:border-gold/40 hover:text-gold disabled:cursor-not-allowed disabled:opacity-60"
                 >
-                  <RefreshCw className={`h-4 w-4 ${rebuilding ? "animate-spin" : ""}`} />
+                  <RefreshCw
+                    className={`h-4 w-4 ${rebuilding ? "animate-spin" : ""}`}
+                  />
                   {rebuilding ? "Reconstruction..." : "Rebuild shopping"}
                 </button>
 
@@ -436,8 +497,11 @@ export default function InventoryPage() {
                 </p>
                 <div className="mt-3 flex flex-wrap gap-2">
                   {selectedItem?.domyliFlows?.length ? (
-                    selectedItem.domyliFlows.map((flow) => (
-                      <DomyliFlowBadge key={flow} flow={flow} />
+                    selectedItem.domyliFlows.map((flow, index) => (
+                      <DomyliFlowBadge
+                        key={`inventory-flow-${selectedItem.code ?? selectedItem.value ?? "item"}-${flow}-${index}`}
+                        flow={flow}
+                      />
                     ))
                   ) : (
                     <p className="text-sm text-white/55">Aucun flux sélectionné</p>
