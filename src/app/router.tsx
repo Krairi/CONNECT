@@ -1,5 +1,6 @@
 import type { ReactElement } from "react";
 import { createBrowserRouter } from "react-router-dom";
+
 import ProtectedRoute from "@/src/components/common/ProtectedRoute";
 import { ROUTES } from "@/src/constants/routes";
 
@@ -30,6 +31,17 @@ function withSession(element: ReactElement) {
 
 function withHousehold(element: ReactElement) {
   return <ProtectedRoute requireHousehold>{element}</ProtectedRoute>;
+}
+
+function withSuperAdmin(element: ReactElement) {
+  return (
+    <ProtectedRoute
+      requireSuperAdmin
+      allowSuperAdminBypassHousehold
+    >
+      {element}
+    </ProtectedRoute>
+  );
 }
 
 export const router = createBrowserRouter([
@@ -108,7 +120,7 @@ export const router = createBrowserRouter([
   },
   {
     path: ROUTES.adminCatalog,
-    element: withHousehold(<AdminCatalogPage />),
+    element: withSuperAdmin(<AdminCatalogPage />),
   },
   {
     path: ROUTES.notFound,

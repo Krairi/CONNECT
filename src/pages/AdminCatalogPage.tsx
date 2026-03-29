@@ -17,7 +17,7 @@ import { getTaskFlowLabel } from "@/src/constants/taskCatalog";
 
 function FlowBadge({ label }: { label: string }) {
   return (
-    <span className="inline-flex items-center rounded-full border border-gold/20 bg-gold/10 px-3 py-1 text-[11px] uppercase tracking-[0.2em] text-gold">
+    <span className="inline-flex items-center rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-[10px] uppercase tracking-[0.22em] text-white/70">
       {label}
     </span>
   );
@@ -44,10 +44,18 @@ export default function AdminCatalogPage() {
     hasHousehold,
     authLoading,
     bootstrapLoading,
+    activeMembership,
   } = useAuth();
 
-  const { loading, saving, error, recipes, taskTemplates, saveRecipe, lastSavedRecipeId } =
-    useCatalog();
+  const {
+    loading,
+    saving,
+    error,
+    recipes,
+    taskTemplates,
+    saveRecipe,
+    lastSavedRecipeId,
+  } = useCatalog();
 
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
@@ -56,31 +64,54 @@ export default function AdminCatalogPage() {
   const [localMessage, setLocalMessage] = useState<string | null>(null);
 
   const isSuperAdmin = Boolean(bootstrap?.is_super_admin);
+
   const recipePreview = useMemo(() => recipes.slice(0, 8), [recipes]);
   const taskPreview = useMemo(() => taskTemplates.slice(0, 8), [taskTemplates]);
 
   if (authLoading || bootstrapLoading || loading) {
     return (
-      <main className="min-h-screen bg-black px-6 py-10 text-white">
-        <div className="mx-auto max-w-6xl rounded-[28px] border border-white/10 bg-white/5 p-8 backdrop-blur">
-          <p className="text-xs uppercase tracking-[0.24em] text-gold">DOMYLI</p>
-          <h1 className="mt-4 text-3xl font-semibold">
-            Chargement du cockpit catalogue...
-          </h1>
+      <main className="min-h-screen bg-obsidian px-6 py-10 text-alabaster">
+        <div className="mx-auto flex min-h-[70vh] max-w-7xl items-center justify-center">
+          <div className="text-center">
+            <div className="mx-auto mb-6 flex h-14 w-14 items-center justify-center rounded-full border border-gold/30 bg-gold/10">
+              <ShieldCheck className="h-6 w-6 text-gold" />
+            </div>
+            <p className="text-xs uppercase tracking-[0.32em] text-gold">
+              DOMYLI
+            </p>
+            <h1 className="mt-4 text-3xl font-semibold tracking-tight text-white">
+              Chargement du cockpit catalogue...
+            </h1>
+          </div>
         </div>
       </main>
     );
   }
 
-  if (!isAuthenticated || !hasHousehold) {
+  if (!isAuthenticated) {
     return (
-      <main className="min-h-screen bg-black px-6 py-10 text-white">
-        <div className="mx-auto max-w-6xl rounded-[28px] border border-white/10 bg-white/5 p-8 backdrop-blur">
-          <p className="text-xs uppercase tracking-[0.24em] text-gold">DOMYLI</p>
-          <h1 className="mt-4 text-3xl font-semibold">Foyer requis</h1>
-          <p className="mt-3 text-white/70">
-            Il faut une session authentifiée et un foyer actif pour accéder au cockpit catalogue.
-          </p>
+      <main className="min-h-screen bg-obsidian px-6 py-10 text-alabaster">
+        <div className="mx-auto flex min-h-[70vh] max-w-3xl items-center justify-center">
+          <div className="rounded-[32px] border border-white/10 bg-white/5 p-10 text-center backdrop-blur">
+            <div className="mx-auto mb-6 flex h-14 w-14 items-center justify-center rounded-full border border-white/10 bg-black/20">
+              <Lock className="h-6 w-6 text-white/80" />
+            </div>
+            <p className="text-xs uppercase tracking-[0.28em] text-gold">
+              Accès restreint
+            </p>
+            <h1 className="mt-4 text-3xl font-semibold text-white">
+              Session requise
+            </h1>
+            <p className="mt-4 text-sm leading-7 text-white/70">
+              Il faut une session authentifiée pour accéder au cockpit catalogue.
+            </p>
+            <button
+              onClick={() => navigate(ROUTES.HOME)}
+              className="mt-8 border border-gold/40 px-6 py-3 text-sm uppercase tracking-[0.25em] text-gold transition-colors hover:bg-gold hover:text-black"
+            >
+              Retour à l’accueil
+            </button>
+          </div>
         </div>
       </main>
     );
@@ -88,25 +119,31 @@ export default function AdminCatalogPage() {
 
   if (!isSuperAdmin) {
     return (
-      <main className="min-h-screen bg-black px-6 py-10 text-white">
-        <div className="mx-auto max-w-5xl rounded-[28px] border border-white/10 bg-white/5 p-8 backdrop-blur">
-          <div className="inline-flex items-center gap-2 rounded-full border border-gold/20 bg-gold/10 px-4 py-2 text-xs uppercase tracking-[0.24em] text-gold">
-            <Lock className="h-4 w-4" />
-            Accès restreint
+      <main className="min-h-screen bg-obsidian px-6 py-10 text-alabaster">
+        <div className="mx-auto flex min-h-[70vh] max-w-3xl items-center justify-center">
+          <div className="rounded-[32px] border border-white/10 bg-white/5 p-10 text-center backdrop-blur">
+            <div className="mx-auto mb-6 flex h-14 w-14 items-center justify-center rounded-full border border-white/10 bg-black/20">
+              <Lock className="h-6 w-6 text-white/80" />
+            </div>
+            <p className="text-xs uppercase tracking-[0.28em] text-gold">
+              Accès restreint
+            </p>
+            <h1 className="mt-4 text-3xl font-semibold text-white">
+              Cockpit Super Admin
+            </h1>
+            <p className="mt-4 text-sm leading-7 text-white/70">
+              Cette surface de gouvernance catalogue est réservée au Super Admin
+              DOMYLI.
+            </p>
+            <button
+              onClick={() =>
+                navigate(hasHousehold ? ROUTES.DASHBOARD : ROUTES.HOME)
+              }
+              className="mt-8 border border-gold/40 px-6 py-3 text-sm uppercase tracking-[0.25em] text-gold transition-colors hover:bg-gold hover:text-black"
+            >
+              {hasHousehold ? "Retour au dashboard" : "Retour à l’accueil"}
+            </button>
           </div>
-
-          <h1 className="mt-6 text-3xl font-semibold">Cockpit Super Admin</h1>
-          <p className="mt-3 max-w-2xl text-sm leading-7 text-white/70">
-            Cette surface de gouvernance catalogue est réservée au Super Admin DOMYLI.
-          </p>
-
-          <button
-            type="button"
-            onClick={() => navigate(ROUTES.DASHBOARD)}
-            className="mt-8 border border-gold/40 px-6 py-3 text-sm uppercase tracking-[0.25em] text-gold transition-colors hover:bg-gold hover:text-black"
-          >
-            Retour au dashboard
-          </button>
         </div>
       </main>
     );
@@ -140,39 +177,65 @@ export default function AdminCatalogPage() {
   };
 
   return (
-    <main className="min-h-screen bg-black px-6 py-10 text-white">
+    <main className="min-h-screen bg-obsidian px-6 py-10 text-alabaster">
       <div className="mx-auto max-w-7xl">
-        <div className="grid gap-6 lg:grid-cols-[1.05fr_0.95fr]">
-          <section className="rounded-[28px] border border-white/10 bg-white/5 p-8 backdrop-blur">
-            <div className="flex items-start justify-between gap-4">
-              <button
-                type="button"
-                onClick={() => navigate(ROUTES.DASHBOARD)}
-                className="mt-1 inline-flex h-10 w-10 items-center justify-center border border-white/10 transition-colors hover:border-gold/40"
-                aria-label="Retour"
-              >
-                <ArrowLeft className="h-4 w-4" />
-              </button>
+        <div className="mb-8 flex items-start justify-between gap-6">
+          <div className="max-w-3xl">
+            <button
+              onClick={() =>
+                navigate(hasHousehold ? ROUTES.DASHBOARD : ROUTES.HOME)
+              }
+              className="mb-6 inline-flex h-10 w-10 items-center justify-center border border-white/10 transition-colors hover:border-gold/40"
+              aria-label="Retour"
+            >
+              <ArrowLeft className="h-4 w-4" />
+            </button>
 
-              <div className="flex-1">
+            <p className="text-xs uppercase tracking-[0.28em] text-gold">
+              DOMYLI
+            </p>
+            <h1 className="mt-4 text-4xl font-semibold tracking-tight text-white">
+              Admin Catalog
+            </h1>
+            <p className="mt-4 max-w-2xl text-sm leading-7 text-white/70">
+              Socle de gouvernance catalogue : publication de recettes côté back,
+              prévisualisation structurée des templates de tâches côté produit.
+            </p>
+          </div>
+
+          <div className="rounded-3xl border border-gold/20 bg-gold/10 px-5 py-4 text-right">
+            <div className="inline-flex items-center gap-2 text-gold">
+              <ShieldCheck className="h-4 w-4" />
+              <span className="text-xs uppercase tracking-[0.24em]">
+                Super Admin
+              </span>
+            </div>
+            <p className="mt-2 text-sm text-gold/90">
+              {hasHousehold
+                ? activeMembership?.household_name ?? "Foyer actif"
+                : "Cockpit global sans foyer requis"}
+            </p>
+          </div>
+        </div>
+
+        <div className="grid gap-8 xl:grid-cols-[1.2fr_0.8fr]">
+          <section className="rounded-[28px] border border-white/10 bg-white/5 p-8 backdrop-blur">
+            <div className="mb-8 flex items-center gap-3">
+              <div className="flex h-11 w-11 items-center justify-center rounded-2xl border border-gold/20 bg-gold/10">
+                <CookingPot className="h-5 w-5 text-gold" />
+              </div>
+              <div>
                 <p className="text-xs uppercase tracking-[0.24em] text-gold">
-                  DOMYLI
+                  Catalogue recette
                 </p>
-                <h1 className="mt-4 text-3xl font-semibold">Admin Catalog</h1>
-                <p className="mt-3 max-w-3xl text-sm leading-7 text-white/70">
-                  Socle de gouvernance catalogue : publication de recettes côté back,
-                  prévisualisation structurée des templates de tâches côté produit.
+                <p className="mt-1 text-sm text-white/65">
+                  Publication contrôlée par le cockpit Super Admin.
                 </p>
               </div>
             </div>
 
-            <div className="mt-8 inline-flex items-center gap-2 rounded-full border border-gold/20 bg-gold/10 px-4 py-2 text-xs uppercase tracking-[0.24em] text-gold">
-              <ShieldCheck className="h-4 w-4" />
-              Super Admin
-            </div>
-
-            <form onSubmit={handleSave} className="mt-8 space-y-5">
-              <div className="grid gap-4 md:grid-cols-2">
+            <form onSubmit={handleSave} className="space-y-6">
+              <div className="grid gap-5 md:grid-cols-2">
                 <label className="block text-sm text-white/80 md:col-span-2">
                   <span className="mb-2 block">Titre de recette</span>
                   <input
@@ -249,7 +312,9 @@ export default function AdminCatalogPage() {
 
                 <div className="mt-5 space-y-4">
                   {recipePreview.length === 0 ? (
-                    <p className="text-sm text-white/60">Aucune recette publiée.</p>
+                    <p className="text-sm text-white/60">
+                      Aucune recette publiée.
+                    </p>
                   ) : (
                     recipePreview.map((recipe) => (
                       <div
@@ -282,13 +347,19 @@ export default function AdminCatalogPage() {
                       key={task.code}
                       className="rounded-2xl border border-white/10 bg-white/[0.03] p-4"
                     >
-                      <p className="text-sm font-medium text-white">{task.label}</p>
+                      <p className="text-sm font-medium text-white">
+                        {task.label}
+                      </p>
                       <p className="mt-2 text-xs text-white/60">
                         {task.description}
                       </p>
+
                       <div className="mt-3 flex flex-wrap gap-2">
                         {task.flows.map((flow) => (
-                          <FlowBadge key={`${task.code}-${flow}`} label={getTaskFlowLabel(flow)} />
+                          <FlowBadge
+                            key={`${task.code}-${flow}`}
+                            label={getTaskFlowLabel(flow)}
+                          />
                         ))}
                       </div>
                     </div>
@@ -303,10 +374,9 @@ export default function AdminCatalogPage() {
                     Lecture système
                   </p>
                 </div>
-
                 <p className="mt-3 text-sm leading-7 text-gold/90">
-                  Le catalogue recette est désormais gouverné côté base et visible
-                  côté utilisateur. Le socle de tâches reste structuré côté produit
+                  Le catalogue recette est gouverné côté base et visible côté
+                  utilisateur. Le socle de tâches reste structuré côté produit
                   pour préparer le prochain build Tasks.
                 </p>
               </div>
