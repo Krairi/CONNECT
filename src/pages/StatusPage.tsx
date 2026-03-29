@@ -460,7 +460,7 @@ export default function DashboardPage() {
                   ["Inventaire", activation?.has_inventory],
                   ["Tâches", activation?.has_tasks],
                   ["Repas", activation?.has_meals],
-                ].map(([label, ok]) => (
+                ].map(([label, ok]: [string, boolean | undefined]) => (
                   <div
                     key={label}
                     className="flex items-center justify-between rounded-[1.5rem] border border-white/10 bg-black/20 px-5 py-4"

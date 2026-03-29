@@ -533,7 +533,7 @@ export function getInventoryCategoryLabel(
   categoryCode?: string | null
 ): string | null {
   if (!categoryCode) return null;
-  return categoryMap.get(categoryCode)?.label ?? null;
+  return categoryMap.get(categoryCode as InventoryCategoryCode)?.label ?? null;
 }
 
 export function getInventoryUnitLabel(unitCode?: string | null): string | null {

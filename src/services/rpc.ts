@@ -87,7 +87,7 @@ export async function callRpc<TOutput>(
   for (let attempt = 0; attempt <= retries; attempt += 1) {
     try {
       const result = await runWithTimeout(
-        supabase.schema("app").rpc(name, payload),
+        supabase.schema("app").rpc(name, payload) as unknown as Promise<unknown>,
         timeoutMs,
         name,
       );

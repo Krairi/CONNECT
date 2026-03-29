@@ -1,7 +1,7 @@
 import type {
-  TodayHealthOutput,
-  TodayLoadFeedItem,
-} from "@/src/services/status/statusService";
+  TodayHealth,
+  DashboardFeedItem,
+} from "@/src/services/dashboard/dashboardService";
 
 export type StatusSignalCode = "STABLE" | "WATCH" | "ATTENTION" | "CRITICAL";
 export type StatusFlow = "INVENTORY" | "TASKS" | "MEALS" | "TOOLS" | "HOUSEHOLD";
@@ -101,7 +101,7 @@ export function getStatusFeedTypeLabel(itemType?: string | null): string {
 }
 
 export function getStatusItemSeverityCode(
-  item: Pick<TodayLoadFeedItem, "item_type" | "status">
+  item: Pick<DashboardFeedItem, "item_type" | "status">
 ): StatusSignalCode {
   const type = normalizeStatusFeedType(item.item_type);
   const status = (item.status ?? "").trim().toUpperCase();
@@ -137,7 +137,7 @@ export function getStatusSignalMeta(
 }
 
 export function computeDomyliGlobalStatus(
-  health: TodayHealthOutput | null
+  health: TodayHealth | null
 ): StatusSignalMeta {
   const safe = {
     missing_stock_count: Number(health?.missing_stock_count ?? 0),
@@ -170,7 +170,7 @@ export function computeDomyliGlobalStatus(
   return getStatusSignalMeta("STABLE");
 }
 
-export function getDomyliPriorityAlerts(health: TodayHealthOutput | null) {
+export function getDomyliPriorityAlerts(health: TodayHealth | null) {
   const safe = {
     missing_stock_count: Number(health?.missing_stock_count ?? 0),
     overdue_tasks_count: Number(health?.overdue_tasks_count ?? 0),
@@ -236,7 +236,7 @@ export function getDomyliPriorityAlerts(health: TodayHealthOutput | null) {
     });
 }
 
-export function sortStatusFeedItems(items: TodayLoadFeedItem[]) {
+export function sortStatusFeedItems(items: DashboardFeedItem[]) {
   return [...items].sort((a, b) => {
     const aSeverity = getStatusSignalMeta(getStatusItemSeverityCode(a)).priority;
     const bSeverity = getStatusSignalMeta(getStatusItemSeverityCode(b)).priority;
@@ -263,7 +263,7 @@ export function sortStatusFeedItems(items: TodayLoadFeedItem[]) {
   });
 }
 
-export function summarizeStatusFeedByType(items: TodayLoadFeedItem[]) {
+export function summarizeStatusFeedByType(items: DashboardFeedItem[]) {
   return STATUS_FEED_TYPE_METAS.map((meta) => ({
     ...meta,
     count: items.filter(

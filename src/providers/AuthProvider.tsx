@@ -35,8 +35,8 @@ export function AuthProvider({ children }: PropsWithChildren) {
       {children}
 
       <SessionExpiredModal
-        isOpen={sessionExpired}
-        onClose={() => {
+        open={sessionExpired}
+        onReconnect={() => {
           setSessionExpired(false);
           void auth.signOut().finally(() => {
             window.location.assign("/");

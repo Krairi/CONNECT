@@ -57,6 +57,7 @@ export type ProfileFlow = "MEALS" | "TASKS" | "RULES" | "SHOPPING";
 export type ProfileOption<T extends string = string> = {
   value: T;
   label: string;
+  description?: string;
 };
 
 export const PROFILE_SEX_OPTIONS: ProfileOption<ProfileSexCode>[] = [

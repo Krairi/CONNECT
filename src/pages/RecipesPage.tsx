@@ -2,18 +2,23 @@ import { useMemo } from "react";
 import {
   ArrowLeft,
   BookOpen,
-  ClipboardList,
   CookingPot,
   ShieldCheck,
   Sparkles,
+  Timer,
+  Users,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 
 import { useAuth } from "@/src/providers/AuthProvider";
 import { useCatalog } from "@/src/hooks/useCatalog";
 import { ROUTES } from "@/src/constants/routes";
-import { getMealFlowLabel } from "@/src/constants/mealCatalog";
-import { getTaskFlowLabel } from "@/src/constants/taskCatalog";
+import {
+  getRecipeDifficultyLabel,
+  getRecipeFitLabel,
+  getRecipeMealTypeLabel,
+  getRecipeStockIntensityLabel,
+} from "@/src/constants/recipeCatalog";
 
 function FlowBadge({ label }: { label: string }) {
   return (
@@ -35,11 +40,20 @@ export default function RecipesPage() {
     bootstrapLoading,
   } = useAuth();
 
-  const { loading, error, recipes, taskTemplates, recipeCount, taskTemplateCount } =
-    useCatalog();
+  const { loading, error, recipes, recipeCount } = useCatalog();
 
-  const highlightedRecipes = useMemo(() => recipes.slice(0, 6), [recipes]);
-  const highlightedTasks = useMemo(() => taskTemplates.slice(0, 6), [taskTemplates]);
+  const highlightedRecipes = useMemo(() => recipes.slice(0, 8), [recipes]);
+  const breakfastCount = useMemo(
+    () => recipes.filter((recipe) => recipe.meal_type === "BREAKFAST").length,
+    [recipes],
+  );
+  const lunchDinnerCount = useMemo(
+    () =>
+      recipes.filter(
+        (recipe) => recipe.meal_type === "LUNCH" || recipe.meal_type === "DINNER",
+      ).length,
+    [recipes],
+  );
 
   if (authLoading || bootstrapLoading || loading) {
     return (
@@ -47,7 +61,7 @@ export default function RecipesPage() {
         <div className="mx-auto max-w-6xl rounded-[28px] border border-white/10 bg-white/5 p-8 backdrop-blur">
           <p className="text-xs uppercase tracking-[0.24em] text-gold">DOMYLI</p>
           <h1 className="mt-4 text-3xl font-semibold">
-            Chargement de la bibliothèque...
+            Chargement de la bibliothèque recettes...
           </h1>
         </div>
       </main>
@@ -95,11 +109,13 @@ export default function RecipesPage() {
                 <p className="text-xs uppercase tracking-[0.24em] text-gold">
                   DOMYLI
                 </p>
-                <h1 className="mt-4 text-3xl font-semibold">Bibliothèque</h1>
+                <h1 className="mt-4 text-3xl font-semibold">
+                  Bibliothèque recettes
+                </h1>
                 <p className="mt-3 max-w-3xl text-sm leading-7 text-white/70">
-                  Cette bibliothèque mondiale prépare les repas et les tâches
-                  autour d’un socle gouverné : recettes publiées côté back,
-                  templates de tâches structurés côté produit.
+                  Bibliothèque mondiale gouvernée par le Super Admin : recettes
+                  lisibles, structurées, publiées et directement réutilisables
+                  dans les prochains flux repas.
                 </p>
               </div>
             </div>
@@ -109,7 +125,7 @@ export default function RecipesPage() {
               Catalogue DOMYLI
             </div>
 
-            <div className="mt-8 grid gap-4 md:grid-cols-2">
+            <div className="mt-8 grid gap-4 md:grid-cols-3">
               <div className="rounded-3xl border border-white/10 bg-black/20 p-5">
                 <p className="text-xs uppercase tracking-[0.24em] text-white/45">
                   Recettes publiées
@@ -119,9 +135,18 @@ export default function RecipesPage() {
 
               <div className="rounded-3xl border border-white/10 bg-black/20 p-5">
                 <p className="text-xs uppercase tracking-[0.24em] text-white/45">
-                  Templates de tâches
+                  Bases matin
                 </p>
-                <p className="mt-3 text-3xl font-semibold">{taskTemplateCount}</p>
+                <p className="mt-3 text-3xl font-semibold">{breakfastCount}</p>
+              </div>
+
+              <div className="rounded-3xl border border-white/10 bg-black/20 p-5">
+                <p className="text-xs uppercase tracking-[0.24em] text-white/45">
+                  Déjeuners / dîners
+                </p>
+                <p className="mt-3 text-3xl font-semibold">
+                  {lunchDinnerCount}
+                </p>
               </div>
             </div>
 
@@ -142,13 +167,89 @@ export default function RecipesPage() {
                       key={recipe.recipe_id}
                       className="rounded-2xl border border-white/10 bg-white/[0.03] p-5"
                     >
-                      <h3 className="text-lg font-medium">{recipe.title}</h3>
-                      <p className="mt-3 text-sm leading-7 text-white/70">
-                        {recipe.description || "Description non renseignée."}
-                      </p>
-                      <p className="mt-4 text-xs uppercase tracking-[0.22em] text-white/45">
-                        Publiée : {recipe.is_active ? "Oui" : "Non"}
-                      </p>
+                      <div className="flex flex-wrap items-start justify-between gap-4">
+                        <div>
+                          <h3 className="text-lg font-medium">{recipe.title}</h3>
+                          <p className="mt-3 text-sm leading-7 text-white/70">
+                            {recipe.description || "Description non renseignée."}
+                          </p>
+                        </div>
+
+                        <div className="flex flex-wrap gap-2">
+                          <FlowBadge label={getRecipeMealTypeLabel(recipe.meal_type)} />
+                          <FlowBadge label={getRecipeFitLabel(recipe.fit)} />
+                          <FlowBadge
+                            label={getRecipeDifficultyLabel(recipe.difficulty)}
+                          />
+                        </div>
+                      </div>
+
+                      <div className="mt-4 grid gap-3 md:grid-cols-3">
+                        <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
+                          <div className="inline-flex items-center gap-2 text-white/70">
+                            <Timer className="h-4 w-4" />
+                            <span className="text-xs uppercase tracking-[0.22em]">
+                              Temps
+                            </span>
+                          </div>
+                          <p className="mt-2 text-sm text-white">
+                            {recipe.prep_minutes} min
+                          </p>
+                        </div>
+
+                        <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
+                          <div className="inline-flex items-center gap-2 text-white/70">
+                            <Users className="h-4 w-4" />
+                            <span className="text-xs uppercase tracking-[0.22em]">
+                              Portions
+                            </span>
+                          </div>
+                          <p className="mt-2 text-sm text-white">
+                            {recipe.servings}
+                          </p>
+                        </div>
+
+                        <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
+                          <p className="text-xs uppercase tracking-[0.22em] text-white/45">
+                            Impact stock
+                          </p>
+                          <p className="mt-2 text-sm text-white">
+                            {getRecipeStockIntensityLabel(recipe.stock_intensity)}
+                          </p>
+                        </div>
+                      </div>
+
+                      {recipe.tags.length > 0 ? (
+                        <div className="mt-4 flex flex-wrap gap-2">
+                          {recipe.tags.map((tag) => (
+                            <FlowBadge key={`${recipe.recipe_id}-${tag}`} label={tag} />
+                          ))}
+                        </div>
+                      ) : null}
+
+                      <div className="mt-4 grid gap-4 lg:grid-cols-2">
+                        <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
+                          <p className="text-xs uppercase tracking-[0.22em] text-white/45">
+                            Ingrédients clés
+                          </p>
+                          <ul className="mt-3 space-y-2 text-sm text-white/80">
+                            {recipe.ingredients.slice(0, 5).map((ingredient) => (
+                              <li key={`${recipe.recipe_id}-${ingredient}`}>• {ingredient}</li>
+                            ))}
+                          </ul>
+                        </div>
+
+                        <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
+                          <p className="text-xs uppercase tracking-[0.22em] text-white/45">
+                            Étapes clés
+                          </p>
+                          <ul className="mt-3 space-y-2 text-sm text-white/80">
+                            {recipe.steps.slice(0, 4).map((step, index) => (
+                              <li key={`${recipe.recipe_id}-${index}`}>{index + 1}. {step}</li>
+                            ))}
+                          </ul>
+                        </div>
+                      </div>
                     </article>
                   ))
                 )}
@@ -188,52 +289,19 @@ export default function RecipesPage() {
                 </p>
               </div>
 
-              <div className="rounded-3xl border border-white/10 bg-black/20 p-5">
-                <div className="inline-flex items-center gap-2 text-white">
-                  <ClipboardList className="h-4 w-4" />
-                  <p className="text-xs uppercase tracking-[0.24em]">
-                    Templates de tâches
-                  </p>
-                </div>
-
-                <div className="mt-5 space-y-4">
-                  {highlightedTasks.map((task) => (
-                    <div
-                      key={task.code}
-                      className="rounded-2xl border border-white/10 bg-white/[0.03] p-4"
-                    >
-                      <p className="text-sm font-medium text-white">{task.label}</p>
-                      <p className="mt-2 text-xs text-white/60">
-                        {task.description}
-                      </p>
-                      <div className="mt-3 flex flex-wrap gap-2">
-                        {task.flows.map((flow) => (
-                          <FlowBadge key={`${task.code}-${flow}`} label={getTaskFlowLabel(flow)} />
-                        ))}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
               <div className="rounded-3xl border border-gold/20 bg-gold/10 p-5">
                 <div className="inline-flex items-center gap-2 text-gold">
                   <Sparkles className="h-4 w-4" />
                   <p className="text-xs uppercase tracking-[0.24em]">
-                    Préparation des étapes suivantes
+                    Lecture cible DOMYLI
                   </p>
                 </div>
 
                 <p className="mt-3 text-sm leading-7 text-gold/90">
-                  Cette bibliothèque prépare directement les prochains runs :
-                  recettes publiées pour Meals, templates structurés pour Tasks.
+                  Cette bibliothèque prépare un pilotage repas plus robuste :
+                  recettes normalisées, portions connues, temps lisible,
+                  ingrédients structurés et tags exploitables.
                 </p>
-
-                <div className="mt-4 flex flex-wrap gap-2">
-                  <FlowBadge label={getMealFlowLabel("INVENTORY")} />
-                  <FlowBadge label={getMealFlowLabel("SHOPPING")} />
-                  <FlowBadge label={getMealFlowLabel("RULES")} />
-                </div>
               </div>
 
               {error ? (

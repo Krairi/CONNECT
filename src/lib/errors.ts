@@ -53,12 +53,14 @@ export function toDomyliError(error: unknown): DomyliAppError {
       fallback.code = maybe.code;
     }
 
-    if (typeof maybe.details === "string" || maybe.details === null) {
-      fallback.details = maybe.details;
+    const details = maybe.details;
+    if (typeof details === "string" || details === null) {
+      fallback.details = details as string | null;
     }
 
-    if (typeof maybe.hint === "string" || maybe.hint === null) {
-      fallback.hint = maybe.hint;
+    const hint = maybe.hint;
+    if (typeof hint === "string" || hint === null) {
+      fallback.hint = hint as string | null;
     }
   }
 

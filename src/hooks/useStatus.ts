@@ -1,17 +1,17 @@
 import { useCallback, useEffect, useState } from "react";
 import { toDomyliError, type DomyliAppError } from "@/src/lib/errors";
 import {
-  readStatusFeed,
-  readStatusHealth,
-  type TodayHealthOutput,
-  type TodayLoadFeedItem,
-} from "@/src/services/status/statusService";
+  getTodayHealth,
+  getTodayLoadFeed,
+  type TodayHealth,
+  type DashboardFeedItem,
+} from "@/src/services/dashboard/dashboardService";
 
 type StatusState = {
   loading: boolean;
   error: DomyliAppError | null;
-  health: TodayHealthOutput | null;
-  feed: TodayLoadFeedItem[];
+  health: TodayHealth | null;
+  feed: DashboardFeedItem[];
 };
 
 const initialState: StatusState = {
@@ -33,8 +33,8 @@ export function useStatus() {
 
     try {
       const [health, feed] = await Promise.all([
-        readStatusHealth(),
-        readStatusFeed(),
+        getTodayHealth(),
+        getTodayLoadFeed(),
       ]);
 
       setState({
