@@ -156,7 +156,7 @@ function normalizeRecipeCandidate(raw: RawRecipeCandidate): RecipeCandidate {
 export async function readRecipeCandidatesForMeal(
   mealType: MealType,
   profileId?: string | null,
-  limit = 60,
+  limit = 120,
 ): Promise<RecipeCandidate[]> {
   try {
     const raw = (await callRpc("rpc_recipe_library_list", {

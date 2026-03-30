@@ -62,7 +62,7 @@ export function useMeals() {
         const recipeCandidates = await readRecipeCandidatesForMeal(
           nextMealType,
           nextProfileId.trim() || null,
-          60,
+          120,
         );
 
         setState((prev) => ({
@@ -174,7 +174,7 @@ export function useMeals() {
         error: normalized,
       }));
 
-      throw normalized;
+        throw normalized;
     }
   };
 
