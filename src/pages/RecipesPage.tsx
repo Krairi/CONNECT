@@ -16,6 +16,7 @@ import { useNavigate } from "react-router-dom";
 
 import { useAuth } from "@/src/providers/AuthProvider";
 import { useRecipeLibrary } from "@/src/hooks/useRecipeLibrary";
+import { useHouseholdProfileOptions } from "@/src/hooks/useHouseholdProfileOptions";
 import { ROUTES } from "@/src/constants/routes";
 import {
   RECIPE_MEAL_TYPE_OPTIONS,
@@ -52,7 +53,8 @@ type RecentProfileTarget = {
   lastUsedAt: string;
 };
 
-const PROFILE_STORAGE_KEY = "domyli:meals:recent-profile-targets:v2";
+const PROFILE_STORAGE_KEY = "domyli:meals:recent-profile-targets:v3";
+
 const QUERY_PLACEHOLDERS: Record<RecipeMealType, string> = {
   BREAKFAST: "Rapide, enfant, satiété, sans porc, matin doux...",
   LUNCH: "Bureau, transportable, protéiné, batch, halal...",
@@ -72,6 +74,8 @@ const SEARCH_INTENTS: SearchIntent[] = [
   { code: "TRANSPORTABLE", label: "Transportable" },
   { code: "FRESH", label: "Frais" },
 ];
+
+type RecipeCardData = ReturnType<typeof useRecipeLibrary>["items"][number];
 
 function readRecentProfileTargets(): RecentProfileTarget[] {
   if (typeof window === "undefined") return [];
@@ -98,6 +102,32 @@ function readRecentProfileTargets(): RecentProfileTarget[] {
   }
 }
 
+function writeRecentProfileTargets(items: RecentProfileTarget[]) {
+  if (typeof window === "undefined") return;
+
+  try {
+    window.localStorage.setItem(
+      PROFILE_STORAGE_KEY,
+      JSON.stringify(items.slice(0, 8)),
+    );
+  } catch {
+    // no-op
+  }
+}
+
+function upsertRecentProfileTarget(
+  currentItems: RecentProfileTarget[],
+  nextItem: RecentProfileTarget,
+): RecentProfileTarget[] {
+  const filtered = currentItems.filter(
+    (item) => item.profileId !== nextItem.profileId,
+  );
+
+  return [nextItem, ...filtered]
+    .sort((a, b) => b.lastUsedAt.localeCompare(a.lastUsedAt))
+    .slice(0, 8);
+}
+
 function normalizeText(value: string): string {
   return value
     .normalize("NFD")
@@ -109,7 +139,10 @@ function recipeHasTag(recipe: RecipeCardData, code: string): boolean {
   return recipe.tags.some((tag) => tag.code.toUpperCase() === code);
 }
 
-function recipeMatchesIntent(recipe: RecipeCardData, intentCode: SearchIntentCode): boolean {
+function recipeMatchesIntent(
+  recipe: RecipeCardData,
+  intentCode: SearchIntentCode,
+): boolean {
   switch (intentCode) {
     case "FAST":
       return recipe.prep_minutes + recipe.cook_minutes <= 20;
@@ -164,7 +197,10 @@ function getFitWeight(value: string): number {
   return 1;
 }
 
-function getProjectionLabel(mode: ProjectionMode, profileLabel: string): string {
+function getProjectionLabel(
+  mode: ProjectionMode,
+  profileLabel: string,
+): string {
   if (mode === "TARGETED") {
     return profileLabel || "Projection ciblée sur un profil humain";
   }
@@ -175,8 +211,6 @@ function getProjectionLabel(mode: ProjectionMode, profileLabel: string): string 
 
   return "Compatibilité neutre sans profil";
 }
-
-type RecipeCardData = ReturnType<typeof useRecipeLibrary>["items"][number];
 
 function MetaBadge({
   label,
@@ -193,9 +227,7 @@ function MetaBadge({
         : "border-gold/20 bg-gold/10 text-gold";
 
   return (
-    <span
-      className={`inline-flex items-center rounded-full border px-3 py-1 text-[11px] uppercase tracking-[0.2em] ${className}`}
-    >
+    <span className={`inline-flex rounded-full border px-3 py-1 text-xs uppercase tracking-[0.2em] ${className}`}>
       {label}
     </span>
   );
@@ -203,6 +235,7 @@ function MetaBadge({
 
 export default function RecipesPage() {
   const navigate = useNavigate();
+
   const {
     sessionEmail,
     activeMembership,
@@ -222,7 +255,6 @@ export default function RecipesPage() {
     search,
     selectedTagCode,
     allTagOptions,
-    summary,
     setMealType,
     setProfileId,
     setSearch,
@@ -230,9 +262,22 @@ export default function RecipesPage() {
     refresh,
   } = useRecipeLibrary();
 
-  const [projectionMode, setProjectionMode] = useState<ProjectionMode>("NEUTRAL");
-  const [recentProfileTargets, setRecentProfileTargets] = useState<RecentProfileTarget[]>([]);
-  const [selectedIntentCodes, setSelectedIntentCodes] = useState<SearchIntentCode[]>([]);
+  const {
+    loading: profilesLoading,
+    error: profilesError,
+    options: profileOptions,
+    refresh: refreshProfiles,
+  } = useHouseholdProfileOptions();
+
+  const [projectionMode, setProjectionMode] =
+    useState<ProjectionMode>("NEUTRAL");
+  const [recentProfileTargets, setRecentProfileTargets] = useState<
+    RecentProfileTarget[]
+  >([]);
+  const [selectedIntentCodes, setSelectedIntentCodes] = useState<
+    SearchIntentCode[]
+  >([]);
+  const [localMessage, setLocalMessage] = useState<string | null>(null);
 
   useEffect(() => {
     setRecentProfileTargets(readRecentProfileTargets());
@@ -244,21 +289,38 @@ export default function RecipesPage() {
     }
   }, [projectionMode, profileId, setProfileId]);
 
+  const selectedProfileOption = useMemo(
+    () => profileOptions.find((item) => item.profile_id === profileId.trim()) ?? null,
+    [profileId, profileOptions],
+  );
+
   const activeProfileLabel = useMemo(() => {
+    if (selectedProfileOption) {
+      return selectedProfileOption.display_name;
+    }
+
     if (!profileId.trim()) return "";
 
-    const matched = recentProfileTargets.find((item) => item.profileId === profileId.trim());
-    return matched?.profileLabel ?? `Profil ciblé ${profileId.trim().slice(0, 8)}…`;
-  }, [profileId, recentProfileTargets]);
+    const matched = recentProfileTargets.find(
+      (item) => item.profileId === profileId.trim(),
+    );
+
+    return matched?.profileLabel ?? "Profil ciblé";
+  }, [profileId, recentProfileTargets, selectedProfileOption]);
 
   const visibleRecipes = useMemo(() => {
     const normalizedSearch = normalizeText(search.trim());
 
     return [...items]
       .filter((recipe) => {
-        const matchesSearch = !normalizedSearch || getRecipeSearchDocument(recipe).includes(normalizedSearch);
+        const matchesSearch =
+          !normalizedSearch ||
+          getRecipeSearchDocument(recipe).includes(normalizedSearch);
+
         const matchesTag =
-          !selectedTagCode || recipe.tags.some((tag) => tag.code === selectedTagCode);
+          !selectedTagCode ||
+          recipe.tags.some((tag) => tag.code === selectedTagCode);
+
         const matchesIntent = selectedIntentCodes.every((intentCode) =>
           recipeMatchesIntent(recipe, intentCode),
         );
@@ -278,7 +340,9 @@ export default function RecipesPage() {
         return (
           getFitWeight(b.fit.fit_status) - getFitWeight(a.fit.fit_status) ||
           b.fit.fit_score - a.fit.fit_score ||
-          a.prep_minutes + a.cook_minutes - (b.prep_minutes + b.cook_minutes) ||
+          a.prep_minutes +
+            a.cook_minutes -
+            (b.prep_minutes + b.cook_minutes) ||
           a.title.localeCompare(b.title, "fr")
         );
       })
@@ -288,8 +352,12 @@ export default function RecipesPage() {
   const computedSummary = useMemo(() => {
     return {
       total: visibleRecipes.length,
-      blocked: visibleRecipes.filter((item) => item.fit.fit_status === "BLOCKED").length,
-      warning: visibleRecipes.filter((item) => item.fit.fit_status === "WARNING").length,
+      blocked: visibleRecipes.filter(
+        (item) => item.fit.fit_status === "BLOCKED",
+      ).length,
+      warning: visibleRecipes.filter(
+        (item) => item.fit.fit_status === "WARNING",
+      ).length,
       ok: visibleRecipes.filter((item) => item.fit.fit_status === "OK").length,
     };
   }, [visibleRecipes]);
@@ -298,38 +366,76 @@ export default function RecipesPage() {
 
   const toggleIntent = (code: SearchIntentCode) => {
     setSelectedIntentCodes((prev) =>
-      prev.includes(code) ? prev.filter((item) => item !== code) : [...prev, code],
+      prev.includes(code)
+        ? prev.filter((item) => item !== code)
+        : [...prev, code],
     );
   };
 
   const applyRecentProfile = (item: RecentProfileTarget) => {
+    const existsInHousehold = profileOptions.some(
+      (option) => option.profile_id === item.profileId,
+    );
+
+    if (!existsInHousehold) {
+      setLocalMessage(
+        "Le profil récent n’existe plus dans le foyer actif. Recharge la liste des profils.",
+      );
+      return;
+    }
+
     setProjectionMode("TARGETED");
     setProfileId(item.profileId);
+    setLocalMessage(`Projection ciblée chargée : ${item.profileLabel}`);
+  };
+
+  const handleSelectProfile = (nextProfileId: string) => {
+    setProfileId(nextProfileId);
+
+    const option = profileOptions.find(
+      (item) => item.profile_id === nextProfileId,
+    );
+
+    if (!option) return;
+
+    const nextRecent = upsertRecentProfileTarget(recentProfileTargets, {
+      profileId: option.profile_id,
+      profileLabel: option.display_name,
+      lastMealType: mealType,
+      lastUsedAt: new Date().toISOString(),
+    });
+
+    setRecentProfileTargets(nextRecent);
+    writeRecentProfileTargets(nextRecent);
   };
 
   if (authLoading || bootstrapLoading || loading) {
     return (
-      <main className="min-h-screen bg-black px-6 py-10 text-white">
-        <div className="mx-auto max-w-6xl rounded-[28px] border border-white/10 bg-white/5 p-8 backdrop-blur">
-          <p className="text-xs uppercase tracking-[0.24em] text-gold">DOMYLI</p>
+      <div className="min-h-screen bg-black px-6 py-10 text-white">
+        <div className="mx-auto max-w-6xl rounded-[32px] border border-white/10 bg-white/5 p-8 backdrop-blur">
+          <p className="text-xs uppercase tracking-[0.24em] text-gold">
+            DOMYLI
+          </p>
           <h1 className="mt-4 text-3xl font-semibold">
             Chargement de la bibliothèque recettes...
           </h1>
         </div>
-      </main>
+      </div>
     );
   }
 
   if (!isAuthenticated || !hasHousehold) {
     return (
-      <main className="min-h-screen bg-black px-6 py-10 text-white">
-        <div className="mx-auto max-w-6xl rounded-[28px] border border-white/10 bg-white/5 p-8 backdrop-blur">
-          <p className="text-xs uppercase tracking-[0.24em] text-gold">DOMYLI</p>
+      <div className="min-h-screen bg-black px-6 py-10 text-white">
+        <div className="mx-auto max-w-4xl rounded-[32px] border border-white/10 bg-white/5 p-8 backdrop-blur">
+          <p className="text-xs uppercase tracking-[0.24em] text-gold">
+            DOMYLI
+          </p>
           <h1 className="mt-4 text-3xl font-semibold">Foyer requis</h1>
           <p className="mt-3 text-white/70">
-            Il faut une session authentifiée et un foyer actif pour accéder à la
-            bibliothèque DOMYLI.
+            Il faut une session authentifiée et un foyer actif pour accéder à la bibliothèque DOMYLI.
           </p>
+
           <button
             type="button"
             onClick={() => navigate(ROUTES.HOME)}
@@ -338,148 +444,241 @@ export default function RecipesPage() {
             Retour à l’accueil
           </button>
         </div>
-      </main>
+      </div>
     );
   }
 
   return (
-    <main className="min-h-screen bg-black px-6 py-10 text-white">
+    <div className="min-h-screen bg-black px-6 py-10 text-white">
       <div className="mx-auto max-w-7xl">
-        <div className="grid gap-6 lg:grid-cols-[1.08fr_0.92fr]">
-          <section className="rounded-[28px] border border-white/10 bg-white/5 p-8 backdrop-blur">
-            <div className="flex items-start justify-between gap-4">
-              <button
-                type="button"
-                onClick={() => navigate(ROUTES.DASHBOARD)}
-                className="mt-1 inline-flex h-10 w-10 items-center justify-center border border-white/10 transition-colors hover:border-gold/40"
-                aria-label="Retour"
-              >
-                <ArrowLeft className="h-4 w-4" />
-              </button>
+        <div className="flex items-center justify-between gap-4 rounded-[32px] border border-white/10 bg-white/5 p-8 backdrop-blur">
+          <div>
+            <p className="text-xs uppercase tracking-[0.24em] text-gold">
+              DOMYLI
+            </p>
+            <h1 className="mt-4 text-3xl font-semibold">
+              Bibliothèque recettes
+            </h1>
+            <p className="mt-3 max-w-3xl text-sm leading-7 text-white/70">
+              Bibliothèque publiée, gouvernée et projetée sur un profil métier
+              sélectionné dans le foyer — jamais sur un UUID saisi librement.
+            </p>
+          </div>
 
-              <div className="flex-1">
-                <p className="text-xs uppercase tracking-[0.24em] text-gold">
-                  DOMYLI
-                </p>
-                <h1 className="mt-4 text-3xl font-semibold">
-                  Bibliothèque recettes
-                </h1>
-                <p className="mt-3 max-w-3xl text-sm leading-7 text-white/70">
-                  Bibliothèque publiée, gouvernée et déjà cadenassée côté back.
-                  Ici, l’utilisateur ne cherche pas un simple mot-clé : il exprime
-                  une intention domestique, un repas et éventuellement une cible
-                  humaine.
-                </p>
+          <button
+            type="button"
+            onClick={() => navigate(ROUTES.DASHBOARD)}
+            className="mt-1 inline-flex h-10 w-10 items-center justify-center border border-white/10 transition-colors hover:border-gold/40"
+            aria-label="Retour"
+          >
+            <ArrowLeft className="h-4 w-4" />
+          </button>
+        </div>
+
+        <div className="mt-8 grid gap-4 md:grid-cols-3">
+          <div className="rounded-[28px] border border-white/10 bg-black/30 p-8">
+            <BookOpen className="h-5 w-5 text-gold" />
+            <p className="mt-6 text-sm uppercase tracking-[0.24em] text-gold">
+              Recettes visibles
+            </p>
+            <h2 className="mt-3 text-4xl font-semibold">{computedSummary.total}</h2>
+          </div>
+
+          <div className="rounded-[28px] border border-white/10 bg-black/30 p-8">
+            <CheckCircle2 className="h-5 w-5 text-gold" />
+            <p className="mt-6 text-sm uppercase tracking-[0.24em] text-gold">
+              Compatibles
+            </p>
+            <h2 className="mt-3 text-4xl font-semibold">{computedSummary.ok}</h2>
+          </div>
+
+          <div className="rounded-[28px] border border-white/10 bg-black/30 p-8">
+            <AlertTriangle className="h-5 w-5 text-gold" />
+            <p className="mt-6 text-sm uppercase tracking-[0.24em] text-gold">
+              À vérifier / bloquées
+            </p>
+            <h2 className="mt-3 text-4xl font-semibold">
+              {computedSummary.warning + computedSummary.blocked}
+            </h2>
+          </div>
+        </div>
+
+        <div className="mt-8 grid gap-8 lg:grid-cols-[minmax(0,1.2fr)_380px]">
+          <section className="rounded-[32px] border border-white/10 bg-white/5 p-8 backdrop-blur">
+            <div className="grid gap-4 md:grid-cols-[220px_minmax(0,1fr)_220px]">
+              <label className="block">
+                <span className="mb-3 block text-xs uppercase tracking-[0.24em] text-white/60">
+                  Type de repas
+                </span>
+                <select
+                  value={mealType}
+                  onChange={(event) =>
+                    setMealType(event.target.value as RecipeMealType)
+                  }
+                  className="w-full border border-white/10 bg-black/30 px-4 py-4 text-sm outline-none focus:border-gold/50"
+                >
+                  {RECIPE_MEAL_TYPE_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <label className="block">
+                <span className="mb-3 block text-xs uppercase tracking-[0.24em] text-white/60">
+                  Décrivez l’intention du repas
+                </span>
+                <div className="relative">
+                  <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-white/35" />
+                  <input
+                    value={search}
+                    onChange={(event) => setSearch(event.target.value)}
+                    placeholder={searchPlaceholder}
+                    className="w-full border border-white/10 bg-black/30 py-4 pl-11 pr-4 text-sm outline-none focus:border-gold/50"
+                  />
+                </div>
+              </label>
+
+              <label className="block">
+                <span className="mb-3 block text-xs uppercase tracking-[0.24em] text-white/60">
+                  Tag métier
+                </span>
+                <select
+                  value={selectedTagCode}
+                  onChange={(event) => setSelectedTagCode(event.target.value)}
+                  className="w-full border border-white/10 bg-black/30 px-4 py-4 text-sm outline-none focus:border-gold/50"
+                >
+                  <option value="">Tous les tags</option>
+                  {allTagOptions.map((tag) => (
+                    <option key={tag.code} value={tag.code}>
+                      {tag.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
+
+            <div className="mt-6">
+              <p className="text-xs uppercase tracking-[0.24em] text-white/60">
+                Pour qui cherchez-vous une recette ?
+              </p>
+
+              <div className="mt-4 flex flex-wrap gap-3">
+                <button
+                  type="button"
+                  onClick={() => setProjectionMode("NEUTRAL")}
+                  className={`border px-4 py-3 text-xs uppercase tracking-[0.22em] transition-colors ${
+                    projectionMode === "NEUTRAL"
+                      ? "border-gold bg-gold/10 text-gold"
+                      : "border-white/10 text-white/65 hover:border-gold/40 hover:text-gold"
+                  }`}
+                >
+                  Neutre
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setProjectionMode("HOUSEHOLD")}
+                  className={`border px-4 py-3 text-xs uppercase tracking-[0.22em] transition-colors ${
+                    projectionMode === "HOUSEHOLD"
+                      ? "border-gold bg-gold/10 text-gold"
+                      : "border-white/10 text-white/65 hover:border-gold/40 hover:text-gold"
+                  }`}
+                >
+                  Foyer
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setProjectionMode("TARGETED")}
+                  className={`border px-4 py-3 text-xs uppercase tracking-[0.22em] transition-colors ${
+                    projectionMode === "TARGETED"
+                      ? "border-gold bg-gold/10 text-gold"
+                      : "border-white/10 text-white/65 hover:border-gold/40 hover:text-gold"
+                  }`}
+                >
+                  Profil ciblé
+                </button>
               </div>
             </div>
 
-            <div className="mt-8 grid gap-4 md:grid-cols-3">
-              <div className="rounded-3xl border border-white/10 bg-black/20 p-5">
-                <p className="text-xs uppercase tracking-[0.24em] text-white/45">
-                  Recettes visibles
-                </p>
-                <p className="mt-3 text-3xl font-semibold">{computedSummary.total}</p>
-              </div>
+            {projectionMode === "TARGETED" ? (
+              <div className="mt-6 rounded-[28px] border border-white/10 bg-black/20 p-6">
+                <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_280px]">
+                  <div>
+                    <span className="mb-3 block text-xs uppercase tracking-[0.24em] text-white/60">
+                      Profil humain du foyer
+                    </span>
 
-              <div className="rounded-3xl border border-white/10 bg-black/20 p-5">
-                <p className="text-xs uppercase tracking-[0.24em] text-white/45">
-                  Compatibles
-                </p>
-                <p className="mt-3 text-3xl font-semibold">{computedSummary.ok}</p>
-              </div>
-
-              <div className="rounded-3xl border border-white/10 bg-black/20 p-5">
-                <p className="text-xs uppercase tracking-[0.24em] text-white/45">
-                  À vérifier / bloquées
-                </p>
-                <p className="mt-3 text-3xl font-semibold">
-                  {computedSummary.warning + computedSummary.blocked}
-                </p>
-              </div>
-            </div>
-
-            <div className="mt-8 rounded-[24px] border border-white/10 bg-black/20 p-5">
-              <div className="grid gap-4 xl:grid-cols-[0.75fr_1.1fr_1.15fr]">
-                <label className="block text-sm text-white/80">
-                  <span className="mb-2 block">Type de repas</span>
-                  <select
-                    value={mealType}
-                    onChange={(event) =>
-                      setMealType(event.target.value as RecipeMealType)
-                    }
-                    className="w-full border border-white/10 bg-black/30 px-4 py-4 text-sm outline-none focus:border-gold/50"
-                  >
-                    {RECIPE_MEAL_TYPE_OPTIONS.map((option) => (
-                      <option key={option.value} value={option.value}>
-                        {option.label}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-
-                <label className="block text-sm text-white/80">
-                  <span className="mb-2 block">Décrivez l’intention du repas</span>
-                  <div className="relative">
-                    <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-white/45" />
-                    <input
-                      value={search}
-                      onChange={(event) => setSearch(event.target.value)}
-                      placeholder={searchPlaceholder}
-                      className="w-full border border-white/10 bg-black/30 py-4 pl-11 pr-4 text-sm outline-none focus:border-gold/50"
-                    />
-                  </div>
-                </label>
-
-                <div>
-                  <span className="mb-2 block text-sm text-white/80">
-                    Pour qui cherchez-vous une recette ?
-                  </span>
-                  <div className="grid gap-2 sm:grid-cols-3">
-                    <button
-                      type="button"
-                      onClick={() => setProjectionMode("NEUTRAL")}
-                      className={`border px-4 py-3 text-xs uppercase tracking-[0.22em] transition-colors ${
-                        projectionMode === "NEUTRAL"
-                          ? "border-gold bg-gold/10 text-gold"
-                          : "border-white/10 text-white/65 hover:border-gold/40 hover:text-gold"
-                      }`}
-                    >
-                      Neutre
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setProjectionMode("HOUSEHOLD")}
-                      className={`border px-4 py-3 text-xs uppercase tracking-[0.22em] transition-colors ${
-                        projectionMode === "HOUSEHOLD"
-                          ? "border-gold bg-gold/10 text-gold"
-                          : "border-white/10 text-white/65 hover:border-gold/40 hover:text-gold"
-                      }`}
-                    >
-                      Foyer
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setProjectionMode("TARGETED")}
-                      className={`border px-4 py-3 text-xs uppercase tracking-[0.22em] transition-colors ${
-                        projectionMode === "TARGETED"
-                          ? "border-gold bg-gold/10 text-gold"
-                          : "border-white/10 text-white/65 hover:border-gold/40 hover:text-gold"
-                      }`}
-                    >
-                      Profil ciblé
-                    </button>
-                  </div>
-
-                  {projectionMode === "TARGETED" ? (
-                    <div className="mt-3 space-y-3">
-                      <input
+                    {profilesLoading ? (
+                      <div className="rounded-[20px] border border-white/10 bg-black/30 px-4 py-4 text-sm text-white/60">
+                        Chargement des profils gouvernés...
+                      </div>
+                    ) : profileOptions.length > 0 ? (
+                      <select
                         value={profileId}
-                        onChange={(event) => setProfileId(event.target.value)}
-                        placeholder="Coller un profil humain connu ou reprendre une cible récente"
+                        onChange={(event) => handleSelectProfile(event.target.value)}
                         className="w-full border border-white/10 bg-black/30 px-4 py-4 text-sm outline-none focus:border-gold/50"
-                      />
+                      >
+                        <option value="">Choisir un profil créé</option>
+                        {profileOptions.map((option) => (
+                          <option key={option.profile_id} value={option.profile_id}>
+                            {option.display_name} — {option.summary}
+                          </option>
+                        ))}
+                      </select>
+                    ) : (
+                      <div className="rounded-[20px] border border-amber-400/20 bg-amber-400/10 px-4 py-4 text-sm text-amber-100">
+                        Aucun profil gouverné n’existe encore dans ce foyer.
+                      </div>
+                    )}
 
-                      {recentProfileTargets.length > 0 ? (
+                    {selectedProfileOption ? (
+                      <p className="mt-4 text-sm text-gold">
+                        Profil sélectionné : {selectedProfileOption.display_name} —{" "}
+                        {selectedProfileOption.summary}
+                      </p>
+                    ) : null}
+
+                    {profilesError ? (
+                      <div className="mt-4 rounded-[20px] border border-red-500/30 bg-red-500/10 px-4 py-4 text-sm text-red-200">
+                        {profilesError.message}
+                      </div>
+                    ) : null}
+
+                    {profileOptions.length === 0 ? (
+                      <div className="mt-4 flex flex-wrap gap-3">
+                        <button
+                          type="button"
+                          onClick={() => navigate(ROUTES.MY_PROFILE)}
+                          className="border border-gold/40 px-4 py-3 text-xs uppercase tracking-[0.22em] text-gold transition-colors hover:bg-gold hover:text-black"
+                        >
+                          Ouvrir Mon profil
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => navigate(ROUTES.PROFILES)}
+                          className="border border-white/10 px-4 py-3 text-xs uppercase tracking-[0.22em] text-white transition-colors hover:border-gold/40 hover:text-gold"
+                        >
+                          Gérer Profiles
+                        </button>
+                      </div>
+                    ) : null}
+                  </div>
+
+                  <div>
+                    <span className="mb-3 block text-xs uppercase tracking-[0.24em] text-white/60">
+                      Profils récents
+                    </span>
+
+                    <div className="rounded-[24px] border border-white/10 bg-black/30 p-4">
+                      {recentProfileTargets.length === 0 ? (
+                        <p className="text-sm text-white/60">
+                          Aucun profil récent. Le premier profil ciblé sera mémorisé ici.
+                        </p>
+                      ) : (
                         <div className="flex flex-wrap gap-2">
                           {recentProfileTargets.map((item) => (
                             <button
@@ -492,63 +691,53 @@ export default function RecipesPage() {
                             </button>
                           ))}
                         </div>
-                      ) : (
-                        <p className="text-xs leading-6 text-white/50">
-                          Aucun profil récent mémorisé côté Meals. La projection ciblée
-                          s’active dès qu’un identifiant métier est fourni.
-                        </p>
                       )}
                     </div>
-                  ) : null}
+                  </div>
                 </div>
               </div>
+            ) : null}
 
-              <div className="mt-4 flex flex-wrap gap-2">
-                {SEARCH_INTENTS.map((intent) => {
-                  const isActive = selectedIntentCodes.includes(intent.code);
+            <div className="mt-6 flex flex-wrap gap-2">
+              {SEARCH_INTENTS.map((intent) => {
+                const isActive = selectedIntentCodes.includes(intent.code);
 
-                  return (
-                    <button
-                      key={intent.code}
-                      type="button"
-                      onClick={() => toggleIntent(intent.code)}
-                      className={`border px-3 py-2 text-[11px] uppercase tracking-[0.2em] transition-colors ${
-                        isActive
-                          ? "border-gold bg-gold/10 text-gold"
-                          : "border-white/10 text-white/70 hover:border-gold/40 hover:text-gold"
-                      }`}
-                    >
-                      {intent.label}
-                    </button>
-                  );
-                })}
-              </div>
-
-              <div className="mt-4 grid gap-4 md:grid-cols-[0.8fr_1.2fr_auto]">
-                <label className="block text-sm text-white/80">
-                  <span className="mb-2 block">Tag métier</span>
-                  <select
-                    value={selectedTagCode}
-                    onChange={(event) => setSelectedTagCode(event.target.value)}
-                    className="w-full border border-white/10 bg-black/30 px-4 py-4 text-sm outline-none focus:border-gold/50"
+                return (
+                  <button
+                    key={intent.code}
+                    type="button"
+                    onClick={() => toggleIntent(intent.code)}
+                    className={`border px-3 py-2 text-[11px] uppercase tracking-[0.2em] transition-colors ${
+                      isActive
+                        ? "border-gold bg-gold/10 text-gold"
+                        : "border-white/10 text-white/70 hover:border-gold/40 hover:text-gold"
+                    }`}
                   >
-                    <option value="">Tous les tags</option>
-                    {allTagOptions.map((tag) => (
-                      <option key={tag.code} value={tag.code}>
-                        {tag.label}
-                      </option>
-                    ))}
-                  </select>
-                </label>
+                    {intent.label}
+                  </button>
+                );
+              })}
+            </div>
 
-                <div className="rounded-3xl border border-white/10 bg-black/30 px-4 py-4">
-                  <p className="text-[11px] uppercase tracking-[0.22em] text-white/45">
-                    Projection active
-                  </p>
-                  <p className="mt-2 text-sm text-white/85">
-                    {getProjectionLabel(projectionMode, activeProfileLabel)}
-                  </p>
-                </div>
+            <div className="mt-6 flex items-center justify-between gap-4">
+              <div>
+                <p className="text-xs uppercase tracking-[0.24em] text-white/60">
+                  Projection active
+                </p>
+                <p className="mt-2 text-white">
+                  {getProjectionLabel(projectionMode, activeProfileLabel)}
+                </p>
+              </div>
+
+              <div className="flex gap-3">
+                <button
+                  type="button"
+                  onClick={() => void refreshProfiles()}
+                  className="inline-flex items-center justify-center gap-3 border border-white/10 px-5 py-4 text-xs uppercase tracking-[0.24em] text-white/75 transition-colors hover:border-gold/40 hover:text-gold"
+                >
+                  <RefreshCw className="h-4 w-4" />
+                  Profils
+                </button>
 
                 <button
                   type="button"
@@ -561,17 +750,21 @@ export default function RecipesPage() {
               </div>
             </div>
 
-            <div className="mt-8 rounded-3xl border border-white/10 bg-black/20 p-6">
-              <div className="flex items-center gap-3">
-                <BookOpen className="h-5 w-5 text-gold" />
-                <h2 className="text-xl font-medium">
-                  {visibleRecipes.length} recette(s) candidate(s) pour {getRecipeMealTypeLabel(mealType)}
-                </h2>
+            {localMessage ? (
+              <div className="mt-6 rounded-[20px] border border-gold/20 bg-gold/10 px-4 py-4 text-sm text-gold">
+                {localMessage}
               </div>
+            ) : null}
 
-              <div className="mt-6 space-y-4">
+            <div className="mt-8">
+              <h2 className="text-2xl font-semibold">
+                {visibleRecipes.length} recette(s) candidate(s) pour{" "}
+                {getRecipeMealTypeLabel(mealType)}
+              </h2>
+
+              <div className="mt-6 grid gap-4">
                 {visibleRecipes.length === 0 ? (
-                  <div className="rounded-2xl border border-dashed border-white/10 p-5 text-sm text-white/60">
+                  <div className="rounded-[24px] border border-white/10 bg-black/20 p-6 text-white/70">
                     Aucune recette publiée pour cette combinaison repas / intention / projection.
                   </div>
                 ) : (
@@ -584,54 +777,57 @@ export default function RecipesPage() {
                           : "default";
 
                     return (
-                      <article
+                      <div
                         key={recipe.recipe_id}
-                        className="rounded-2xl border border-white/10 bg-white/[0.03] p-5"
+                        className="rounded-[28px] border border-white/10 bg-black/20 p-6"
                       >
-                        <div className="flex flex-wrap items-start justify-between gap-4">
+                        <div className="flex flex-wrap items-start justify-between gap-3">
                           <div>
-                            <h3 className="text-lg font-medium">{recipe.title}</h3>
-                            <p className="mt-3 text-sm leading-7 text-white/70">
+                            <h3 className="text-xl font-semibold">{recipe.title}</h3>
+                            <p className="mt-2 text-sm text-white/70">
                               {recipe.short_description}
                             </p>
                           </div>
 
-                          <div className="flex flex-wrap gap-2">
-                            <MetaBadge
-                              label={getRecipeFitStatusLabel(recipe.fit.fit_status)}
-                              tone={fitTone}
-                            />
-                            <MetaBadge label={getRecipeDifficultyLabel(recipe.difficulty)} />
-                            <MetaBadge label={getRecipeStockIntensityLabel(recipe.stock_intensity)} />
-                          </div>
+                          <MetaBadge
+                            label={getRecipeFitStatusLabel(recipe.fit.fit_status)}
+                            tone={fitTone}
+                          />
                         </div>
 
                         <div className="mt-4 flex flex-wrap gap-2">
-                          <MetaBadge label={`${recipe.prep_minutes + recipe.cook_minutes} min`} />
+                          <MetaBadge
+                            label={`Difficulté ${getRecipeDifficultyLabel(recipe.difficulty)}`}
+                          />
+                          <MetaBadge
+                            label={`Stock ${getRecipeStockIntensityLabel(
+                              recipe.stock_intensity,
+                            )}`}
+                          />
                           <MetaBadge label={`${recipe.default_servings} portions`} />
-                          {recipe.tags.slice(0, 4).map((tag) => (
-                            <MetaBadge key={`${recipe.recipe_id}-${tag.code}`} label={tag.label} />
-                          ))}
+                          <MetaBadge
+                            label={`${recipe.prep_minutes + recipe.cook_minutes} min`}
+                          />
                         </div>
 
                         {recipe.fit.fit_reasons.length > 0 ? (
-                          <div className="mt-4 rounded-2xl border border-emerald-400/20 bg-emerald-400/10 p-4 text-sm text-emerald-100">
+                          <p className="mt-4 text-sm text-emerald-200">
                             {recipe.fit.fit_reasons.join(" · ")}
-                          </div>
+                          </p>
                         ) : null}
 
                         {recipe.fit.warnings.length > 0 ? (
-                          <div className="mt-4 rounded-2xl border border-amber-400/20 bg-amber-400/10 p-4 text-sm text-amber-100">
+                          <p className="mt-3 text-sm text-amber-200">
                             {recipe.fit.warnings.join(" · ")}
-                          </div>
+                          </p>
                         ) : null}
 
                         {recipe.fit.blocked_reasons.length > 0 ? (
-                          <div className="mt-4 rounded-2xl border border-red-400/20 bg-red-400/10 p-4 text-sm text-red-100">
+                          <p className="mt-3 text-sm text-red-200">
                             {recipe.fit.blocked_reasons.join(" · ")}
-                          </div>
+                          </p>
                         ) : null}
-                      </article>
+                      </div>
                     );
                   })
                 )}
@@ -639,113 +835,79 @@ export default function RecipesPage() {
             </div>
           </section>
 
-          <aside className="rounded-[28px] border border-white/10 bg-white/5 p-8 backdrop-blur">
-            <div className="inline-flex items-center gap-2 rounded-full border border-white/10 px-4 py-2 text-xs uppercase tracking-[0.24em] text-white/70">
-              <ShieldCheck className="h-4 w-4" />
-              Lecture DOMYLI
-            </div>
-
-            <div className="mt-8 space-y-5">
-              <div className="rounded-3xl border border-white/10 bg-black/20 p-5">
-                <p className="text-xs uppercase tracking-[0.24em] text-white/45">
-                  Email
-                </p>
-                <p className="mt-2 text-sm text-white/85">{sessionEmail ?? "—"}</p>
-              </div>
-
-              <div className="rounded-3xl border border-white/10 bg-black/20 p-5">
-                <p className="text-xs uppercase tracking-[0.24em] text-white/45">
-                  Foyer actif
-                </p>
-                <p className="mt-2 text-sm text-white/85">
-                  {activeMembership?.household_name ?? "—"}
+          <aside className="space-y-6">
+            <div className="rounded-[32px] border border-white/10 bg-white/5 p-8 backdrop-blur">
+              <div className="flex items-center gap-3">
+                <ShieldCheck className="h-5 w-5 text-gold" />
+                <p className="text-sm uppercase tracking-[0.24em] text-gold">
+                  Lecture métier DOMYLI
                 </p>
               </div>
 
-              <div className="rounded-3xl border border-white/10 bg-black/20 p-5">
-                <p className="text-xs uppercase tracking-[0.24em] text-white/45">
-                  Projection profil
-                </p>
-                <p className="mt-2 text-sm text-white/85">
-                  {getProjectionLabel(projectionMode, activeProfileLabel)}
-                </p>
-              </div>
+              <div className="mt-6 space-y-5 text-sm">
+                <div>
+                  <p className="text-xs uppercase tracking-[0.24em] text-white/50">
+                    Email
+                  </p>
+                  <p className="mt-2 text-white">{sessionEmail ?? "—"}</p>
+                </div>
 
-              <div className="rounded-3xl border border-white/10 bg-black/20 p-5">
-                <p className="text-xs uppercase tracking-[0.24em] text-white/45">
-                  Super Admin
-                </p>
-                <p className="mt-2 text-sm text-white/85">
-                  {bootstrap?.is_super_admin ? "Oui" : "Non"}
-                </p>
-              </div>
+                <div>
+                  <p className="text-xs uppercase tracking-[0.24em] text-white/50">
+                    Foyer actif
+                  </p>
+                  <p className="mt-2 text-white">
+                    {activeMembership?.household_name ?? "—"}
+                  </p>
+                </div>
 
-              <div className="rounded-3xl border border-gold/20 bg-gold/10 p-5">
-                <div className="inline-flex items-center gap-2 text-gold">
-                  <Sparkles className="h-4 w-4" />
-                  <p className="text-xs uppercase tracking-[0.24em]">
+                <div>
+                  <p className="text-xs uppercase tracking-[0.24em] text-white/50">
+                    Projection profil
+                  </p>
+                  <p className="mt-2 text-white">
+                    {getProjectionLabel(projectionMode, activeProfileLabel)}
+                  </p>
+                </div>
+
+                <div>
+                  <p className="text-xs uppercase tracking-[0.24em] text-white/50">
+                    Super Admin
+                  </p>
+                  <p className="mt-2 text-white">
+                    {bootstrap?.is_super_admin ? "Oui" : "Non"}
+                  </p>
+                </div>
+
+                <div>
+                  <p className="text-xs uppercase tracking-[0.24em] text-white/50">
                     Logique cible
                   </p>
-                </div>
-
-                <p className="mt-3 text-sm leading-7 text-gold/90">
-                  DOMYLI ne te demande plus un identifiant technique vide. Tu choisis
-                  désormais une intention de repas, un mode de projection et, si besoin,
-                  un profil humain déjà utilisé dans le système.
-                </p>
-              </div>
-
-              <div className="rounded-3xl border border-white/10 bg-white/5 p-5 text-sm text-white/85">
-                <div className="flex items-center gap-3 text-white">
-                  <Target className="h-4 w-4 text-gold" />
-                  <span>Résumé de filtre</span>
-                </div>
-                <div className="mt-4 space-y-3 text-white/70">
-                  <p className="flex items-start gap-2">
-                    <BookOpen className="mt-0.5 h-4 w-4 text-gold" />
-                    <span>{getRecipeMealTypeLabel(mealType)}</span>
-                  </p>
-                  <p className="flex items-start gap-2">
-                    <UserRound className="mt-0.5 h-4 w-4 text-gold" />
-                    <span>{getProjectionLabel(projectionMode, activeProfileLabel)}</span>
-                  </p>
-                  <p className="flex items-start gap-2">
-                    <Users className="mt-0.5 h-4 w-4 text-gold" />
-                    <span>
-                      {selectedIntentCodes.length > 0
-                        ? selectedIntentCodes
-                            .map(
-                              (code) =>
-                                SEARCH_INTENTS.find((intent) => intent.code === code)?.label ?? code,
-                            )
-                            .join(" · ")
-                        : "Aucun filtre d’intention ajouté"}
-                    </span>
+                  <p className="mt-2 text-white/70">
+                    Le ciblage passe maintenant par un profil du foyer déjà créé,
+                    jamais par un identifiant technique saisi à la main.
                   </p>
                 </div>
               </div>
-
-              {error ? (
-                <div className="rounded-3xl border border-red-400/20 bg-red-400/10 p-5 text-sm text-red-100">
-                  <div className="flex items-start gap-3">
-                    <AlertTriangle className="mt-0.5 h-4 w-4" />
-                    <span>{error.message}</span>
-                  </div>
-                </div>
-              ) : null}
-
-              <button
-                type="button"
-                onClick={() => navigate(ROUTES.MEALS)}
-                className="inline-flex w-full items-center justify-center gap-3 border border-white/10 px-5 py-4 text-sm uppercase tracking-[0.24em] text-white transition-colors hover:border-gold/40 hover:text-gold"
-              >
-                <CheckCircle2 className="h-4 w-4" />
-                Continuer vers Meals
-              </button>
             </div>
+
+            <button
+              type="button"
+              onClick={() => navigate(ROUTES.MEALS)}
+              className="inline-flex w-full items-center justify-center gap-3 border border-white/10 px-5 py-4 text-sm uppercase tracking-[0.24em] text-white transition-colors hover:border-gold/40 hover:text-gold"
+            >
+              <Target className="h-4 w-4" />
+              Continuer vers Meals
+            </button>
+
+            {error ? (
+              <div className="rounded-[20px] border border-red-500/30 bg-red-500/10 px-4 py-4 text-sm text-red-200">
+                {error.message}
+              </div>
+            ) : null}
           </aside>
         </div>
       </div>
-    </main>
+    </div>
   );
 }

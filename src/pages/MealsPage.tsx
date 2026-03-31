@@ -4,7 +4,6 @@ import {
   ArrowLeft,
   CalendarDays,
   CheckCircle2,
-  ChevronDown,
   Plus,
   RefreshCw,
   Save,
@@ -20,6 +19,7 @@ import { useNavigate } from "react-router-dom";
 
 import { useAuth } from "@/src/providers/AuthProvider";
 import { useMeals } from "@/src/hooks/useMeals";
+import { useHouseholdProfileOptions } from "@/src/hooks/useHouseholdProfileOptions";
 import { ROUTES } from "@/src/constants/routes";
 import {
   RECIPE_MEAL_TYPE_OPTIONS,
@@ -56,7 +56,8 @@ type RecentProfileTarget = {
   lastUsedAt: string;
 };
 
-const PROFILE_STORAGE_KEY = "domyli:meals:recent-profile-targets:v2";
+const PROFILE_STORAGE_KEY = "domyli:meals:recent-profile-targets:v3";
+
 const QUERY_PLACEHOLDERS: Record<MealType, string> = {
   BREAKFAST: "Rapide, protéiné, enfant, sans porc, matin doux...",
   LUNCH: "Batch, bureau, halal, riche en protéines, transportable...",
@@ -157,7 +158,10 @@ function recipeHasTag(recipe: RecipeCandidate, code: string): boolean {
   return recipe.tags.some((tag) => tag.code.toUpperCase() === code);
 }
 
-function recipeMatchesIntent(recipe: RecipeCandidate, intentCode: SearchIntent["code"]): boolean {
+function recipeMatchesIntent(
+  recipe: RecipeCandidate,
+  intentCode: SearchIntent["code"],
+): boolean {
   switch (intentCode) {
     case "FAST":
       return recipe.prep_minutes + recipe.cook_minutes <= 20;
@@ -204,27 +208,38 @@ function getStockWeight(value: string): number {
   return 3;
 }
 
-function sortRecipes(recipes: RecipeCandidate[], sortMode: RecipeSortMode): RecipeCandidate[] {
+function sortRecipes(
+  recipes: RecipeCandidate[],
+  sortMode: RecipeSortMode,
+): RecipeCandidate[] {
   const cloned = [...recipes];
 
   cloned.sort((a, b) => {
     if (sortMode === "FAST") {
       const aTime = a.prep_minutes + a.cook_minutes;
       const bTime = b.prep_minutes + b.cook_minutes;
-      return aTime - bTime || b.fit.fit_score - a.fit.fit_score || a.title.localeCompare(b.title, "fr");
+
+      return (
+        aTime - bTime ||
+        b.fit.fit_score - a.fit.fit_score ||
+        a.title.localeCompare(b.title, "fr")
+      );
     }
 
     if (sortMode === "STOCK") {
       return (
-        getStockWeight(a.stock_intensity) - getStockWeight(b.stock_intensity) ||
+        getStockWeight(a.stock_intensity) -
+          getStockWeight(b.stock_intensity) ||
         b.fit.fit_score - a.fit.fit_score ||
         a.title.localeCompare(b.title, "fr")
       );
     }
 
     if (sortMode === "FAMILY") {
-      const aFamily = recipeHasTag(a, "FAMILY") || recipeHasTag(a, "KID") ? 1 : 0;
-      const bFamily = recipeHasTag(b, "FAMILY") || recipeHasTag(b, "KID") ? 1 : 0;
+      const aFamily =
+        recipeHasTag(a, "FAMILY") || recipeHasTag(a, "KID") ? 1 : 0;
+      const bFamily =
+        recipeHasTag(b, "FAMILY") || recipeHasTag(b, "KID") ? 1 : 0;
 
       return (
         bFamily - aFamily ||
@@ -273,34 +288,42 @@ function buildMealNotes(
   ];
 
   if (operatorNotes.trim()) {
-    lines.push("", "[DOMYLI_OPERATOR_NOTES]", operatorNotes.trim(), "[/DOMYLI_OPERATOR_NOTES]");
+    lines.push(
+      "",
+      "[DOMYLI_OPERATOR_NOTES]",
+      operatorNotes.trim(),
+      "[/DOMYLI_OPERATOR_NOTES]",
+    );
   }
 
   return lines.join("\n");
 }
 
-function getProjectionHeadline(mode: ProjectionMode, label: string): string {
+function getProjectionHeadline(
+  mode: ProjectionMode,
+  label: string,
+): string {
   if (mode === "TARGETED") {
     return label.trim() || "Profil ciblé à confirmer";
   }
 
   if (mode === "HOUSEHOLD") {
-    return "Repas pensé pour le foyer";
+    return "Repas foyer";
   }
 
-  return "Compatibilité neutre du foyer";
+  return "Compatibilité neutre";
 }
 
 function getProjectionDescription(mode: ProjectionMode): string {
   if (mode === "TARGETED") {
-    return "DOMYLI projette les recettes sur un profil humain précis dès qu’un profil lié est fourni.";
+    return "DOMYLI projette la compatibilité sur un profil humain précis déjà créé dans le foyer.";
   }
 
   if (mode === "HOUSEHOLD") {
-    return "DOMYLI privilégie les recettes plus consensuelles, simples et utilisables pour plusieurs personnes.";
+    return "DOMYLI privilégie les recettes plus consensuelles et partageables.";
   }
 
-  return "DOMYLI n’applique pas de contrainte profil précise et affiche la lecture la plus neutre.";
+  return "Lecture simple du foyer, sans profil spécifique.";
 }
 
 function ModeCard({
@@ -320,15 +343,17 @@ function ModeCard({
     <button
       type="button"
       onClick={onClick}
-      className={`rounded-2xl border p-4 text-left transition-colors ${
+      className={`rounded-[28px] border p-8 text-left transition-colors ${
         isActive
-          ? "border-gold/50 bg-gold/10"
-          : "border-white/10 bg-white/[0.03] hover:border-gold/30"
+          ? "border-gold bg-gold/10 text-gold"
+          : "border-white/10 bg-black/30 text-white hover:border-gold/40 hover:text-gold"
       }`}
     >
-      <div className="inline-flex items-center gap-2 text-gold">{icon}</div>
-      <p className="mt-3 text-sm font-medium text-white">{title}</p>
-      <p className="mt-2 text-xs leading-6 text-white/60">{description}</p>
+      <div className="mb-6">{icon}</div>
+      <h3 className="text-3xl font-semibold">{title}</h3>
+      <p className="mt-4 max-w-sm text-base leading-8 text-white/70">
+        {description}
+      </p>
     </button>
   );
 }
@@ -348,9 +373,7 @@ function MetaBadge({
         : "border-gold/20 bg-gold/10 text-gold";
 
   return (
-    <span
-      className={`inline-flex items-center rounded-full border px-3 py-1 text-[11px] uppercase tracking-[0.2em] ${className}`}
-    >
+    <span className={`inline-flex rounded-full border px-3 py-1 text-xs uppercase tracking-[0.2em] ${className}`}>
       {label}
     </span>
   );
@@ -358,6 +381,7 @@ function MetaBadge({
 
 export default function MealsPage() {
   const navigate = useNavigate();
+
   const {
     sessionEmail,
     activeMembership,
@@ -384,16 +408,24 @@ export default function MealsPage() {
     refreshRecipeCandidates,
   } = useMeals();
 
+  const {
+    loading: profilesLoading,
+    error: profilesError,
+    options: profileOptions,
+    refresh: refreshProfiles,
+  } = useHouseholdProfileOptions();
+
   const [selectedMealSlotId, setSelectedMealSlotId] = useState("");
   const [plannedFor, setPlannedFor] = useState(todayIsoDate());
   const [mealType, setMealType] = useState<MealType>("LUNCH");
-  const [projectionMode, setProjectionMode] = useState<ProjectionMode>("NEUTRAL");
-  const [profileLabel, setProfileLabel] = useState("");
+  const [projectionMode, setProjectionMode] =
+    useState<ProjectionMode>("NEUTRAL");
   const [profileId, setProfileId] = useState("");
-  const [showProfileIdentifier, setShowProfileIdentifier] = useState(false);
   const [recentProfiles, setRecentProfiles] = useState<RecentProfileTarget[]>([]);
   const [recipeSearch, setRecipeSearch] = useState("");
-  const [selectedIntentCodes, setSelectedIntentCodes] = useState<SearchIntent["code"][]>([]);
+  const [selectedIntentCodes, setSelectedIntentCodes] = useState<
+    SearchIntent["code"][]
+  >([]);
   const [sortMode, setSortMode] = useState<RecipeSortMode>("COMPATIBILITY");
   const [selectedRecipeId, setSelectedRecipeId] = useState("");
   const [operatorNotes, setOperatorNotes] = useState("");
@@ -402,6 +434,12 @@ export default function MealsPage() {
   useEffect(() => {
     setRecentProfiles(readRecentProfileTargets());
   }, []);
+
+  useEffect(() => {
+    if (projectionMode !== "TARGETED" && profileId) {
+      setProfileId("");
+    }
+  }, [projectionMode, profileId]);
 
   const effectiveProfileId = useMemo(() => {
     if (projectionMode !== "TARGETED") return "";
@@ -412,7 +450,33 @@ export default function MealsPage() {
     void refreshRecipeCandidates(mealType, effectiveProfileId);
   }, [effectiveProfileId, mealType, refreshRecipeCandidates]);
 
-  const isEditMode = useMemo(() => Boolean(selectedMealSlotId), [selectedMealSlotId]);
+  const selectedProfileOption = useMemo(
+    () =>
+      profileOptions.find((option) => option.profile_id === effectiveProfileId) ??
+      null,
+    [effectiveProfileId, profileOptions],
+  );
+
+  const selectedProfileLabel = useMemo(() => {
+    if (selectedProfileOption) {
+      return selectedProfileOption.display_name;
+    }
+
+    if (!effectiveProfileId) {
+      return "";
+    }
+
+    const matchedRecent = recentProfiles.find(
+      (item) => item.profileId === effectiveProfileId,
+    );
+
+    return matchedRecent?.profileLabel ?? "Profil ciblé";
+  }, [effectiveProfileId, recentProfiles, selectedProfileOption]);
+
+  const isEditMode = useMemo(
+    () => Boolean(selectedMealSlotId),
+    [selectedMealSlotId],
+  );
 
   const filteredRecipes = useMemo(() => {
     const normalizedSearch = normalizeText(recipeSearch.trim());
@@ -461,28 +525,33 @@ export default function MealsPage() {
 
   const canSubmit = useMemo(() => {
     return Boolean(plannedFor && mealType && selectedRecipe);
-  }, [plannedFor, mealType, selectedRecipe]);
+  }, [mealType, plannedFor, selectedRecipe]);
 
   if (authLoading || bootstrapLoading) {
     return (
-      <main className="min-h-screen bg-black px-6 py-10 text-white">
-        <div className="mx-auto max-w-6xl rounded-[28px] border border-white/10 bg-white/5 p-8 backdrop-blur">
-          <p className="text-xs uppercase tracking-[0.24em] text-gold">DOMYLI</p>
+      <div className="min-h-screen bg-black px-6 py-10 text-white">
+        <div className="mx-auto max-w-6xl rounded-[32px] border border-white/10 bg-white/5 p-8 backdrop-blur">
+          <p className="text-xs uppercase tracking-[0.24em] text-gold">
+            DOMYLI
+          </p>
           <h1 className="mt-4 text-3xl font-semibold">Chargement des repas...</h1>
         </div>
-      </main>
+      </div>
     );
   }
 
   if (!isAuthenticated || !hasHousehold) {
     return (
-      <main className="min-h-screen bg-black px-6 py-10 text-white">
-        <div className="mx-auto max-w-6xl rounded-[28px] border border-white/10 bg-white/5 p-8 backdrop-blur">
-          <p className="text-xs uppercase tracking-[0.24em] text-gold">DOMYLI</p>
+      <div className="min-h-screen bg-black px-6 py-10 text-white">
+        <div className="mx-auto max-w-4xl rounded-[32px] border border-white/10 bg-white/5 p-8 backdrop-blur">
+          <p className="text-xs uppercase tracking-[0.24em] text-gold">
+            DOMYLI
+          </p>
           <h1 className="mt-4 text-3xl font-semibold">Foyer requis</h1>
           <p className="mt-3 text-white/70">
             Il faut une session authentifiée et un foyer actif pour accéder aux repas.
           </p>
+
           <button
             type="button"
             onClick={() => navigate(ROUTES.HOME)}
@@ -491,7 +560,7 @@ export default function MealsPage() {
             Retour à l’accueil
           </button>
         </div>
-      </main>
+      </div>
     );
   }
 
@@ -500,9 +569,7 @@ export default function MealsPage() {
     setPlannedFor(todayIsoDate());
     setMealType("LUNCH");
     setProjectionMode("NEUTRAL");
-    setProfileLabel("");
     setProfileId("");
-    setShowProfileIdentifier(false);
     setRecipeSearch("");
     setSelectedIntentCodes([]);
     setSortMode("COMPATIBILITY");
@@ -527,10 +594,19 @@ export default function MealsPage() {
   };
 
   const applyRecentProfile = (recentProfile: RecentProfileTarget) => {
+    const existsInHousehold = profileOptions.some(
+      (option) => option.profile_id === recentProfile.profileId,
+    );
+
+    if (!existsInHousehold) {
+      setLocalMessage(
+        "Le profil récent n’existe plus dans le foyer actif. Recharge la liste des profils.",
+      );
+      return;
+    }
+
     setProjectionMode("TARGETED");
-    setProfileLabel(recentProfile.profileLabel);
     setProfileId(recentProfile.profileId);
-    setShowProfileIdentifier(true);
     setLocalMessage(`Projection ciblée chargée : ${recentProfile.profileLabel}`);
   };
 
@@ -550,12 +626,11 @@ export default function MealsPage() {
 
   const persistRecentProfile = () => {
     if (projectionMode !== "TARGETED") return;
-    if (!profileId.trim()) return;
-    if (!profileLabel.trim()) return;
+    if (!selectedProfileOption) return;
 
     const nextItem: RecentProfileTarget = {
-      profileId: profileId.trim(),
-      profileLabel: profileLabel.trim(),
+      profileId: selectedProfileOption.profile_id,
+      profileLabel: selectedProfileOption.display_name,
       lastMealType: mealType,
       lastUsedAt: new Date().toISOString(),
     };
@@ -578,9 +653,9 @@ export default function MealsPage() {
       return;
     }
 
-    if (projectionMode === "TARGETED" && !profileId.trim()) {
+    if (projectionMode === "TARGETED" && !effectiveProfileId) {
       setLocalMessage(
-        "Pour une projection ciblée, sélectionne un profil récent ou renseigne l’identifiant du profil DOMYLI lié.",
+        "Pour une projection ciblée, sélectionne un profil existant du foyer.",
       );
       return;
     }
@@ -595,7 +670,7 @@ export default function MealsPage() {
         selectedRecipe,
         operatorNotes,
         projectionMode,
-        profileLabel,
+        selectedProfileLabel,
         selectedIntentCodes,
         sortMode,
       );
@@ -637,6 +712,7 @@ export default function MealsPage() {
 
     try {
       const result = await confirmMealSlot(mealSlotId);
+
       setLocalMessage(
         `Repas confirmé : ${result.meal_slot_id ?? mealSlotId} (${result.status ?? "CONFIRMED"})`,
       );
@@ -646,34 +722,63 @@ export default function MealsPage() {
   };
 
   return (
-    <main className="min-h-screen bg-black px-6 py-10 text-white">
+    <div className="min-h-screen bg-black px-6 py-10 text-white">
       <div className="mx-auto max-w-7xl">
-        <div className="grid gap-6 lg:grid-cols-[1.08fr_0.92fr]">
-          <section className="rounded-[28px] border border-white/10 bg-white/5 p-8 backdrop-blur">
-            <div className="flex items-start justify-between gap-4">
-              <button
-                type="button"
-                onClick={() => navigate(ROUTES.DASHBOARD)}
-                className="mt-1 inline-flex h-10 w-10 items-center justify-center border border-white/10 transition-colors hover:border-gold/40"
-                aria-label="Retour"
-              >
-                <ArrowLeft className="h-4 w-4" />
-              </button>
+        <div className="flex items-center justify-between gap-4 rounded-[32px] border border-white/10 bg-white/5 p-8 backdrop-blur">
+          <div>
+            <p className="text-xs uppercase tracking-[0.24em] text-gold">
+              DOMYLI
+            </p>
+            <h1 className="mt-4 text-3xl font-semibold">Meals</h1>
+            <p className="mt-3 max-w-3xl text-sm leading-7 text-white/70">
+              Ici, la projection repas doit être gouvernée par des profils déjà créés
+              dans le foyer. Plus aucun UUID libre n’est demandé à l’utilisateur.
+            </p>
+          </div>
 
-              <div className="flex-1">
-                <p className="text-xs uppercase tracking-[0.24em] text-gold">DOMYLI</p>
-                <h1 className="mt-4 text-3xl font-semibold">Meals</h1>
-                <p className="mt-3 max-w-3xl text-sm leading-7 text-white/70">
-                  Ici, DOMYLI transforme une intention de repas en sélection structurée :
-                  pour qui, dans quel contexte, avec quel niveau de compatibilité et
-                  quelle recette publiée réellement exploitable.
-                </p>
-              </div>
-            </div>
+          <button
+            type="button"
+            onClick={() => navigate(ROUTES.DASHBOARD)}
+            className="mt-1 inline-flex h-10 w-10 items-center justify-center border border-white/10 transition-colors hover:border-gold/40"
+            aria-label="Retour"
+          >
+            <ArrowLeft className="h-4 w-4" />
+          </button>
+        </div>
 
-            <div className="mt-8 grid gap-4 rounded-[24px] border border-white/10 bg-black/20 p-5 lg:grid-cols-[0.95fr_1.05fr]">
-              <label className="block text-sm text-white/80">
-                <span className="mb-2 block">Date</span>
+        <div className="mt-8 grid gap-4 md:grid-cols-3">
+          <ModeCard
+            isActive={projectionMode === "NEUTRAL"}
+            icon={<ShieldCheck className="h-5 w-5" />}
+            title="Compatibilité neutre"
+            description={getProjectionDescription("NEUTRAL")}
+            onClick={() => setProjectionMode("NEUTRAL")}
+          />
+
+          <ModeCard
+            isActive={projectionMode === "HOUSEHOLD"}
+            icon={<Users className="h-5 w-5" />}
+            title="Repas foyer"
+            description={getProjectionDescription("HOUSEHOLD")}
+            onClick={() => setProjectionMode("HOUSEHOLD")}
+          />
+
+          <ModeCard
+            isActive={projectionMode === "TARGETED"}
+            icon={<UserRound className="h-5 w-5" />}
+            title="Profil ciblé"
+            description={getProjectionDescription("TARGETED")}
+            onClick={() => setProjectionMode("TARGETED")}
+          />
+        </div>
+
+        <div className="mt-8 grid gap-8 lg:grid-cols-[minmax(0,1.2fr)_380px]">
+          <section className="rounded-[32px] border border-white/10 bg-white/5 p-8 backdrop-blur">
+            <div className="grid gap-4 md:grid-cols-2">
+              <label className="block">
+                <span className="mb-3 block text-xs uppercase tracking-[0.24em] text-white/60">
+                  Date planifiée
+                </span>
                 <input
                   type="date"
                   value={plannedFor}
@@ -682,8 +787,10 @@ export default function MealsPage() {
                 />
               </label>
 
-              <label className="block text-sm text-white/80">
-                <span className="mb-2 block">Type de repas</span>
+              <label className="block">
+                <span className="mb-3 block text-xs uppercase tracking-[0.24em] text-white/60">
+                  Type de repas
+                </span>
                 <select
                   value={mealType}
                   onChange={(event) =>
@@ -700,201 +807,213 @@ export default function MealsPage() {
               </label>
             </div>
 
-            <div className="mt-8 rounded-[24px] border border-white/10 bg-black/20 p-5">
-              <div className="flex items-center gap-3 text-gold">
-                <Target className="h-5 w-5" />
-                <div>
-                  <p className="text-xs uppercase tracking-[0.24em]">Pour qui est ce repas ?</p>
-                  <p className="mt-1 text-sm text-white/60">
-                    DOMYLI guide la projection au lieu de te laisser un champ technique vide.
-                  </p>
-                </div>
-              </div>
+            {projectionMode === "TARGETED" ? (
+              <div className="mt-6 rounded-[28px] border border-white/10 bg-black/20 p-6">
+                <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_280px]">
+                  <div>
+                    <span className="mb-3 block text-xs uppercase tracking-[0.24em] text-white/60">
+                      Profil humain du foyer
+                    </span>
 
-              <div className="mt-5 grid gap-4 lg:grid-cols-3">
-                <ModeCard
-                  isActive={projectionMode === "NEUTRAL"}
-                  icon={<ShieldCheck className="h-4 w-4" />}
-                  title="Compatibilité neutre"
-                  description="Lecture simple du foyer, sans profil spécifique."
-                  onClick={() => setProjectionMode("NEUTRAL")}
-                />
-
-                <ModeCard
-                  isActive={projectionMode === "HOUSEHOLD"}
-                  icon={<Users className="h-4 w-4" />}
-                  title="Repas foyer"
-                  description="DOMYLI privilégie les recettes plus consensuelles et partageables."
-                  onClick={() => setProjectionMode("HOUSEHOLD")}
-                />
-
-                <ModeCard
-                  isActive={projectionMode === "TARGETED"}
-                  icon={<UserRound className="h-4 w-4" />}
-                  title="Profil ciblé"
-                  description="DOMYLI projette la compatibilité sur un profil humain précis."
-                  onClick={() => setProjectionMode("TARGETED")}
-                />
-              </div>
-
-              {projectionMode === "TARGETED" && (
-                <div className="mt-5 rounded-2xl border border-white/10 bg-white/[0.03] p-5">
-                  <div className="grid gap-4 lg:grid-cols-[1.1fr_0.9fr]">
-                    <label className="block text-sm text-white/80">
-                      <span className="mb-2 block">Nom visible du profil</span>
-                      <input
-                        value={profileLabel}
-                        onChange={(event) => setProfileLabel(event.target.value)}
-                        placeholder="Ex: Mina — diabète — halal"
-                        className="w-full border border-white/10 bg-black/30 px-4 py-4 text-sm outline-none focus:border-gold/50"
-                      />
-                    </label>
-
-                    <div className="text-sm text-white/80">
-                      <span className="mb-2 block">Profils récents</span>
-                      <div className="flex min-h-[58px] flex-wrap gap-2 rounded-2xl border border-white/10 bg-black/30 p-3">
-                        {recentProfiles.length === 0 ? (
-                          <p className="text-sm text-white/45">
-                            Aucun profil récent. Le premier repas ciblé sera mémorisé ici.
-                          </p>
-                        ) : (
-                          recentProfiles.map((recentProfile) => (
-                            <button
-                              key={recentProfile.profileId}
-                              type="button"
-                              onClick={() => applyRecentProfile(recentProfile)}
-                              className="rounded-full border border-gold/20 bg-gold/10 px-3 py-2 text-[11px] uppercase tracking-[0.18em] text-gold transition-colors hover:border-gold/40"
-                            >
-                              {recentProfile.profileLabel}
-                            </button>
-                          ))
-                        )}
+                    {profilesLoading ? (
+                      <div className="rounded-[20px] border border-white/10 bg-black/30 px-4 py-4 text-sm text-white/60">
+                        Chargement des profils gouvernés...
                       </div>
-                    </div>
-                  </div>
-
-                  <button
-                    type="button"
-                    onClick={() => setShowProfileIdentifier((prev) => !prev)}
-                    className="mt-4 inline-flex items-center gap-2 text-xs uppercase tracking-[0.24em] text-gold/80 transition-colors hover:text-gold"
-                  >
-                    <ChevronDown className={`h-4 w-4 transition-transform ${showProfileIdentifier ? "rotate-180" : ""}`} />
-                    Profil déjà lié dans DOMYLI
-                  </button>
-
-                  {showProfileIdentifier && (
-                    <label className="mt-4 block text-sm text-white/80">
-                      <span className="mb-2 block">Identifiant du profil DOMYLI</span>
-                      <input
+                    ) : profileOptions.length > 0 ? (
+                      <select
                         value={profileId}
                         onChange={(event) => setProfileId(event.target.value)}
-                        placeholder="UUID du profil humain lié"
                         className="w-full border border-white/10 bg-black/30 px-4 py-4 text-sm outline-none focus:border-gold/50"
-                      />
-                      <p className="mt-2 text-xs leading-6 text-white/45">
-                        Ce champ n’apparaît que si tu vises une projection réellement personnalisée.
+                      >
+                        <option value="">Choisir un profil créé</option>
+                        {profileOptions.map((option) => (
+                          <option key={option.profile_id} value={option.profile_id}>
+                            {option.display_name} — {option.summary}
+                          </option>
+                        ))}
+                      </select>
+                    ) : (
+                      <div className="rounded-[20px] border border-amber-400/20 bg-amber-400/10 px-4 py-4 text-sm text-amber-100">
+                        Aucun profil gouverné n’existe encore dans ce foyer. Crée ou
+                        complète d’abord un profil humain.
+                      </div>
+                    )}
+
+                    {selectedProfileOption ? (
+                      <p className="mt-4 text-sm text-gold">
+                        Profil sélectionné : {selectedProfileOption.display_name} —{" "}
+                        {selectedProfileOption.summary}
                       </p>
-                    </label>
-                  )}
-                </div>
-              )}
-            </div>
+                    ) : null}
 
-            <div className="mt-8 rounded-[24px] border border-white/10 bg-black/20 p-5">
-              <div className="flex items-center gap-3 text-gold">
-                <Sparkles className="h-5 w-5" />
-                <div>
-                  <p className="text-xs uppercase tracking-[0.24em]">Décris l’intention du repas</p>
-                  <p className="mt-1 text-sm text-white/60">
-                    DOMYLI filtre les recettes comme un moteur domestique, pas comme une simple barre de recherche.
-                  </p>
-                </div>
-              </div>
+                    {profilesError ? (
+                      <div className="mt-4 rounded-[20px] border border-red-500/30 bg-red-500/10 px-4 py-4 text-sm text-red-200">
+                        {profilesError.message}
+                      </div>
+                    ) : null}
 
-              <div className="mt-5 grid gap-4 lg:grid-cols-[1.2fr_0.8fr]">
-                <label className="block text-sm text-white/80">
-                  <span className="mb-2 block">Recherche guidée</span>
-                  <div className="relative">
-                    <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-white/45" />
-                    <input
-                      value={recipeSearch}
-                      onChange={(event) => setRecipeSearch(event.target.value)}
-                      placeholder={QUERY_PLACEHOLDERS[mealType]}
-                      className="w-full border border-white/10 bg-black/30 py-4 pl-11 pr-4 text-sm outline-none focus:border-gold/50"
-                    />
+                    {profileOptions.length === 0 ? (
+                      <div className="mt-4 flex flex-wrap gap-3">
+                        <button
+                          type="button"
+                          onClick={() => navigate(ROUTES.MY_PROFILE)}
+                          className="border border-gold/40 px-4 py-3 text-xs uppercase tracking-[0.22em] text-gold transition-colors hover:bg-gold hover:text-black"
+                        >
+                          Ouvrir Mon profil
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => navigate(ROUTES.PROFILES)}
+                          className="border border-white/10 px-4 py-3 text-xs uppercase tracking-[0.22em] text-white transition-colors hover:border-gold/40 hover:text-gold"
+                        >
+                          Gérer Profiles
+                        </button>
+                      </div>
+                    ) : null}
                   </div>
-                </label>
 
-                <label className="block text-sm text-white/80">
-                  <span className="mb-2 block">Angle de sélection</span>
-                  <select
-                    value={sortMode}
-                    onChange={(event) =>
-                      setSortMode(event.target.value as RecipeSortMode)
-                    }
-                    className="w-full border border-white/10 bg-black/30 px-4 py-4 text-sm outline-none focus:border-gold/50"
-                  >
-                    {RECIPE_SORT_MODE_OPTIONS.map((option) => (
-                      <option key={option.value} value={option.value}>
-                        {option.label}
-                      </option>
-                    ))}
-                  </select>
-                </label>
+                  <div>
+                    <span className="mb-3 block text-xs uppercase tracking-[0.24em] text-white/60">
+                      Profils récents
+                    </span>
+
+                    <div className="rounded-[24px] border border-white/10 bg-black/30 p-4">
+                      {recentProfiles.length === 0 ? (
+                        <p className="text-sm text-white/60">
+                          Aucun profil récent. Le premier repas ciblé sera mémorisé ici.
+                        </p>
+                      ) : (
+                        <div className="flex flex-wrap gap-2">
+                          {recentProfiles.map((item) => (
+                            <button
+                              key={item.profileId}
+                              type="button"
+                              onClick={() => applyRecentProfile(item)}
+                              className="border border-white/10 px-3 py-2 text-[11px] uppercase tracking-[0.18em] text-white/70 transition-colors hover:border-gold/40 hover:text-gold"
+                            >
+                              {item.profileLabel}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
               </div>
+            ) : null}
 
-              <div className="mt-4 flex flex-wrap gap-2">
-                {SEARCH_INTENTS.map((intent) => {
-                  const isActive = selectedIntentCodes.includes(intent.code);
+            <div className="mt-6 grid gap-4 md:grid-cols-[minmax(0,1fr)_220px_220px]">
+              <label className="block md:col-span-2">
+                <span className="mb-3 block text-xs uppercase tracking-[0.24em] text-white/60">
+                  Décrivez l’intention du repas
+                </span>
 
-                  return (
-                    <button
-                      key={intent.code}
-                      type="button"
-                      onClick={() => toggleIntent(intent.code)}
-                      className={`rounded-full border px-4 py-2 text-[11px] uppercase tracking-[0.2em] transition-colors ${
-                        isActive
-                          ? "border-gold/50 bg-gold/10 text-gold"
-                          : "border-white/10 bg-white/[0.03] text-white/70 hover:border-gold/30 hover:text-gold"
-                      }`}
-                    >
-                      {intent.label}
-                    </button>
-                  );
-                })}
-              </div>
+                <div className="relative">
+                  <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-white/35" />
+                  <input
+                    value={recipeSearch}
+                    onChange={(event) => setRecipeSearch(event.target.value)}
+                    placeholder={QUERY_PLACEHOLDERS[mealType]}
+                    className="w-full border border-white/10 bg-black/30 py-4 pl-11 pr-4 text-sm outline-none focus:border-gold/50"
+                  />
+                </div>
+              </label>
+
+              <label className="block">
+                <span className="mb-3 block text-xs uppercase tracking-[0.24em] text-white/60">
+                  Tri
+                </span>
+                <select
+                  value={sortMode}
+                  onChange={(event) =>
+                    setSortMode(event.target.value as RecipeSortMode)
+                  }
+                  className="w-full border border-white/10 bg-black/30 px-4 py-4 text-sm outline-none focus:border-gold/50"
+                >
+                  {RECIPE_SORT_MODE_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
             </div>
 
-            <div className="mt-8 rounded-[24px] border border-white/10 bg-black/20 p-5">
-              <div className="flex items-center justify-between gap-4">
-                <div className="inline-flex items-center gap-3 text-gold/85">
-                  <Utensils className="h-5 w-5" />
-                  <span className="text-sm">
-                    {visibleRecipes.length} recette(s) candidate(s) pour {mealType}
-                  </span>
-                </div>
+            <div className="mt-6 flex flex-wrap gap-2">
+              {SEARCH_INTENTS.map((intent) => {
+                const isActive = selectedIntentCodes.includes(intent.code);
+
+                return (
+                  <button
+                    key={intent.code}
+                    type="button"
+                    onClick={() => toggleIntent(intent.code)}
+                    className={`border px-3 py-2 text-[11px] uppercase tracking-[0.2em] transition-colors ${
+                      isActive
+                        ? "border-gold bg-gold/10 text-gold"
+                        : "border-white/10 text-white/70 hover:border-gold/40 hover:text-gold"
+                    }`}
+                  >
+                    {intent.label}
+                  </button>
+                );
+              })}
+            </div>
+
+            <div className="mt-6 flex items-center justify-between gap-4">
+              <div>
+                <p className="text-xs uppercase tracking-[0.24em] text-white/60">
+                  Projection active
+                </p>
+                <p className="mt-2 text-white">
+                  {getProjectionHeadline(projectionMode, selectedProfileLabel)}
+                </p>
+              </div>
+
+              <div className="flex gap-3">
+                <button
+                  type="button"
+                  onClick={() => void refreshProfiles()}
+                  className="inline-flex items-center justify-center gap-3 border border-white/10 px-5 py-4 text-xs uppercase tracking-[0.24em] text-white/75 transition-colors hover:border-gold/40 hover:text-gold"
+                >
+                  <RefreshCw className="h-4 w-4" />
+                  Profils
+                </button>
 
                 <button
                   type="button"
-                  onClick={() => void refreshRecipeCandidates(mealType, effectiveProfileId)}
-                  className="inline-flex items-center gap-2 border border-white/10 px-4 py-2 text-xs uppercase tracking-[0.24em] text-white/75 transition-colors hover:border-gold/40 hover:text-gold"
+                  onClick={() =>
+                    void refreshRecipeCandidates(mealType, effectiveProfileId)
+                  }
+                  className="inline-flex items-center justify-center gap-3 border border-white/10 px-5 py-4 text-xs uppercase tracking-[0.24em] text-white/75 transition-colors hover:border-gold/40 hover:text-gold"
                 >
                   <RefreshCw className="h-4 w-4" />
-                  Recharger
+                  Recettes
                 </button>
               </div>
+            </div>
 
-              <div className="mt-5 space-y-4">
+            <div className="mt-8">
+              <h2 className="text-2xl font-semibold">
+                {visibleRecipes.length} recette(s) candidate(s)
+              </h2>
+              <p className="mt-2 text-sm text-white/60">
+                Tri actuel : {getRecipeSortModeLabel(sortMode)} · repas :{" "}
+                {mealType}
+              </p>
+
+              <div className="mt-6 grid gap-4">
                 {candidatesLoading ? (
-                  <div className="rounded-2xl border border-dashed border-white/10 p-5 text-sm text-white/60">
+                  <div className="rounded-[24px] border border-white/10 bg-black/20 p-6 text-white/70">
                     Chargement des recettes candidates...
                   </div>
                 ) : visibleRecipes.length === 0 ? (
-                  <div className="rounded-2xl border border-dashed border-white/10 p-5 text-sm text-white/60">
-                    Aucune recette candidate pour cette intention.
+                  <div className="rounded-[24px] border border-white/10 bg-black/20 p-6 text-white/70">
+                    Aucune recette publiée pour cette combinaison repas / intention / projection.
                   </div>
                 ) : (
-                  visibleRecipes.slice(0, 18).map((recipe) => {
+                  visibleRecipes.map((recipe) => {
                     const fitTone =
                       recipe.fit.fit_status === "BLOCKED"
                         ? "danger"
@@ -909,290 +1028,277 @@ export default function MealsPage() {
                         key={recipe.recipe_id}
                         type="button"
                         onClick={() => setSelectedRecipeId(recipe.recipe_id)}
-                        className={`block w-full rounded-2xl border p-5 text-left transition-colors ${
+                        className={`rounded-[28px] border p-6 text-left transition-colors ${
                           isSelected
-                            ? "border-gold/50 bg-gold/10"
-                            : "border-white/10 bg-white/[0.03] hover:border-gold/30"
+                            ? "border-gold bg-gold/10"
+                            : "border-white/10 bg-black/20 hover:border-gold/40"
                         }`}
                       >
-                        <div className="flex flex-wrap items-start justify-between gap-4">
+                        <div className="flex flex-wrap items-start justify-between gap-3">
                           <div>
-                            <p className="text-lg font-medium text-white">{recipe.title}</p>
-                            <p className="mt-2 text-sm leading-7 text-white/70">
+                            <h3 className="text-xl font-semibold">{recipe.title}</h3>
+                            <p className="mt-2 text-sm text-white/70">
                               {recipe.short_description}
                             </p>
                           </div>
 
-                          <div className="flex flex-wrap gap-2">
-                            <MetaBadge
-                              label={getRecipeFitStatusLabel(recipe.fit.fit_status)}
-                              tone={fitTone}
-                            />
-                            <MetaBadge label={getRecipeDifficultyLabel(recipe.difficulty)} />
-                          </div>
+                          <MetaBadge
+                            label={getRecipeFitStatusLabel(recipe.fit.fit_status)}
+                            tone={fitTone}
+                          />
                         </div>
 
                         <div className="mt-4 flex flex-wrap gap-2">
-                          <MetaBadge label={`${recipe.prep_minutes + recipe.cook_minutes} min`} />
+                          <MetaBadge
+                            label={`Difficulté ${getRecipeDifficultyLabel(recipe.difficulty)}`}
+                          />
+                          <MetaBadge
+                            label={`Stock ${getRecipeStockIntensityLabel(
+                              recipe.stock_intensity,
+                            )}`}
+                          />
                           <MetaBadge label={`${recipe.default_servings} portions`} />
-                          <MetaBadge label={getRecipeStockIntensityLabel(recipe.stock_intensity)} />
+                          <MetaBadge
+                            label={`${recipe.prep_minutes + recipe.cook_minutes} min`}
+                          />
                         </div>
+
+                        {recipe.fit.fit_reasons.length > 0 ? (
+                          <p className="mt-4 text-sm text-emerald-200">
+                            {recipe.fit.fit_reasons.join(" · ")}
+                          </p>
+                        ) : null}
+
+                        {recipe.fit.warnings.length > 0 ? (
+                          <p className="mt-3 text-sm text-amber-200">
+                            {recipe.fit.warnings.join(" · ")}
+                          </p>
+                        ) : null}
+
+                        {recipe.fit.blocked_reasons.length > 0 ? (
+                          <p className="mt-3 text-sm text-red-200">
+                            {recipe.fit.blocked_reasons.join(" · ")}
+                          </p>
+                        ) : null}
                       </button>
                     );
                   })
                 )}
               </div>
             </div>
+          </section>
 
-            <div className="mt-8 rounded-[24px] border border-white/10 bg-black/20 p-5">
-              <div className="grid gap-5 lg:grid-cols-[1fr_1fr]">
+          <aside className="space-y-6">
+            <div className="rounded-[32px] border border-white/10 bg-white/5 p-8 backdrop-blur">
+              <div className="flex items-center gap-3">
+                <Utensils className="h-5 w-5 text-gold" />
+                <p className="text-sm uppercase tracking-[0.24em] text-gold">
+                  Construction du repas
+                </p>
+              </div>
+
+              <div className="mt-6 space-y-5 text-sm">
                 <div>
-                  <p className="text-xs uppercase tracking-[0.24em] text-gold">
-                    Recette sélectionnée
+                  <p className="text-xs uppercase tracking-[0.24em] text-white/50">
+                    Projection
                   </p>
+                  <p className="mt-2 text-white">
+                    {getProjectionHeadline(projectionMode, selectedProfileLabel)}
+                  </p>
+                </div>
 
-                  <div className="mt-4 rounded-2xl border border-white/10 bg-white/[0.03] p-5">
-                    {selectedRecipe ? (
-                      <>
-                        <p className="text-lg font-medium text-white">{selectedRecipe.title}</p>
-                        <p className="mt-3 text-sm leading-7 text-white/70">
-                          {selectedRecipe.short_description}
-                        </p>
-
-                        <div className="mt-4 flex flex-wrap gap-2">
-                          <MetaBadge
-                            label={getRecipeFitStatusLabel(selectedRecipe.fit.fit_status)}
-                            tone={
-                              selectedRecipe.fit.fit_status === "BLOCKED"
-                                ? "danger"
-                                : selectedRecipe.fit.fit_status === "WARNING"
-                                  ? "warning"
-                                  : "default"
-                            }
-                          />
-                          {selectedRecipe.tags.slice(0, 4).map((tag) => (
-                            <MetaBadge key={tag.code} label={tag.label} />
-                          ))}
-                        </div>
-
-                        {(selectedRecipe.fit.warnings.length > 0 ||
-                          selectedRecipe.fit.blocked_reasons.length > 0) && (
-                          <div className="mt-4 rounded-2xl border border-amber-400/20 bg-amber-400/10 p-4 text-sm text-amber-50">
-                            <p className="mb-2 text-xs uppercase tracking-[0.2em]">
-                              Lecture compatibilité
-                            </p>
-
-                            {selectedRecipe.fit.warnings.map((warning) => (
-                              <p key={warning}>• {warning}</p>
-                            ))}
-
-                            {selectedRecipe.fit.blocked_reasons.map((reason) => (
-                              <p key={reason}>• {reason}</p>
-                            ))}
-                          </div>
-                        )}
-                      </>
-                    ) : (
-                      <p className="text-sm text-white/60">
-                        Sélectionne une recette publiée DOMYLI pour construire le repas.
-                      </p>
-                    )}
+                {selectedProfileOption ? (
+                  <div>
+                    <p className="text-xs uppercase tracking-[0.24em] text-white/50">
+                      Profil cible
+                    </p>
+                    <p className="mt-2 text-white">
+                      {selectedProfileOption.display_name}
+                    </p>
+                    <p className="mt-1 text-white/60">
+                      {selectedProfileOption.summary}
+                    </p>
                   </div>
+                ) : null}
+
+                <div>
+                  <p className="text-xs uppercase tracking-[0.24em] text-white/50">
+                    Recette choisie
+                  </p>
+                  <p className="mt-2 text-white">
+                    {selectedRecipe?.title ?? "Aucune recette sélectionnée"}
+                  </p>
                 </div>
 
                 <div>
-                  <p className="text-xs uppercase tracking-[0.24em] text-gold">
-                    Note foyer optionnelle
+                  <p className="text-xs uppercase tracking-[0.24em] text-white/50">
+                    Notes opérateur
                   </p>
-
                   <textarea
                     value={operatorNotes}
                     onChange={(event) => setOperatorNotes(event.target.value)}
-                    rows={8}
-                    placeholder="Ex: utiliser en priorité les produits frais déjà ouverts."
-                    className="mt-4 w-full resize-none border border-white/10 bg-black/30 px-4 py-4 text-sm outline-none focus:border-gold/50"
+                    rows={5}
+                    className="mt-3 w-full border border-white/10 bg-black/30 px-4 py-4 text-sm outline-none focus:border-gold/50"
+                    placeholder="Contexte de service, précision foyer, arbitrage du jour..."
                   />
-
-                  <div className="mt-6 flex flex-col gap-4 sm:flex-row">
-                    <button
-                      type="button"
-                      onClick={handleCreateOrUpdate}
-                      disabled={!canSubmit || saving}
-                      className="inline-flex items-center justify-center gap-3 bg-gold px-6 py-4 text-sm uppercase tracking-[0.25em] text-black transition hover:opacity-90 disabled:opacity-50"
-                    >
-                      {isEditMode ? <Save className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
-                      {saving
-                        ? "Enregistrement..."
-                        : isEditMode
-                          ? "Mettre à jour le repas"
-                          : "Créer le repas"}
-                    </button>
-
-                    {isEditMode && (
-                      <button
-                        type="button"
-                        onClick={resetForm}
-                        className="inline-flex items-center justify-center gap-3 border border-white/10 px-6 py-4 text-sm uppercase tracking-[0.25em] text-white/80 transition-colors hover:border-gold/40 hover:text-gold"
-                      >
-                        Réinitialiser
-                      </button>
-                    )}
-                  </div>
-
-                  {(lastCreatedMealSlotId || lastUpdatedMealSlotId || lastConfirmResult) && (
-                    <div className="mt-6 rounded-2xl border border-emerald-400/20 bg-emerald-400/10 p-4 text-sm text-emerald-100">
-                      {lastCreatedMealSlotId ? <p>Dernier repas créé : {lastCreatedMealSlotId}</p> : null}
-                      {lastUpdatedMealSlotId ? <p>Dernier repas mis à jour : {lastUpdatedMealSlotId}</p> : null}
-                      {lastConfirmResult?.meal_slot_id ? (
-                        <p>
-                          Dernière confirmation : {lastConfirmResult.meal_slot_id} ({lastConfirmResult.status})
-                        </p>
-                      ) : null}
-                    </div>
-                  )}
                 </div>
+
+                <div className="flex flex-wrap gap-3">
+                  <button
+                    type="button"
+                    disabled={!canSubmit || saving}
+                    onClick={handleCreateOrUpdate}
+                    className="inline-flex items-center justify-center gap-3 border border-gold bg-gold px-5 py-4 text-sm uppercase tracking-[0.24em] text-black transition-opacity disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {isEditMode ? <Save className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
+                    {saving
+                      ? "Enregistrement..."
+                      : isEditMode
+                        ? "Mettre à jour"
+                        : "Créer le repas"}
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={resetForm}
+                    className="inline-flex items-center justify-center gap-3 border border-white/10 px-5 py-4 text-sm uppercase tracking-[0.24em] text-white transition-colors hover:border-gold/40 hover:text-gold"
+                  >
+                    Réinitialiser
+                  </button>
+                </div>
+
+                {localMessage ? (
+                  <div className="rounded-[20px] border border-gold/20 bg-gold/10 px-4 py-4 text-sm text-gold">
+                    {localMessage}
+                  </div>
+                ) : null}
+
+                {error ? (
+                  <div className="rounded-[20px] border border-red-500/30 bg-red-500/10 px-4 py-4 text-sm text-red-200">
+                    {error.message}
+                  </div>
+                ) : null}
               </div>
             </div>
 
-            {items.length > 0 && (
-              <div className="mt-8 rounded-[24px] border border-white/10 bg-black/20 p-5">
-                <div className="flex items-center gap-3 text-gold">
-                  <CalendarDays className="h-5 w-5" />
-                  <p className="text-xs uppercase tracking-[0.24em]">Repas manipulés dans cette session</p>
+            <div className="rounded-[32px] border border-white/10 bg-white/5 p-8 backdrop-blur">
+              <div className="flex items-center gap-3">
+                <Sparkles className="h-5 w-5 text-gold" />
+                <p className="text-sm uppercase tracking-[0.24em] text-gold">
+                  Lecture DOMYLI
+                </p>
+              </div>
+
+              <div className="mt-6 space-y-5 text-sm">
+                <div>
+                  <p className="text-xs uppercase tracking-[0.24em] text-white/50">
+                    Email
+                  </p>
+                  <p className="mt-2 text-white">{sessionEmail ?? "—"}</p>
                 </div>
 
-                <div className="mt-5 space-y-4">
-                  {items.map((item) => (
-                    <div
-                      key={item.meal_slot_id}
-                      className="rounded-2xl border border-white/10 bg-white/[0.03] p-5"
-                    >
-                      <div className="flex flex-wrap items-center justify-between gap-4">
-                        <div>
-                          <p className="text-sm uppercase tracking-[0.24em] text-gold">
-                            {item.meal_type} · {item.planned_for}
-                          </p>
-                          <p className="mt-2 text-lg font-medium text-white">
-                            {item.title ?? "Repas DOMYLI"}
-                          </p>
-                          <p className="mt-2 text-sm text-white/60">
-                            Slot : {item.meal_slot_id}
-                          </p>
-                        </div>
-
-                        <div className="flex flex-wrap gap-3">
-                          <button
-                            type="button"
-                            onClick={() => handleEdit(item.meal_slot_id)}
-                            className="border border-white/10 px-4 py-2 text-xs uppercase tracking-[0.24em] text-white/75 transition-colors hover:border-gold/40 hover:text-gold"
-                          >
-                            Éditer
-                          </button>
-
-                          <button
-                            type="button"
-                            onClick={() => void handleConfirm(item.meal_slot_id)}
-                            disabled={confirming}
-                            className="inline-flex items-center gap-2 border border-gold/40 px-4 py-2 text-xs uppercase tracking-[0.24em] text-gold transition-colors hover:bg-gold hover:text-black disabled:opacity-50"
-                          >
-                            <CheckCircle2 className="h-4 w-4" />
-                            Confirmer
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {(localMessage || error?.message) && (
-              <div className="mt-8 rounded-[24px] border border-white/10 bg-white/5 p-5 text-sm text-white/85">
-                {localMessage ?? error?.message}
-              </div>
-            )}
-          </section>
-
-          <aside className="rounded-[28px] border border-white/10 bg-white/5 p-8 backdrop-blur">
-            <div className="inline-flex items-center gap-2 rounded-full border border-white/10 px-4 py-2 text-xs uppercase tracking-[0.24em] text-white/70">
-              <ShieldCheck className="h-4 w-4" />
-              Lecture DOMYLI
-            </div>
-
-            <div className="mt-8 space-y-5">
-              <div className="rounded-3xl border border-white/10 bg-black/20 p-5">
-                <p className="text-xs uppercase tracking-[0.24em] text-white/45">Email</p>
-                <p className="mt-2 text-sm text-white/85">{sessionEmail ?? "—"}</p>
-              </div>
-
-              <div className="rounded-3xl border border-white/10 bg-black/20 p-5">
-                <p className="text-xs uppercase tracking-[0.24em] text-white/45">Foyer actif</p>
-                <p className="mt-2 text-sm text-white/85">
-                  {activeMembership?.household_name ?? "—"}
-                </p>
-              </div>
-
-              <div className="rounded-3xl border border-white/10 bg-black/20 p-5">
-                <p className="text-xs uppercase tracking-[0.24em] text-white/45">Projection repas</p>
-                <p className="mt-2 text-sm text-white/85">
-                  {getProjectionHeadline(projectionMode, profileLabel)}
-                </p>
-                <p className="mt-2 text-sm leading-7 text-white/55">
-                  {getProjectionDescription(projectionMode)}
-                </p>
-              </div>
-
-              <div className="rounded-3xl border border-white/10 bg-black/20 p-5">
-                <p className="text-xs uppercase tracking-[0.24em] text-white/45">Angle de sélection</p>
-                <p className="mt-2 text-sm text-white/85">{getRecipeSortModeLabel(sortMode)}</p>
-                <div className="mt-4 flex flex-wrap gap-2">
-                  {selectedIntentCodes.length === 0 ? (
-                    <MetaBadge label="Aucune contrainte active" />
-                  ) : (
-                    selectedIntentCodes.map((intentCode) => {
-                      const intent = SEARCH_INTENTS.find((item) => item.code === intentCode);
-                      return <MetaBadge key={intentCode} label={intent?.label ?? intentCode} />;
-                    })
-                  )}
-                </div>
-              </div>
-
-              <div className="rounded-3xl border border-white/10 bg-black/20 p-5">
-                <p className="text-xs uppercase tracking-[0.24em] text-white/45">Super Admin</p>
-                <p className="mt-2 text-sm text-white/85">
-                  {bootstrap?.is_super_admin ? "Oui" : "Non"}
-                </p>
-              </div>
-
-              <div className="rounded-3xl border border-gold/20 bg-gold/10 p-5">
-                <div className="inline-flex items-center gap-2 text-gold">
-                  <Utensils className="h-4 w-4" />
-                  <p className="text-xs uppercase tracking-[0.24em]">Contrat Meals</p>
-                </div>
-
-                <p className="mt-3 text-sm leading-7 text-gold/90">
-                  Le front renseigne désormais le repas par intention : projection neutre,
-                  repas foyer ou profil ciblé, recherche guidée, filtres métiers, puis
-                  sélection d’une recette publiée compatible avec la cible DOMYLI.
-                </p>
-              </div>
-
-              {selectedRecipe?.fit.fit_status === "BLOCKED" && (
-                <div className="rounded-3xl border border-red-400/20 bg-red-400/10 p-5 text-sm text-red-100">
-                  <div className="inline-flex items-center gap-2">
-                    <AlertTriangle className="h-4 w-4" />
-                    <p className="text-xs uppercase tracking-[0.24em]">Attention recette bloquée</p>
-                  </div>
-                  <p className="mt-3 leading-7">
-                    La recette sélectionnée est marquée comme bloquante dans la projection
-                    actuelle. Revois la cible du repas ou change de recette.
+                <div>
+                  <p className="text-xs uppercase tracking-[0.24em] text-white/50">
+                    Foyer actif
+                  </p>
+                  <p className="mt-2 text-white">
+                    {activeMembership?.household_name ?? "—"}
                   </p>
                 </div>
-              )}
+
+                <div>
+                  <p className="text-xs uppercase tracking-[0.24em] text-white/50">
+                    Projection profil
+                  </p>
+                  <p className="mt-2 text-white">
+                    {getProjectionHeadline(projectionMode, selectedProfileLabel)}
+                  </p>
+                </div>
+
+                <div>
+                  <p className="text-xs uppercase tracking-[0.24em] text-white/50">
+                    Super Admin
+                  </p>
+                  <p className="mt-2 text-white">
+                    {bootstrap?.is_super_admin ? "Oui" : "Non"}
+                  </p>
+                </div>
+
+                {(lastCreatedMealSlotId || lastUpdatedMealSlotId || lastConfirmResult) && (
+                  <div>
+                    <p className="text-xs uppercase tracking-[0.24em] text-white/50">
+                      Dernière activité
+                    </p>
+                    <p className="mt-2 text-white">
+                      {lastConfirmResult?.meal_slot_id ??
+                        lastUpdatedMealSlotId ??
+                        lastCreatedMealSlotId ??
+                        "—"}
+                    </p>
+                  </div>
+                )}
+              </div>
             </div>
           </aside>
         </div>
+
+        <section className="mt-8 rounded-[32px] border border-white/10 bg-white/5 p-8 backdrop-blur">
+          <div className="flex items-center gap-3">
+            <CalendarDays className="h-5 w-5 text-gold" />
+            <p className="text-sm uppercase tracking-[0.24em] text-gold">
+              Repas planifiés
+            </p>
+          </div>
+
+          <div className="mt-6 grid gap-4">
+            {items.length === 0 ? (
+              <div className="rounded-[24px] border border-white/10 bg-black/20 p-6 text-white/70">
+                Aucun repas planifié pour le moment.
+              </div>
+            ) : (
+              items.map((meal) => (
+                <div
+                  key={meal.meal_slot_id}
+                  className="rounded-[24px] border border-white/10 bg-black/20 p-6"
+                >
+                  <div className="flex flex-wrap items-start justify-between gap-4">
+                    <div>
+                      <h3 className="text-xl font-semibold">
+                        {meal.title ?? "Repas DOMYLI"}
+                      </h3>
+                      <p className="mt-2 text-sm text-white/70">
+                        {meal.planned_for} · {meal.meal_type}
+                      </p>
+                      <p className="mt-2 text-sm text-white/50">
+                        {meal.status ?? "PENDING"}
+                      </p>
+                    </div>
+
+                    <div className="flex flex-wrap gap-3">
+                      <button
+                        type="button"
+                        onClick={() => handleEdit(meal.meal_slot_id)}
+                        className="border border-white/10 px-4 py-3 text-xs uppercase tracking-[0.22em] text-white transition-colors hover:border-gold/40 hover:text-gold"
+                      >
+                        Éditer
+                      </button>
+
+                      <button
+                        type="button"
+                        disabled={confirming}
+                        onClick={() => void handleConfirm(meal.meal_slot_id)}
+                        className="border border-gold/40 px-4 py-3 text-xs uppercase tracking-[0.22em] text-gold transition-colors hover:bg-gold hover:text-black disabled:opacity-60"
+                      >
+                        {confirming ? "Confirmation..." : "Confirmer"}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </section>
       </div>
-    </main>
+    </div>
   );
 }
