@@ -81,16 +81,58 @@ type RawMyProfileUpsertOutput = {
 };
 
 function firstRow<T>(value: T | T[] | null | undefined): T | null {
-  if (Array.isArray(value)) return value[0] ?? null;
+  if (Array.isArray(value)) {
+    return value[0] ?? null;
+  }
+
   return value ?? null;
+}
+
+function isReadCompatibilityIssue(error: ReturnType<typeof toDomyliError>) {
+  const haystack = [
+    error.message,
+    error.details,
+    error.hint,
+    error.code,
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+
+  return (
+    haystack.includes("birth_date") ||
+    haystack.includes("hp.birth_date")
+  );
+}
+
+function mapReadRow(row: RawMyProfileReadModel): MyProfileReadModel {
+  return {
+    profile_id: row.profile_id ?? null,
+    household_id: row.household_id ?? null,
+    display_name: row.display_name ?? "",
+    birth_date: row.birth_date ?? null,
+    sex: row.sex ?? null,
+    height_cm: row.height_cm ?? null,
+    weight_kg: row.weight_kg ?? null,
+    is_pregnant: Boolean(row.is_pregnant),
+    has_diabetes: Boolean(row.has_diabetes),
+    goal: row.goal ?? null,
+    activity_level: row.activity_level ?? null,
+    allergies: row.allergies ?? [],
+    food_constraints: row.food_constraints ?? [],
+    cultural_constraints: row.cultural_constraints ?? [],
+    updated_at: row.updated_at ?? null,
+  };
 }
 
 export async function readMyProfileStatus(): Promise<MyProfileStatus> {
   try {
-    const raw = (await callRpc("rpc_my_profile_status", {}, { unwrap: true })) as
-      | RawMyProfileStatus
-      | RawMyProfileStatus[]
-      | null;
+    const raw = (await callRpc("rpc_my_profile_status", {}, {
+      unwrap: true,
+      timeoutMs: 12_000,
+      retries: 1,
+      retryDelayMs: 900,
+    })) as RawMyProfileStatus | RawMyProfileStatus[] | null;
 
     const row = firstRow(raw);
 
@@ -107,10 +149,12 @@ export async function readMyProfileStatus(): Promise<MyProfileStatus> {
 
 export async function readMyProfile(): Promise<MyProfileReadModel | null> {
   try {
-    const raw = (await callRpc("rpc_my_profile_read", {}, { unwrap: true })) as
-      | RawMyProfileReadModel
-      | RawMyProfileReadModel[]
-      | null;
+    const raw = (await callRpc("rpc_my_profile_read", {}, {
+      unwrap: true,
+      timeoutMs: 12_000,
+      retries: 1,
+      retryDelayMs: 900,
+    })) as RawMyProfileReadModel | RawMyProfileReadModel[] | null;
 
     const row = firstRow(raw);
 
@@ -118,25 +162,19 @@ export async function readMyProfile(): Promise<MyProfileReadModel | null> {
       return null;
     }
 
-    return {
-      profile_id: row.profile_id ?? null,
-      household_id: row.household_id ?? null,
-      display_name: row.display_name ?? "",
-      birth_date: row.birth_date ?? null,
-      sex: row.sex ?? null,
-      height_cm: row.height_cm ?? null,
-      weight_kg: row.weight_kg ?? null,
-      is_pregnant: Boolean(row.is_pregnant),
-      has_diabetes: Boolean(row.has_diabetes),
-      goal: row.goal ?? null,
-      activity_level: row.activity_level ?? null,
-      allergies: row.allergies ?? [],
-      food_constraints: row.food_constraints ?? [],
-      cultural_constraints: row.cultural_constraints ?? [],
-      updated_at: row.updated_at ?? null,
-    };
+    return mapReadRow(row);
   } catch (error) {
-    throw toDomyliError(error);
+    const normalized = toDomyliError(error);
+
+    if (isReadCompatibilityIssue(normalized)) {
+      console.warn(
+        "DOMYLI rpc_my_profile_read compatibility fallback =>",
+        normalized,
+      );
+      return null;
+    }
+
+    throw normalized;
   }
 }
 
@@ -146,15 +184,30 @@ export async function saveMyProfile(
   try {
     const raw = (await callRpc("rpc_my_profile_upsert", payload, {
       unwrap: true,
+      timeoutMs: 20_000,
+      retries: 1,
+      retryDelayMs: 900,
     })) as RawMyProfileUpsertOutput | RawMyProfileUpsertOutput[] | null;
 
     const row = firstRow(raw);
 
+    if (row?.profile_id) {
+      return {
+        profile_id: row.profile_id ?? "",
+        household_id: row.household_id ?? "",
+        display_name: row.display_name ?? payload.p_display_name,
+        updated_at: row.updated_at ?? new Date().toISOString(),
+      };
+    }
+
+    const status = await readMyProfileStatus();
+
     return {
-      profile_id: row?.profile_id ?? "",
-      household_id: row?.household_id ?? "",
-      display_name: row?.display_name ?? payload.p_display_name,
-      updated_at: row?.updated_at ?? new Date().toISOString(),
+      profile_id: status.profile_id ?? "",
+      household_id: status.household_id,
+      display_name:
+        status.profile_display_name ?? payload.p_display_name,
+      updated_at: new Date().toISOString(),
     };
   } catch (error) {
     throw toDomyliError(error);

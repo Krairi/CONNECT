@@ -33,6 +33,14 @@ function withHousehold(element: ReactElement) {
   return <ProtectedRoute requireHousehold>{element}</ProtectedRoute>;
 }
 
+function withProfiledHousehold(element: ReactElement) {
+  return (
+    <ProtectedRoute requireHousehold requireProfile>
+      {element}
+    </ProtectedRoute>
+  );
+}
+
 function withSuperAdmin(element: ReactElement) {
   return (
     <ProtectedRoute
@@ -55,14 +63,6 @@ export const router = createBrowserRouter([
     element: withSession(<HouseholdActivationPage />),
   },
   {
-    path: ROUTES.dashboard,
-    element: withHousehold(<DashboardPage />),
-  },
-  {
-    path: ROUTES.householdMembers,
-    element: withHousehold(<HouseholdMembersPage />),
-  },
-  {
     path: ROUTES.inviteAccept,
     element: withSession(<InviteAcceptPage />),
   },
@@ -71,48 +71,56 @@ export const router = createBrowserRouter([
     element: withHousehold(<MyProfilePage />),
   },
   {
+    path: ROUTES.dashboard,
+    element: withProfiledHousehold(<DashboardPage />),
+  },
+  {
+    path: ROUTES.householdMembers,
+    element: withProfiledHousehold(<HouseholdMembersPage />),
+  },
+  {
     path: ROUTES.profiles,
-    element: withHousehold(<ProfilesPage />),
+    element: withProfiledHousehold(<ProfilesPage />),
   },
   {
     path: ROUTES.inventory,
-    element: withHousehold(<InventoryPage />),
+    element: withProfiledHousehold(<InventoryPage />),
   },
   {
     path: ROUTES.shopping,
-    element: withHousehold(<ShoppingPage />),
+    element: withProfiledHousehold(<ShoppingPage />),
   },
   {
     path: ROUTES.recipes,
-    element: withHousehold(<RecipesPage />),
+    element: withProfiledHousehold(<RecipesPage />),
   },
   {
     path: ROUTES.meals,
-    element: withHousehold(<MealsPage />),
+    element: withProfiledHousehold(<MealsPage />),
   },
   {
     path: ROUTES.tools,
-    element: withHousehold(<ToolsPage />),
+    element: withProfiledHousehold(<ToolsPage />),
   },
   {
     path: ROUTES.tasks,
-    element: withHousehold(<TasksPage />),
+    element: withProfiledHousehold(<TasksPage />),
   },
   {
     path: ROUTES.status,
-    element: withHousehold(<StatusPage />),
+    element: withProfiledHousehold(<StatusPage />),
   },
   {
     path: ROUTES.capacity,
-    element: withHousehold(<CapacityPage />),
+    element: withProfiledHousehold(<CapacityPage />),
   },
   {
     path: ROUTES.subscription,
-    element: withHousehold(<SubscriptionPage />),
+    element: withProfiledHousehold(<SubscriptionPage />),
   },
   {
     path: ROUTES.readiness,
-    element: withHousehold(<ReadinessPage />),
+    element: withProfiledHousehold(<ReadinessPage />),
   },
   {
     path: ROUTES.pricing,

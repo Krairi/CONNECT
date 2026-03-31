@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+
 import { toDomyliError, type DomyliAppError } from "@/src/lib/errors";
 import {
   readMyProfile,
@@ -28,8 +29,51 @@ const initialState: MyProfileState = {
   lastSavedProfile: null,
 };
 
+function buildFallbackProfile(
+  status: MyProfileStatus | null,
+  profile: MyProfileReadModel | null,
+): MyProfileReadModel | null {
+  if (profile) {
+    return profile;
+  }
+
+  if (!status?.has_profile) {
+    return null;
+  }
+
+  return {
+    profile_id: status.profile_id ?? null,
+    household_id: status.household_id ?? null,
+    display_name: status.profile_display_name ?? "",
+    birth_date: null,
+    sex: null,
+    height_cm: null,
+    weight_kg: null,
+    is_pregnant: false,
+    has_diabetes: false,
+    goal: null,
+    activity_level: null,
+    allergies: [],
+    food_constraints: [],
+    cultural_constraints: [],
+    updated_at: null,
+  };
+}
+
+async function loadProfileSafely(
+  status: MyProfileStatus,
+): Promise<MyProfileReadModel | null> {
+  try {
+    const profile = await readMyProfile();
+    return buildFallbackProfile(status, profile);
+  } catch (error) {
+    console.warn("DOMYLI useMyProfile fallback =>", error);
+    return buildFallbackProfile(status, null);
+  }
+}
+
 export function useMyProfile() {
-  const [state, setState] = useState<MyProfileState>(initialState);
+  const [state, setState] = useState(initialState);
 
   const refresh = useCallback(async () => {
     setState((prev) => ({
@@ -39,14 +83,13 @@ export function useMyProfile() {
     }));
 
     try {
-      const [status, profile] = await Promise.all([
-        readMyProfileStatus(),
-        readMyProfile(),
-      ]);
+      const status = await readMyProfileStatus();
+      const profile = await loadProfileSafely(status);
 
       setState((prev) => ({
         ...prev,
         loading: false,
+        error: null,
         status,
         profile,
       }));
@@ -79,14 +122,13 @@ export function useMyProfile() {
 
     try {
       const result = await saveMyProfile(payload);
-      const [status, profile] = await Promise.all([
-        readMyProfileStatus(),
-        readMyProfile(),
-      ]);
+      const status = await readMyProfileStatus();
+      const profile = await loadProfileSafely(status);
 
       setState((prev) => ({
         ...prev,
         saving: false,
+        error: null,
         status,
         profile,
         lastSavedProfile: result,
