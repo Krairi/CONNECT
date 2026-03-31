@@ -88,23 +88,6 @@ function firstRow<T>(value: T | T[] | null | undefined): T | null {
   return value ?? null;
 }
 
-function isReadCompatibilityIssue(error: ReturnType<typeof toDomyliError>) {
-  const haystack = [
-    error.message,
-    error.details,
-    error.hint,
-    error.code,
-  ]
-    .filter(Boolean)
-    .join(" ")
-    .toLowerCase();
-
-  return (
-    haystack.includes("birth_date") ||
-    haystack.includes("hp.birth_date")
-  );
-}
-
 function mapReadRow(row: RawMyProfileReadModel): MyProfileReadModel {
   return {
     profile_id: row.profile_id ?? null,
@@ -123,6 +106,20 @@ function mapReadRow(row: RawMyProfileReadModel): MyProfileReadModel {
     cultural_constraints: row.cultural_constraints ?? [],
     updated_at: row.updated_at ?? null,
   };
+}
+
+function isReadCompatibilityIssue(error: ReturnType<typeof toDomyliError>) {
+  const haystack = [
+    error.message,
+    error.details,
+    error.hint,
+    error.code,
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+
+  return haystack.includes("birth_date") || haystack.includes("hp.birth_date");
 }
 
 export async function readMyProfileStatus(): Promise<MyProfileStatus> {
@@ -205,8 +202,7 @@ export async function saveMyProfile(
     return {
       profile_id: status.profile_id ?? "",
       household_id: status.household_id,
-      display_name:
-        status.profile_display_name ?? payload.p_display_name,
+      display_name: status.profile_display_name ?? payload.p_display_name,
       updated_at: new Date().toISOString(),
     };
   } catch (error) {

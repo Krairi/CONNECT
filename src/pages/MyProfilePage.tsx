@@ -291,12 +291,10 @@ export default function MyProfilePage() {
           <p className="text-xs uppercase tracking-[0.24em] text-gold">
             DOMYLI
           </p>
-          <h1 className="mt-4 text-3xl font-semibold">
-            Contexte requis
-          </h1>
+          <h1 className="mt-4 text-3xl font-semibold">Contexte requis</h1>
           <p className="mt-3 text-white/70">
-            Un foyer actif et un contexte membre valide sont requis
-            pour gérer le profil humain.
+            Un foyer actif et un contexte membre valide sont requis pour gérer
+            le profil humain.
           </p>
         </div>
       </div>
@@ -343,14 +341,11 @@ export default function MyProfilePage() {
             <p className="text-xs uppercase tracking-[0.24em] text-gold">
               DOMYLI
             </p>
-            <h1 className="mt-4 text-3xl font-semibold">
-              Mon profil
-            </h1>
+            <h1 className="mt-4 text-3xl font-semibold">Mon profil</h1>
             <p className="mt-3 max-w-3xl text-sm leading-7 text-white/70">
-              Cette étape est obligatoire pour tout membre adulte
-              connecté qui rejoint le foyer. Le profil humain devient
-              ensuite exploitable par les repas, règles, tâches et
-              arbitrages DOMYLI.
+              Cette étape est obligatoire pour tout membre adulte connecté qui
+              rejoint le foyer. Le profil humain devient ensuite exploitable par
+              les repas, règles, tâches et arbitrages DOMYLI.
             </p>
           </div>
 
@@ -381,10 +376,9 @@ export default function MyProfilePage() {
             </h2>
 
             <p className="mt-3 text-sm leading-7 text-white/70">
-              DOMYLI normalise ici l’identité métier du compte
-              connecté. Cette structure sert ensuite de base aux
-              repas, aux règles, à la faisabilité, aux tâches et aux
-              arbitrages du foyer.
+              DOMYLI normalise ici l’identité métier du compte connecté. Cette
+              structure sert ensuite de base aux repas, aux règles, à la
+              faisabilité, aux tâches et aux arbitrages du foyer.
             </p>
 
             <div className="mt-8 grid gap-4 md:grid-cols-2">
@@ -720,9 +714,9 @@ export default function MyProfilePage() {
               </div>
 
               <p className="mt-4 text-sm leading-7 text-white/70">
-                Une fois enregistré, ce profil humain devient la base
-                réelle utilisée par DOMYLI pour les repas, tâches,
-                règles, contraintes et arbitrages du foyer.
+                Une fois enregistré, ce profil humain devient la base réelle
+                utilisée par DOMYLI pour les repas, tâches, règles, contraintes
+                et arbitrages du foyer.
               </p>
 
               <div className="mt-6 flex flex-wrap gap-2">

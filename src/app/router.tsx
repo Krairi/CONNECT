@@ -43,10 +43,7 @@ function withProfiledHousehold(element: ReactElement) {
 
 function withSuperAdmin(element: ReactElement) {
   return (
-    <ProtectedRoute
-      requireSuperAdmin
-      allowSuperAdminBypassHousehold
-    >
+    <ProtectedRoute requireSuperAdmin allowSuperAdminBypassHousehold>
       {element}
     </ProtectedRoute>
   );

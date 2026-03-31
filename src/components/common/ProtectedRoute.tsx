@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
-import { Navigate } from "react-router-dom";
+import { Navigate, Link } from "react-router-dom";
 
 import { useAuth } from "@/src/providers/AuthProvider";
 import { ROUTES } from "@/src/constants/routes";
@@ -61,7 +61,12 @@ function GateScreen({
 
         <div className="mt-8 flex flex-wrap gap-3">
           {primaryLabel && primaryHref ? (
-            <NavigateButton href={primaryHref}>{primaryLabel}</NavigateButton>
+            <Link
+              to={primaryHref}
+              className="inline-flex items-center justify-center border border-gold/40 px-5 py-3 text-sm uppercase tracking-[0.24em] text-gold transition-colors hover:bg-gold hover:text-black"
+            >
+              {primaryLabel}
+            </Link>
           ) : null}
 
           {secondaryLabel && onSecondaryClick ? (
@@ -76,23 +81,6 @@ function GateScreen({
         </div>
       </div>
     </div>
-  );
-}
-
-function NavigateButton({
-  href,
-  children,
-}: {
-  href: string;
-  children: ReactNode;
-}) {
-  return (
-    <a
-      href={href}
-      className="inline-flex items-center justify-center border border-gold/40 px-5 py-3 text-sm uppercase tracking-[0.24em] text-gold transition-colors hover:bg-gold hover:text-black"
-    >
-      {children}
-    </a>
   );
 }
 
@@ -112,8 +100,7 @@ export default function ProtectedRoute({
   } = useAuth();
 
   const isSuperAdmin = Boolean(bootstrap?.is_super_admin);
-  const canBypassHousehold =
-    allowSuperAdminBypassHousehold && isSuperAdmin;
+  const canBypassHousehold = allowSuperAdminBypassHousehold && isSuperAdmin;
   const activeHouseholdId = bootstrap?.active_household_id ?? null;
 
   const mustCheckProfile = useMemo(() => {
@@ -195,12 +182,7 @@ export default function ProtectedRoute({
   }
 
   if (requireSuperAdmin && !isSuperAdmin) {
-    return (
-      <Navigate
-        to={getAuthenticatedFallbackRoute(hasHousehold)}
-        replace
-      />
-    );
+    return <Navigate to={getAuthenticatedFallbackRoute(hasHousehold)} replace />;
   }
 
   if (requireHousehold && !hasHousehold && !canBypassHousehold) {
