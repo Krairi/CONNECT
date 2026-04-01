@@ -1,796 +1,383 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { toDomyliError, type DomyliAppError } from "@/src/lib/errors";
 import {
-  buildSessionMealDraft,
   confirmMealSlot,
-  reopenMealSlot as reopenMealSlotRpc,
   createMeal,
-  listInventoryMappingCandidates,
-  listInventoryMappingTargets,
   listMealActiveProfiles,
   listMealSlotsFeed,
   readMealConfirmationServer,
+  readMealRecipeDetail,
   readMealSlotDetail,
   readRecipeCandidatesForMeal,
-  readRecipePreviewForMeal,
+  reopenMealSlot,
   updateMeal,
-  upsertInventoryMapping,
   type ActiveMealProfile,
-  type CreateMealRpcInput,
-  type InventoryMappingCandidate,
-  type InventoryMappingTarget,
-  type InventoryMappingUpsertResult,
   type MealConfirmResult,
   type MealConfirmationServerDetail,
-  type MealReopenResult,
-  type MealDraft,
   type MealFeedItem,
-  type MealFeedQuery,
   type MealMutationResult,
+  type MealRecipeDetail,
+  type MealReopenResult,
   type MealSlotDetail,
   type MealType,
   type RecipeCandidate,
-  type RecipePreview,
-  type UpdateMealRpcInput,
 } from "@/src/services/meals/mealService";
 
-type CreateMealActionInput = CreateMealRpcInput & { title?: string | null };
-type UpdateMealActionInput = UpdateMealRpcInput & { title?: string | null };
+function todayIsoDate(): string {
+  return new Date().toISOString().slice(0, 10);
+}
 
-export type MealExecutionHistoryEntry = {
-  meal_slot_id: string;
-  confirmed_at: string;
-  status: string | null;
-  shopping_rebuild_status: string | null;
-  consumption_line_count: number;
-  consumed_count: number;
-  partial_count: number;
-  unmapped_count: number;
-  alert_count: number;
-  planned_for: string | null;
-  meal_type: MealType | null;
-  profile_id: string | null;
-  recipe_id: string | null;
-  title: string | null;
-};
+function addDays(dateIso: string, days: number): string {
+  const date = new Date(`${dateIso}T00:00:00`);
+  date.setDate(date.getDate() + days);
+  return date.toISOString().slice(0, 10);
+}
 
 type MealsState = {
   loadingProfiles: boolean;
-  saving: boolean;
-  confirming: boolean;
-  reopening: boolean;
   candidatesLoading: boolean;
-  previewLoading: boolean;
-  mappingTargetsLoading: boolean;
-  mappingCandidatesLoading: boolean;
-  mappingSaving: boolean;
-  historyLoading: boolean;
+  recipeDetailLoading: boolean;
   mealFeedLoading: boolean;
   mealDetailLoading: boolean;
   mealExecutionLoading: boolean;
+  saving: boolean;
+  confirming: boolean;
+  reopening: boolean;
   error: DomyliAppError | null;
-  items: MealDraft[];
   profiles: ActiveMealProfile[];
+  selectedProfileId: string;
+  selectedMealType: MealType;
+  selectedTagCode: string;
+  plannedFor: string;
   recipeCandidates: RecipeCandidate[];
-  recipePreview: RecipePreview | null;
-  inventoryMappingTargets: InventoryMappingTarget[];
-  inventoryMappingCandidates: InventoryMappingCandidate[];
-  confirmationHistory: MealExecutionHistoryEntry[];
+  selectedRecipeId: string;
+  selectedRecipeDetail: MealRecipeDetail | null;
   mealFeed: MealFeedItem[];
+  selectedMealSlotId: string;
   selectedMealDetail: MealSlotDetail | null;
   selectedMealExecution: MealConfirmationServerDetail | null;
-  selectedMealType: MealType;
-  selectedProfileId: string;
-  selectedRecipeId: string;
-  lastCreatedMealSlotId: string | null;
-  lastUpdatedMealSlotId: string | null;
+  lastMutation: MealMutationResult | null;
   lastConfirmResult: MealConfirmResult | null;
   lastReopenResult: MealReopenResult | null;
-  lastInventoryMappingResult: InventoryMappingUpsertResult | null;
 };
 
 const initialState: MealsState = {
   loadingProfiles: false,
-  saving: false,
-  confirming: false,
-  reopening: false,
   candidatesLoading: false,
-  previewLoading: false,
-  mappingTargetsLoading: false,
-  mappingCandidatesLoading: false,
-  mappingSaving: false,
-  historyLoading: true,
+  recipeDetailLoading: false,
   mealFeedLoading: false,
   mealDetailLoading: false,
   mealExecutionLoading: false,
+  saving: false,
+  confirming: false,
+  reopening: false,
   error: null,
-  items: [],
   profiles: [],
+  selectedProfileId: "",
+  selectedMealType: "DINNER",
+  selectedTagCode: "",
+  plannedFor: todayIsoDate(),
   recipeCandidates: [],
-  recipePreview: null,
-  inventoryMappingTargets: [],
-  inventoryMappingCandidates: [],
-  confirmationHistory: [],
+  selectedRecipeId: "",
+  selectedRecipeDetail: null,
   mealFeed: [],
+  selectedMealSlotId: "",
   selectedMealDetail: null,
   selectedMealExecution: null,
-  selectedMealType: "LUNCH",
-  selectedProfileId: "",
-  selectedRecipeId: "",
-  lastCreatedMealSlotId: null,
-  lastUpdatedMealSlotId: null,
+  lastMutation: null,
   lastConfirmResult: null,
   lastReopenResult: null,
-  lastInventoryMappingResult: null,
 };
 
-const HISTORY_STORAGE_KEY = "domyli:meals:v3:confirmation-history";
-const HISTORY_LIMIT = 30;
-
-function readHistoryStorage(): MealExecutionHistoryEntry[] {
-  if (typeof window === "undefined") return [];
-
-  try {
-    const raw = window.localStorage.getItem(HISTORY_STORAGE_KEY);
-    if (!raw) return [];
-
-    const parsed = JSON.parse(raw) as MealExecutionHistoryEntry[];
-    if (!Array.isArray(parsed)) return [];
-
-    return parsed
-      .filter(
-        (item) =>
-          item &&
-          typeof item.meal_slot_id === "string" &&
-          item.meal_slot_id.trim() &&
-          typeof item.confirmed_at === "string" &&
-          item.confirmed_at.trim(),
-      )
-      .slice(0, HISTORY_LIMIT);
-  } catch {
-    return [];
-  }
-}
-
-function writeHistoryStorage(items: MealExecutionHistoryEntry[]) {
-  if (typeof window === "undefined") return;
-
-  try {
-    window.localStorage.setItem(
-      HISTORY_STORAGE_KEY,
-      JSON.stringify(items.slice(0, HISTORY_LIMIT)),
-    );
-  } catch {
-    // no-op
-  }
-}
-
-function upsertHistoryEntry(
-  current: MealExecutionHistoryEntry[],
-  next: MealExecutionHistoryEntry,
-): MealExecutionHistoryEntry[] {
-  const filtered = current.filter((item) => item.meal_slot_id !== next.meal_slot_id);
-
-  return [next, ...filtered]
-    .sort((a, b) => b.confirmed_at.localeCompare(a.confirmed_at))
-    .slice(0, HISTORY_LIMIT);
-}
-
-function buildHistoryEntry(
-  result: MealConfirmResult,
-  sourceItem?: MealDraft,
-): MealExecutionHistoryEntry {
-  const consumedCount = result.consumption_lines.filter(
-    (line) => line.inventory_status === "CONSUMED",
-  ).length;
-
-  const partialCount = result.consumption_lines.filter(
-    (line) => line.inventory_status === "PARTIAL_STOCK",
-  ).length;
-
-  const unmappedCount = result.consumption_lines.filter(
-    (line) => line.inventory_status === "NO_INVENTORY_ITEM",
-  ).length;
-
-  return {
-    meal_slot_id: result.meal_slot_id ?? sourceItem?.meal_slot_id ?? "",
-    confirmed_at: new Date().toISOString(),
-    status: result.status ?? "CONFIRMED",
-    shopping_rebuild_status: result.shopping_rebuild_status ?? null,
-    consumption_line_count: result.consumption_lines.length,
-    consumed_count: consumedCount,
-    partial_count: partialCount,
-    unmapped_count: unmappedCount,
-    alert_count: result.alerts.length,
-    planned_for: sourceItem?.planned_for ?? null,
-    meal_type: sourceItem?.meal_type ?? null,
-    profile_id: sourceItem?.profile_id ?? null,
-    recipe_id: sourceItem?.recipe_id ?? null,
-    title: sourceItem?.title ?? null,
-  };
-}
-
 export function useMeals() {
-  const [state, setState] = useState(initialState);
+  const [state, setState] = useState<MealsState>(initialState);
 
-  useEffect(() => {
-    const storedHistory = readHistoryStorage();
-
-    setState((prev) => ({
-      ...prev,
-      historyLoading: false,
-      confirmationHistory: storedHistory,
-    }));
-  }, []);
-
-  const refreshActiveProfiles = useCallback(async () => {
-    setState((prev) => ({
-      ...prev,
-      loadingProfiles: true,
-      error: null,
-    }));
-
+  const refreshProfiles = useCallback(async () => {
+    setState((prev) => ({ ...prev, loadingProfiles: true, error: null }));
     try {
       const profiles = await listMealActiveProfiles();
-
       setState((prev) => ({
         ...prev,
         loadingProfiles: false,
         profiles,
+        selectedProfileId:
+          prev.selectedProfileId && profiles.some((item) => item.profile_id === prev.selectedProfileId)
+            ? prev.selectedProfileId
+            : profiles[0]?.profile_id ?? "",
       }));
-
       return profiles;
     } catch (error) {
       const normalized = toDomyliError(error);
-
-      setState((prev) => ({
-        ...prev,
-        loadingProfiles: false,
-        error: normalized,
-      }));
-
+      setState((prev) => ({ ...prev, loadingProfiles: false, error: normalized }));
       throw normalized;
     }
   }, []);
 
-  const refreshRecipeCandidates = useCallback(
-    async (mealType?: MealType, profileId?: string, search?: string) => {
-      const nextMealType = mealType ?? state.selectedMealType;
-      const nextProfileId = profileId ?? state.selectedProfileId;
-
-      setState((prev) => ({
-        ...prev,
-        candidatesLoading: true,
-        error: null,
-        selectedMealType: nextMealType,
-        selectedProfileId: nextProfileId,
-      }));
-
-      try {
-        const recipeCandidates = await readRecipeCandidatesForMeal(
-          nextProfileId.trim(),
-          nextMealType,
-          search,
-          120,
-        );
-
-        setState((prev) => ({
-          ...prev,
-          candidatesLoading: false,
-          recipeCandidates,
-        }));
-
-        return recipeCandidates;
-      } catch (error) {
-        const normalized = toDomyliError(error);
-
-        setState((prev) => ({
-          ...prev,
-          candidatesLoading: false,
-          error: normalized,
-        }));
-
-        throw normalized;
-      }
-    },
-    [state.selectedMealType, state.selectedProfileId],
-  );
-
-  const refreshRecipePreview = useCallback(
-    async (mealType?: MealType, profileId?: string, recipeId?: string) => {
-      const nextMealType = mealType ?? state.selectedMealType;
-      const nextProfileId = profileId ?? state.selectedProfileId;
-      const nextRecipeId = recipeId ?? state.selectedRecipeId;
-
-      setState((prev) => ({
-        ...prev,
-        previewLoading: true,
-        error: null,
-        selectedMealType: nextMealType,
-        selectedProfileId: nextProfileId,
-        selectedRecipeId: nextRecipeId,
-      }));
-
-      try {
-        const recipePreview = await readRecipePreviewForMeal(
-          nextProfileId.trim(),
-          nextRecipeId.trim(),
-          nextMealType,
-        );
-
-        setState((prev) => ({
-          ...prev,
-          previewLoading: false,
-          recipePreview,
-        }));
-
-        return recipePreview;
-      } catch (error) {
-        const normalized = toDomyliError(error);
-
-        setState((prev) => ({
-          ...prev,
-          previewLoading: false,
-          error: normalized,
-        }));
-
-        throw normalized;
-      }
-    },
-    [state.selectedMealType, state.selectedProfileId, state.selectedRecipeId],
-  );
-
-  const refreshInventoryMappingTargets = useCallback(async (includeMapped = true) => {
-    setState((prev) => ({
-      ...prev,
-      mappingTargetsLoading: true,
-      error: null,
-    }));
-
-    try {
-      const inventoryMappingTargets = await listInventoryMappingTargets(includeMapped);
-
-      setState((prev) => ({
-        ...prev,
-        mappingTargetsLoading: false,
-        inventoryMappingTargets,
-      }));
-
-      return inventoryMappingTargets;
-    } catch (error) {
-      const normalized = toDomyliError(error);
-
-      setState((prev) => ({
-        ...prev,
-        mappingTargetsLoading: false,
-        error: normalized,
-      }));
-
-      throw normalized;
+  const refreshCandidates = useCallback(async () => {
+    if (!state.selectedProfileId) {
+      setState((prev) => ({ ...prev, recipeCandidates: [], selectedRecipeId: "", selectedRecipeDetail: null }));
+      return [];
     }
-  }, []);
 
-  const refreshInventoryMappingCandidates = useCallback(async (search: string) => {
-    setState((prev) => ({
-      ...prev,
-      mappingCandidatesLoading: true,
-      error: null,
-    }));
-
+    setState((prev) => ({ ...prev, candidatesLoading: true, error: null }));
     try {
-      const inventoryMappingCandidates = await listInventoryMappingCandidates(search, 25);
-
-      setState((prev) => ({
-        ...prev,
-        mappingCandidatesLoading: false,
-        inventoryMappingCandidates,
-      }));
-
-      return inventoryMappingCandidates;
-    } catch (error) {
-      const normalized = toDomyliError(error);
-
-      setState((prev) => ({
-        ...prev,
-        mappingCandidatesLoading: false,
-        error: normalized,
-      }));
-
-      throw normalized;
-    }
-  }, []);
-
-  const saveInventoryMapping = useCallback(
-    async (ingredientCode: string, inventoryItemId: string, notes?: string) => {
-      setState((prev) => ({
-        ...prev,
-        mappingSaving: true,
-        error: null,
-        lastInventoryMappingResult: null,
-      }));
-
-      try {
-        const result = await upsertInventoryMapping(
-          ingredientCode,
-          inventoryItemId,
-          notes,
-        );
-        const refreshedTargets = await listInventoryMappingTargets(true);
-
-        setState((prev) => ({
-          ...prev,
-          mappingSaving: false,
-          inventoryMappingTargets: refreshedTargets,
-          lastInventoryMappingResult: result,
-        }));
-
-        return result;
-      } catch (error) {
-        const normalized = toDomyliError(error);
-
-        setState((prev) => ({
-          ...prev,
-          mappingSaving: false,
-          error: normalized,
-        }));
-
-        throw normalized;
-      }
-    },
-    [],
-  );
-
-  const refreshMealFeed = useCallback(async (query: MealFeedQuery = {}) => {
-    setState((prev) => ({
-      ...prev,
-      mealFeedLoading: true,
-      error: null,
-    }));
-
-    try {
-      const mealFeed = await listMealSlotsFeed(query);
-
-      setState((prev) => ({
-        ...prev,
-        mealFeedLoading: false,
-        mealFeed,
-      }));
-
-      return mealFeed;
-    } catch (error) {
-      const normalized = toDomyliError(error);
-
-      setState((prev) => ({
-        ...prev,
-        mealFeedLoading: false,
-        error: normalized,
-      }));
-
-      throw normalized;
-    }
-  }, []);
-
-  const refreshMealDetail = useCallback(async (mealSlotId: string) => {
-    setState((prev) => ({
-      ...prev,
-      mealDetailLoading: true,
-      error: null,
-    }));
-
-    try {
-      const selectedMealDetail = await readMealSlotDetail(mealSlotId);
-
-      setState((prev) => ({
-        ...prev,
-        mealDetailLoading: false,
-        selectedMealDetail,
-      }));
-
-      return selectedMealDetail;
-    } catch (error) {
-      const normalized = toDomyliError(error);
-
-      setState((prev) => ({
-        ...prev,
-        mealDetailLoading: false,
-        error: normalized,
-      }));
-
-      throw normalized;
-    }
-  }, []);
-
-
-  const refreshMealExecution = useCallback(async (mealSlotId: string) => {
-    setState((prev) => ({
-      ...prev,
-      mealExecutionLoading: true,
-      error: null,
-    }));
-
-    try {
-      const selectedMealExecution = await readMealConfirmationServer(mealSlotId);
-
-      setState((prev) => ({
-        ...prev,
-        mealExecutionLoading: false,
-        selectedMealExecution,
-      }));
-
-      return selectedMealExecution;
-    } catch (error) {
-      const normalized = toDomyliError(error);
-
-      setState((prev) => ({
-        ...prev,
-        mealExecutionLoading: false,
-        error: normalized,
-      }));
-
-      throw normalized;
-    }
-  }, []);
-
-
-  useEffect(() => {
-    void refreshActiveProfiles();
-    void refreshInventoryMappingTargets(true);
-  }, [refreshActiveProfiles, refreshInventoryMappingTargets]);
-
-  const createMealAction = async (
-    payload: CreateMealActionInput,
-  ): Promise<MealMutationResult> => {
-    setState((prev) => ({
-      ...prev,
-      saving: true,
-      error: null,
-      lastCreatedMealSlotId: null,
-      lastUpdatedMealSlotId: null,
-      lastReopenResult: null,
-    }));
-
-    try {
-      const { title, ...rpcPayload } = payload;
-      const result = await createMeal(rpcPayload);
-
-      setState((prev) => ({
-        ...prev,
-        saving: false,
-        lastCreatedMealSlotId: result.meal_slot_id,
-        items: result.meal_slot_id
-          ? [
-              buildSessionMealDraft({
-                ...rpcPayload,
-                meal_slot_id: result.meal_slot_id,
-                title,
-                status: result.status ?? "PLANNED",
-                portion_factor: result.portion_factor,
-                created_at: result.created_at,
-                updated_at: result.updated_at,
-                inserted_ingredient_count: result.inserted_ingredient_count,
-              }),
-              ...prev.items.filter((item) => item.meal_slot_id !== result.meal_slot_id),
-            ]
-          : prev.items,
-      }));
-
-      return result;
-    } catch (error) {
-      const normalized = toDomyliError(error);
-
-      setState((prev) => ({
-        ...prev,
-        saving: false,
-        error: normalized,
-      }));
-
-      throw normalized;
-    }
-  };
-
-  const updateMealAction = async (
-    payload: UpdateMealActionInput,
-  ): Promise<MealMutationResult> => {
-    setState((prev) => ({
-      ...prev,
-      saving: true,
-      error: null,
-      lastCreatedMealSlotId: null,
-      lastUpdatedMealSlotId: null,
-      lastReopenResult: null,
-    }));
-
-    try {
-      const { title, ...rpcPayload } = payload;
-      const result = await updateMeal(rpcPayload);
-
-      setState((prev) => ({
-        ...prev,
-        saving: false,
-        lastUpdatedMealSlotId: result.meal_slot_id,
-        items: prev.items.map((item) =>
-          item.meal_slot_id === result.meal_slot_id
-            ? {
-                ...item,
-                planned_for: rpcPayload.p_planned_for,
-                meal_type: rpcPayload.p_meal_type,
-                profile_id: rpcPayload.p_profile_id,
-                recipe_id: rpcPayload.p_recipe_id,
-                title: title ?? item.title,
-                notes: rpcPayload.p_operator_notes ?? null,
-                status: result.status ?? item.status,
-                portion_factor: result.portion_factor,
-                updated_at: result.updated_at,
-                inserted_ingredient_count: result.inserted_ingredient_count,
-              }
-            : item,
-        ),
-      }));
-
-      return result;
-    } catch (error) {
-      const normalized = toDomyliError(error);
-
-      setState((prev) => ({
-        ...prev,
-        saving: false,
-        error: normalized,
-      }));
-
-      throw normalized;
-    }
-  };
-
-  const confirmMealSlotAction = async (
-    mealSlotId: string,
-  ): Promise<MealConfirmResult> => {
-    setState((prev) => ({
-      ...prev,
-      confirming: true,
-      error: null,
-      lastConfirmResult: null,
-      lastReopenResult: null,
-    }));
-
-    try {
-      const result = await confirmMealSlot(mealSlotId);
-      const [selectedMealDetail, selectedMealExecution] = await Promise.all([
-        readMealSlotDetail(mealSlotId).catch(() => null),
-        readMealConfirmationServer(mealSlotId).catch(() => null),
-      ]);
-
+      const candidates = await readRecipeCandidatesForMeal(
+        state.selectedProfileId,
+        state.selectedMealType,
+        state.selectedTagCode || undefined,
+      );
       setState((prev) => {
-        const sourceItem = prev.items.find((item) => item.meal_slot_id === mealSlotId);
-        const historyEntry = buildHistoryEntry(result, sourceItem);
-        const nextHistory = upsertHistoryEntry(prev.confirmationHistory, historyEntry);
-
-        writeHistoryStorage(nextHistory);
-
+        const nextRecipeId = candidates.some((item) => item.recipe_id === prev.selectedRecipeId)
+          ? prev.selectedRecipeId
+          : candidates[0]?.recipe_id ?? "";
         return {
           ...prev,
-          confirming: false,
-          lastConfirmResult: result,
-          confirmationHistory: nextHistory,
-          selectedMealDetail:
-            selectedMealDetail ??
-            (prev.selectedMealDetail?.meal_slot_id === mealSlotId
-              ? {
-                  ...prev.selectedMealDetail,
-                  status: result.status ?? prev.selectedMealDetail.status,
-                }
-              : prev.selectedMealDetail),
-          selectedMealExecution:
-            selectedMealExecution ??
-            (prev.selectedMealExecution?.meal_slot_id === mealSlotId
-              ? prev.selectedMealExecution
-              : prev.selectedMealExecution),
-          items: prev.items.map((item) =>
-            item.meal_slot_id === mealSlotId
-              ? {
-                  ...item,
-                  status: result.status ?? item.status,
-                }
-              : item,
-          ),
+          candidatesLoading: false,
+          recipeCandidates: candidates,
+          selectedRecipeId: nextRecipeId,
+          selectedRecipeDetail:
+            prev.selectedRecipeDetail && prev.selectedRecipeDetail.recipe_id === nextRecipeId
+              ? prev.selectedRecipeDetail
+              : null,
         };
       });
+      return candidates;
+    } catch (error) {
+      const normalized = toDomyliError(error);
+      setState((prev) => ({ ...prev, candidatesLoading: false, error: normalized }));
+      throw normalized;
+    }
+  }, [state.selectedMealType, state.selectedProfileId, state.selectedTagCode]);
 
+  const refreshRecipeDetail = useCallback(async () => {
+    if (!state.selectedProfileId || !state.selectedRecipeId) {
+      setState((prev) => ({ ...prev, selectedRecipeDetail: null }));
+      return null;
+    }
+
+    setState((prev) => ({ ...prev, recipeDetailLoading: true, error: null }));
+    try {
+      const detail = await readMealRecipeDetail(
+        state.selectedProfileId,
+        state.selectedRecipeId,
+        state.selectedMealType,
+      );
+      setState((prev) => ({ ...prev, recipeDetailLoading: false, selectedRecipeDetail: detail }));
+      return detail;
+    } catch (error) {
+      const normalized = toDomyliError(error);
+      setState((prev) => ({ ...prev, recipeDetailLoading: false, error: normalized }));
+      throw normalized;
+    }
+  }, [state.selectedMealType, state.selectedProfileId, state.selectedRecipeId]);
+
+  const refreshMealFeed = useCallback(async () => {
+    setState((prev) => ({ ...prev, mealFeedLoading: true, error: null }));
+    try {
+      const items = await listMealSlotsFeed({
+        p_from_date: addDays(todayIsoDate(), -2),
+        p_to_date: addDays(todayIsoDate(), 14),
+        p_profile_id: state.selectedProfileId || null,
+        p_meal_type: state.selectedMealType,
+        p_limit: 80,
+      });
+      setState((prev) => ({
+        ...prev,
+        mealFeedLoading: false,
+        mealFeed: items,
+        selectedMealSlotId:
+          prev.selectedMealSlotId && items.some((item) => item.meal_slot_id === prev.selectedMealSlotId)
+            ? prev.selectedMealSlotId
+            : items[0]?.meal_slot_id ?? prev.selectedMealSlotId,
+      }));
+      return items;
+    } catch (error) {
+      const normalized = toDomyliError(error);
+      setState((prev) => ({ ...prev, mealFeedLoading: false, error: normalized }));
+      throw normalized;
+    }
+  }, [state.selectedMealType, state.selectedProfileId]);
+
+  const refreshSelectedMealDetail = useCallback(async () => {
+    if (!state.selectedMealSlotId) {
+      setState((prev) => ({ ...prev, selectedMealDetail: null, selectedMealExecution: null }));
+      return null;
+    }
+
+    setState((prev) => ({ ...prev, mealDetailLoading: true, mealExecutionLoading: true, error: null }));
+    try {
+      const [detail, execution] = await Promise.all([
+        readMealSlotDetail(state.selectedMealSlotId),
+        readMealConfirmationServer(state.selectedMealSlotId),
+      ]);
+      setState((prev) => ({
+        ...prev,
+        mealDetailLoading: false,
+        mealExecutionLoading: false,
+        selectedMealDetail: detail,
+        selectedMealExecution: execution,
+      }));
+      return detail;
+    } catch (error) {
+      const normalized = toDomyliError(error);
+      setState((prev) => ({
+        ...prev,
+        mealDetailLoading: false,
+        mealExecutionLoading: false,
+        error: normalized,
+      }));
+      throw normalized;
+    }
+  }, [state.selectedMealSlotId]);
+
+  useEffect(() => {
+    void refreshProfiles();
+  }, [refreshProfiles]);
+
+  useEffect(() => {
+    if (!state.selectedProfileId) return;
+    void refreshCandidates();
+  }, [refreshCandidates, state.selectedProfileId]);
+
+  useEffect(() => {
+    if (!state.selectedRecipeId) {
+      setState((prev) => ({ ...prev, selectedRecipeDetail: null }));
+      return;
+    }
+    void refreshRecipeDetail();
+  }, [refreshRecipeDetail, state.selectedRecipeId]);
+
+  useEffect(() => {
+    if (!state.selectedProfileId) return;
+    void refreshMealFeed();
+  }, [refreshMealFeed, state.selectedProfileId]);
+
+  useEffect(() => {
+    if (!state.selectedMealSlotId) return;
+    void refreshSelectedMealDetail();
+  }, [refreshSelectedMealDetail, state.selectedMealSlotId]);
+
+  const availableTagOptions = useMemo(() => {
+    const map = new Map<string, string>();
+    state.recipeCandidates.forEach((recipe) => {
+      recipe.tags.forEach((tag) => {
+        if (!map.has(tag.code)) map.set(tag.code, tag.label);
+      });
+    });
+    return [...map.entries()].map(([code, label]) => ({ code, label })).sort((a, b) => a.label.localeCompare(b.label, "fr"));
+  }, [state.recipeCandidates]);
+
+  const profileLabel = useMemo(() => {
+    return state.profiles.find((item) => item.profile_id === state.selectedProfileId)?.display_name ?? "";
+  }, [state.profiles, state.selectedProfileId]);
+
+  const createSelectedMeal = useCallback(async () => {
+    if (!state.selectedProfileId || !state.selectedRecipeId) return null;
+    setState((prev) => ({ ...prev, saving: true, error: null, lastMutation: null }));
+    try {
+      const result = await createMeal({
+        p_profile_id: state.selectedProfileId,
+        p_recipe_id: state.selectedRecipeId,
+        p_planned_for: state.plannedFor,
+        p_meal_type: state.selectedMealType,
+      });
+      setState((prev) => ({ ...prev, saving: false, lastMutation: result, selectedMealSlotId: result.meal_slot_id || prev.selectedMealSlotId }));
+      await refreshMealFeed();
+      if (result.meal_slot_id) {
+        setState((prev) => ({ ...prev, selectedMealSlotId: result.meal_slot_id }));
+      }
       return result;
     } catch (error) {
       const normalized = toDomyliError(error);
-
-      setState((prev) => ({
-        ...prev,
-        confirming: false,
-        error: normalized,
-      }));
-
+      setState((prev) => ({ ...prev, saving: false, error: normalized }));
       throw normalized;
     }
-  };
+  }, [refreshMealFeed, state.plannedFor, state.selectedMealType, state.selectedProfileId, state.selectedRecipeId]);
 
-  const reopenMealSlotAction = async (
-    mealSlotId: string,
-    reason?: string | null,
-  ): Promise<MealReopenResult> => {
+  const updateSelectedMeal = useCallback(async () => {
+    if (!state.selectedMealSlotId || !state.selectedProfileId || !state.selectedRecipeId) return null;
+    setState((prev) => ({ ...prev, saving: true, error: null, lastMutation: null }));
+    try {
+      const result = await updateMeal({
+        p_meal_slot_id: state.selectedMealSlotId,
+        p_profile_id: state.selectedProfileId,
+        p_recipe_id: state.selectedRecipeId,
+        p_planned_for: state.plannedFor,
+        p_meal_type: state.selectedMealType,
+      });
+      setState((prev) => ({ ...prev, saving: false, lastMutation: result }));
+      await Promise.all([refreshMealFeed(), refreshSelectedMealDetail()]);
+      return result;
+    } catch (error) {
+      const normalized = toDomyliError(error);
+      setState((prev) => ({ ...prev, saving: false, error: normalized }));
+      throw normalized;
+    }
+  }, [refreshMealFeed, refreshSelectedMealDetail, state.plannedFor, state.selectedMealSlotId, state.selectedMealType, state.selectedProfileId, state.selectedRecipeId]);
+
+  const confirmSelectedMeal = useCallback(async () => {
+    if (!state.selectedMealSlotId) return null;
+    setState((prev) => ({ ...prev, confirming: true, error: null, lastConfirmResult: null }));
+    try {
+      const result = await confirmMealSlot(state.selectedMealSlotId);
+      setState((prev) => ({ ...prev, confirming: false, lastConfirmResult: result }));
+      await Promise.all([refreshMealFeed(), refreshSelectedMealDetail()]);
+      return result;
+    } catch (error) {
+      const normalized = toDomyliError(error);
+      setState((prev) => ({ ...prev, confirming: false, error: normalized }));
+      throw normalized;
+    }
+  }, [refreshMealFeed, refreshSelectedMealDetail, state.selectedMealSlotId]);
+
+  const reopenSelectedMeal = useCallback(async () => {
+    if (!state.selectedMealSlotId) return null;
+    setState((prev) => ({ ...prev, reopening: true, error: null, lastReopenResult: null }));
+    try {
+      const result = await reopenMealSlot(state.selectedMealSlotId);
+      setState((prev) => ({ ...prev, reopening: false, lastReopenResult: result }));
+      await Promise.all([refreshMealFeed(), refreshSelectedMealDetail()]);
+      return result;
+    } catch (error) {
+      const normalized = toDomyliError(error);
+      setState((prev) => ({ ...prev, reopening: false, error: normalized }));
+      throw normalized;
+    }
+  }, [refreshMealFeed, refreshSelectedMealDetail, state.selectedMealSlotId]);
+
+  const hydratePlanningFromMeal = useCallback((mealSlotId: string) => {
+    const item = state.mealFeed.find((entry) => entry.meal_slot_id === mealSlotId);
+    if (!item) return;
+
     setState((prev) => ({
       ...prev,
-      reopening: true,
-      error: null,
-      lastReopenResult: null,
+      selectedMealSlotId: mealSlotId,
+      selectedProfileId: item.profile_id ?? prev.selectedProfileId,
+      selectedMealType: item.meal_type,
+      selectedRecipeId: item.recipe_id ?? prev.selectedRecipeId,
+      plannedFor: item.planned_for || prev.plannedFor,
     }));
-
-    try {
-      const result = await reopenMealSlotRpc(mealSlotId, reason);
-      const [selectedMealDetail, selectedMealExecution] = await Promise.all([
-        readMealSlotDetail(mealSlotId).catch(() => null),
-        readMealConfirmationServer(mealSlotId).catch(() => null),
-      ]);
-
-      setState((prev) => ({
-        ...prev,
-        reopening: false,
-        lastConfirmResult:
-          prev.lastConfirmResult?.meal_slot_id === mealSlotId
-            ? null
-            : prev.lastConfirmResult,
-        lastReopenResult: result,
-        selectedMealDetail:
-          selectedMealDetail ??
-          (prev.selectedMealDetail?.meal_slot_id === mealSlotId
-            ? {
-                ...prev.selectedMealDetail,
-                status: result.status ?? prev.selectedMealDetail.status,
-                updated_at: result.reopened_at ?? prev.selectedMealDetail.updated_at,
-              }
-            : prev.selectedMealDetail),
-        selectedMealExecution:
-          selectedMealExecution ??
-          (prev.selectedMealExecution?.meal_slot_id === mealSlotId
-            ? {
-                ...prev.selectedMealExecution,
-                status: result.status ?? prev.selectedMealExecution.status,
-              }
-            : prev.selectedMealExecution),
-        items: prev.items.map((item) =>
-          item.meal_slot_id === mealSlotId
-            ? {
-                ...item,
-                status: result.status ?? item.status,
-                updated_at: result.reopened_at ?? item.updated_at,
-              }
-            : item,
-        ),
-      }));
-
-      return result;
-    } catch (error) {
-      const normalized = toDomyliError(error);
-
-      setState((prev) => ({
-        ...prev,
-        reopening: false,
-        error: normalized,
-      }));
-
-      throw normalized;
-    }
-  };
+  }, [state.mealFeed]);
 
   return {
     ...state,
-    refreshActiveProfiles,
-    refreshRecipeCandidates,
-    refreshRecipePreview,
-    refreshInventoryMappingTargets,
-    refreshInventoryMappingCandidates,
+    availableTagOptions,
+    profileLabel,
+    setSelectedProfileId: (value: string) => setState((prev) => ({ ...prev, selectedProfileId: value, selectedMealSlotId: "", lastConfirmResult: null, lastReopenResult: null })),
+    setSelectedMealType: (value: MealType) => setState((prev) => ({ ...prev, selectedMealType: value, selectedMealSlotId: "", lastConfirmResult: null, lastReopenResult: null })),
+    setSelectedTagCode: (value: string) => setState((prev) => ({ ...prev, selectedTagCode: value, selectedRecipeId: "", selectedRecipeDetail: null })),
+    setPlannedFor: (value: string) => setState((prev) => ({ ...prev, plannedFor: value })),
+    setSelectedRecipeId: (value: string) => setState((prev) => ({ ...prev, selectedRecipeId: value })),
+    setSelectedMealSlotId: (value: string) => setState((prev) => ({ ...prev, selectedMealSlotId: value })),
+    hydratePlanningFromMeal,
+    refreshProfiles,
+    refreshCandidates,
+    refreshRecipeDetail,
     refreshMealFeed,
-    refreshMealDetail,
-    refreshMealExecution,
-    saveInventoryMapping,
-    createMeal: createMealAction,
-    updateMeal: updateMealAction,
-    confirmMealSlot: confirmMealSlotAction,
-    reopenMealSlot: reopenMealSlotAction,
+    refreshSelectedMealDetail,
+    createSelectedMeal,
+    updateSelectedMeal,
+    confirmSelectedMeal,
+    reopenSelectedMeal,
   };
 }
