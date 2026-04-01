@@ -175,20 +175,62 @@ export type MealMutationResult = {
   inserted_ingredient_count: number;
 };
 
+type RawConfirmConsumptionLine = {
+  ingredient_code?: string | null;
+  ingredient_label?: string | null;
+  nutrition_role?: string | null;
+  unit_code?: string | null;
+  quantity_planned?: number | null;
+  quantity_confirmed?: number | null;
+  inventory_item_id?: string | null;
+  inventory_status?: string | null;
+  before_qty?: number | null;
+  after_qty?: number | null;
+  consumed_qty?: number | null;
+  shortage_qty?: number | null;
+};
+
+export type MealConfirmConsumptionLine = {
+  ingredient_code: string;
+  ingredient_label: string;
+  nutrition_role: string | null;
+  unit_code: string | null;
+  quantity_planned: number | null;
+  quantity_confirmed: number | null;
+  inventory_item_id: string | null;
+  inventory_status: string | null;
+  before_qty: number | null;
+  after_qty: number | null;
+  consumed_qty: number | null;
+  shortage_qty: number | null;
+};
+
+type RawConfirmAlert = {
+  ingredient_code?: string | null;
+  alert_sync_status?: string | null;
+  inventory_item_id?: string | null;
+};
+
+export type MealConfirmAlert = {
+  ingredient_code: string;
+  alert_sync_status: string | null;
+  inventory_item_id: string | null;
+};
+
 type RawConfirmOutput = {
   meal_slot_id?: string | null;
   status?: string | null;
-  consumption_lines?: Array<Record<string, unknown>> | null;
+  consumption_lines?: RawConfirmConsumptionLine[] | null;
   shopping_rebuild_status?: string | null;
-  alerts?: Array<Record<string, unknown>> | null;
+  alerts?: RawConfirmAlert[] | null;
 };
 
 export type MealConfirmResult = {
   meal_slot_id: string | null;
   status: string | null;
-  consumption_lines: Array<Record<string, unknown>>;
+  consumption_lines: MealConfirmConsumptionLine[];
   shopping_rebuild_status: string | null;
-  alerts: Array<Record<string, unknown>>;
+  alerts: MealConfirmAlert[];
 };
 
 export type CreateMealRpcInput = {
@@ -206,6 +248,58 @@ export type UpdateMealRpcInput = {
   p_planned_for: string;
   p_meal_type: MealType;
   p_operator_notes?: string | null;
+};
+
+type RawInventoryMappingTarget = {
+  ingredient_code?: string | null;
+  ingredient_label?: string | null;
+  meal_usage_count?: number | null;
+  recipe_usage_count?: number | null;
+  mapped_inventory_item_id?: string | null;
+  mapped_item_code?: string | null;
+  mapped_item_label?: string | null;
+};
+
+export type InventoryMappingTarget = {
+  ingredient_code: string;
+  ingredient_label: string;
+  meal_usage_count: number;
+  recipe_usage_count: number;
+  mapped_inventory_item_id: string | null;
+  mapped_item_code: string | null;
+  mapped_item_label: string | null;
+};
+
+type RawInventoryMappingCandidate = {
+  inventory_item_id?: string | null;
+  item_code?: string | null;
+  item_label?: string | null;
+  qty_on_hand?: number | null;
+};
+
+export type InventoryMappingCandidate = {
+  inventory_item_id: string;
+  item_code: string | null;
+  item_label: string;
+  qty_on_hand: number | null;
+};
+
+type RawInventoryMappingUpsert = {
+  ingredient_code?: string | null;
+  inventory_item_id?: string | null;
+  item_code?: string | null;
+  item_label?: string | null;
+  linked_meal_slot_ingredient_count?: number | null;
+  updated_at?: string | null;
+};
+
+export type InventoryMappingUpsertResult = {
+  ingredient_code: string;
+  inventory_item_id: string;
+  item_code: string | null;
+  item_label: string | null;
+  linked_meal_slot_ingredient_count: number;
+  updated_at: string | null;
 };
 
 function pickRows<T>(value: T[] | T | null | undefined): T[] {
@@ -342,6 +436,63 @@ function normalizeMealMutationResult(
   };
 }
 
+function normalizeConfirmConsumptionLine(
+  raw: RawConfirmConsumptionLine,
+): MealConfirmConsumptionLine {
+  return {
+    ingredient_code: raw.ingredient_code ?? "UNKNOWN_INGREDIENT",
+    ingredient_label: raw.ingredient_label ?? "Ingrédient",
+    nutrition_role: raw.nutrition_role ?? null,
+    unit_code: raw.unit_code ?? null,
+    quantity_planned:
+      typeof raw.quantity_planned === "number"
+        ? Number(raw.quantity_planned)
+        : raw.quantity_planned != null
+          ? Number(raw.quantity_planned)
+          : null,
+    quantity_confirmed:
+      typeof raw.quantity_confirmed === "number"
+        ? Number(raw.quantity_confirmed)
+        : raw.quantity_confirmed != null
+          ? Number(raw.quantity_confirmed)
+          : null,
+    inventory_item_id: raw.inventory_item_id ?? null,
+    inventory_status: raw.inventory_status ?? null,
+    before_qty:
+      typeof raw.before_qty === "number"
+        ? Number(raw.before_qty)
+        : raw.before_qty != null
+          ? Number(raw.before_qty)
+          : null,
+    after_qty:
+      typeof raw.after_qty === "number"
+        ? Number(raw.after_qty)
+        : raw.after_qty != null
+          ? Number(raw.after_qty)
+          : null,
+    consumed_qty:
+      typeof raw.consumed_qty === "number"
+        ? Number(raw.consumed_qty)
+        : raw.consumed_qty != null
+          ? Number(raw.consumed_qty)
+          : null,
+    shortage_qty:
+      typeof raw.shortage_qty === "number"
+        ? Number(raw.shortage_qty)
+        : raw.shortage_qty != null
+          ? Number(raw.shortage_qty)
+          : null,
+  };
+}
+
+function normalizeConfirmAlert(raw: RawConfirmAlert): MealConfirmAlert {
+  return {
+    ingredient_code: raw.ingredient_code ?? "UNKNOWN_INGREDIENT",
+    alert_sync_status: raw.alert_sync_status ?? null,
+    inventory_item_id: raw.inventory_item_id ?? null,
+  };
+}
+
 function normalizeConfirmResult(
   raw: RawConfirmOutput | null | undefined,
 ): MealConfirmResult {
@@ -349,20 +500,71 @@ function normalizeConfirmResult(
     meal_slot_id: raw?.meal_slot_id ?? null,
     status: raw?.status ?? null,
     consumption_lines: Array.isArray(raw?.consumption_lines)
-      ? raw!.consumption_lines
+      ? raw!.consumption_lines.map(normalizeConfirmConsumptionLine)
       : [],
     shopping_rebuild_status: raw?.shopping_rebuild_status ?? null,
-    alerts: Array.isArray(raw?.alerts) ? raw!.alerts : [],
+    alerts: Array.isArray(raw?.alerts)
+      ? raw!.alerts.map(normalizeConfirmAlert)
+      : [],
+  };
+}
+
+function normalizeInventoryMappingTarget(
+  raw: RawInventoryMappingTarget,
+): InventoryMappingTarget {
+  return {
+    ingredient_code: raw.ingredient_code ?? "",
+    ingredient_label: raw.ingredient_label ?? raw.ingredient_code ?? "Ingrédient",
+    meal_usage_count: Number(raw.meal_usage_count ?? 0),
+    recipe_usage_count: Number(raw.recipe_usage_count ?? 0),
+    mapped_inventory_item_id: raw.mapped_inventory_item_id ?? null,
+    mapped_item_code: raw.mapped_item_code ?? null,
+    mapped_item_label: raw.mapped_item_label ?? null,
+  };
+}
+
+function normalizeInventoryMappingCandidate(
+  raw: RawInventoryMappingCandidate,
+): InventoryMappingCandidate {
+  return {
+    inventory_item_id: raw.inventory_item_id ?? "",
+    item_code: raw.item_code ?? null,
+    item_label: raw.item_label ?? "Article stock",
+    qty_on_hand:
+      typeof raw.qty_on_hand === "number"
+        ? Number(raw.qty_on_hand)
+        : raw.qty_on_hand != null
+          ? Number(raw.qty_on_hand)
+          : null,
+  };
+}
+
+function normalizeInventoryMappingUpsert(
+  raw: RawInventoryMappingUpsert | null | undefined,
+): InventoryMappingUpsertResult {
+  return {
+    ingredient_code: raw?.ingredient_code ?? "",
+    inventory_item_id: raw?.inventory_item_id ?? "",
+    item_code: raw?.item_code ?? null,
+    item_label: raw?.item_label ?? null,
+    linked_meal_slot_ingredient_count: Number(
+      raw?.linked_meal_slot_ingredient_count ?? 0,
+    ),
+    updated_at: raw?.updated_at ?? null,
   };
 }
 
 export async function listMealActiveProfiles(): Promise<ActiveMealProfile[]> {
   try {
-    const raw = (await callRpc("rpc_meal_active_profiles_list", {}, {
-      timeoutMs: 12_000,
-      retries: 1,
-      retryDelayMs: 900,
-    })) as RawMealProfile[] | RawMealProfile | null;
+    const raw = (await callRpc(
+      "rpc_meal_active_profiles_list",
+      {},
+      {
+        timeoutMs: 12_000,
+        retries: 1,
+        retryDelayMs: 900,
+      },
+    )) as RawMealProfile[] | RawMealProfile | null;
 
     return pickRows(raw)
       .filter((row) => typeof row.profile_id === "string" && row.profile_id.trim())
@@ -384,16 +586,20 @@ export async function readRecipeCandidatesForMeal(
       return [];
     }
 
-    const raw = (await callRpc("rpc_meal_recipe_candidates_v3", {
-      p_profile_id: profileId.trim(),
-      p_meal_type: mealType,
-      p_search: search?.trim() || null,
-      p_limit: limit,
-    }, {
-      timeoutMs: 15_000,
-      retries: 1,
-      retryDelayMs: 900,
-    })) as RawRecipeCandidate[] | RawRecipeCandidate | null;
+    const raw = (await callRpc(
+      "rpc_meal_recipe_candidates_v3",
+      {
+        p_profile_id: profileId.trim(),
+        p_meal_type: mealType,
+        p_search: search?.trim() || null,
+        p_limit: limit,
+      },
+      {
+        timeoutMs: 15_000,
+        retries: 1,
+        retryDelayMs: 900,
+      },
+    )) as RawRecipeCandidate[] | RawRecipeCandidate | null;
 
     return pickRows(raw)
       .map(normalizeRecipeCandidate)
@@ -414,16 +620,20 @@ export async function readRecipePreviewForMeal(
       return null;
     }
 
-    const raw = (await callRpc("rpc_meal_recipe_preview_v3", {
-      p_profile_id: profileId.trim(),
-      p_recipe_id: recipeId.trim(),
-      p_meal_type: mealType,
-    }, {
-      unwrap: true,
-      timeoutMs: 15_000,
-      retries: 1,
-      retryDelayMs: 900,
-    })) as RawRecipePreview | null;
+    const raw = (await callRpc(
+      "rpc_meal_recipe_preview_v3",
+      {
+        p_profile_id: profileId.trim(),
+        p_recipe_id: recipeId.trim(),
+        p_meal_type: mealType,
+      },
+      {
+        unwrap: true,
+        timeoutMs: 15_000,
+        retries: 1,
+        retryDelayMs: 900,
+      },
+    )) as RawRecipePreview | null;
 
     return normalizeRecipePreview(raw);
   } catch (error) {
@@ -469,16 +679,99 @@ export async function confirmMealSlot(
   mealSlotId: string,
 ): Promise<MealConfirmResult> {
   try {
-    const raw = (await callRpc("rpc_meal_confirm_v4", {
-      p_meal_slot_id: mealSlotId,
-    }, {
-      unwrap: true,
-      timeoutMs: 15_000,
-      retries: 1,
-      retryDelayMs: 900,
-    })) as RawConfirmOutput | null;
+    const raw = (await callRpc(
+      "rpc_meal_confirm_v4",
+      {
+        p_meal_slot_id: mealSlotId,
+      },
+      {
+        unwrap: true,
+        timeoutMs: 15_000,
+        retries: 1,
+        retryDelayMs: 900,
+      },
+    )) as RawConfirmOutput | null;
 
     return normalizeConfirmResult(raw);
+  } catch (error) {
+    throw toDomyliError(error);
+  }
+}
+
+export async function listInventoryMappingTargets(
+  includeMapped = true,
+): Promise<InventoryMappingTarget[]> {
+  try {
+    const raw = (await callRpc(
+      "rpc_inventory_ingredient_map_targets_v3",
+      {
+        p_include_mapped: includeMapped,
+      },
+      {
+        timeoutMs: 15_000,
+        retries: 1,
+        retryDelayMs: 900,
+      },
+    )) as RawInventoryMappingTarget[] | RawInventoryMappingTarget | null;
+
+    return pickRows(raw)
+      .map(normalizeInventoryMappingTarget)
+      .filter((row) => Boolean(row.ingredient_code))
+      .sort((a, b) => a.ingredient_code.localeCompare(b.ingredient_code, "fr"));
+  } catch (error) {
+    throw toDomyliError(error);
+  }
+}
+
+export async function listInventoryMappingCandidates(
+  search: string,
+  limit = 25,
+): Promise<InventoryMappingCandidate[]> {
+  try {
+    const raw = (await callRpc(
+      "rpc_inventory_mapping_candidates_v3",
+      {
+        p_search: search?.trim() || null,
+        p_limit: limit,
+      },
+      {
+        timeoutMs: 15_000,
+        retries: 1,
+        retryDelayMs: 900,
+      },
+    )) as RawInventoryMappingCandidate[] | RawInventoryMappingCandidate | null;
+
+    return pickRows(raw)
+      .map(normalizeInventoryMappingCandidate)
+      .filter((row) => Boolean(row.inventory_item_id))
+      .sort((a, b) => a.item_label.localeCompare(b.item_label, "fr"));
+  } catch (error) {
+    throw toDomyliError(error);
+  }
+}
+
+export async function upsertInventoryMapping(
+  ingredientCode: string,
+  inventoryItemId: string,
+  notes?: string,
+): Promise<InventoryMappingUpsertResult> {
+  try {
+    const raw = (await callRpc(
+      "rpc_inventory_ingredient_map_upsert_v3",
+      {
+        p_ingredient_code: ingredientCode,
+        p_inventory_item_id: inventoryItemId,
+        p_notes: notes?.trim() || null,
+      },
+      {
+        unwrap: true,
+        timeoutMs: 15_000,
+        retries: 1,
+        retryDelayMs: 900,
+      },
+    )) as RawInventoryMappingUpsert | null;
+
+    return normalizeInventoryMappingUpsert(raw);
   } catch (error) {
     throw toDomyliError(error);
   }
