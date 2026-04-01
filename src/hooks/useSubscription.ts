@@ -1,58 +1,54 @@
-import { useCallback, useEffect, useState } from "react";
-import { toDomyliError, type DomyliAppError } from "@/src/lib/errors";
-import {
-  assertQuota,
-  readSubscriptionState,
-  type QuotaAssertResult,
-  type SubscriptionState,
-} from "@/src/services/subscription/subscriptionService";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
-type SubscriptionStateView = {
+import {
+  readPricingPlans,
+  readSubscriptionChangePreview,
+  readSubscriptionSnapshot,
+  type PlanCode,
+  type PricingPlan,
+  type SubscriptionChangePreview,
+  type SubscriptionSnapshot,
+} from "@/src/services/subscription/subscriptionService";
+import type { DomyliError } from "@/src/lib/errors";
+
+type SubscriptionState = {
   loading: boolean;
-  checking: boolean;
-  error: DomyliAppError | null;
-  subscription: SubscriptionState | null;
-  lastQuotaCheck: QuotaAssertResult | null;
+  previewLoading: boolean;
+  error: DomyliError | null;
+  pricingPlans: PricingPlan[];
+  snapshot: SubscriptionSnapshot | null;
+  selectedTargetPlanCode: PlanCode | null;
+  preview: SubscriptionChangePreview | null;
 };
 
-const initialState: SubscriptionStateView = {
-  loading: false,
-  checking: false,
+const initialState: SubscriptionState = {
+  loading: true,
+  previewLoading: false,
   error: null,
-  subscription: null,
-  lastQuotaCheck: null,
+  pricingPlans: [],
+  snapshot: null,
+  selectedTargetPlanCode: null,
+  preview: null,
 };
 
 export function useSubscription() {
-  const [state, setState] = useState<SubscriptionStateView>(initialState);
+  const [state, setState] = useState<SubscriptionState>(initialState);
 
   const refresh = useCallback(async () => {
-    setState((prev) => ({
-      ...prev,
-      loading: true,
-      error: null,
-    }));
-
+    setState((prev) => ({ ...prev, loading: true, error: null }));
     try {
-      const subscription = await readSubscriptionState();
-
+      const [pricingPlans, snapshot] = await Promise.all([readPricingPlans(), readSubscriptionSnapshot()]);
+      const suggested = snapshot.upgrade_suggestion.target_plan_code ?? null;
       setState((prev) => ({
         ...prev,
         loading: false,
-        subscription,
+        pricingPlans,
+        snapshot,
+        selectedTargetPlanCode: prev.selectedTargetPlanCode ?? suggested,
+        preview: null,
       }));
-
-      return subscription;
     } catch (error) {
-      const normalized = toDomyliError(error);
-
-      setState((prev) => ({
-        ...prev,
-        loading: false,
-        error: normalized,
-      }));
-
-      throw normalized;
+      setState((prev) => ({ ...prev, loading: false, error: error as DomyliError }));
     }
   }, []);
 
@@ -60,40 +56,36 @@ export function useSubscription() {
     void refresh();
   }, [refresh]);
 
-  const checkQuota = useCallback(async (limitName: string, requestedValue: number) => {
-    setState((prev) => ({
-      ...prev,
-      checking: true,
-      error: null,
-      lastQuotaCheck: null,
-    }));
-
+  const selectTargetPlan = useCallback(async (targetPlanCode: PlanCode | null) => {
+    setState((prev) => ({ ...prev, selectedTargetPlanCode: targetPlanCode }));
+    if (!targetPlanCode) {
+      setState((prev) => ({ ...prev, preview: null, previewLoading: false }));
+      return;
+    }
+    setState((prev) => ({ ...prev, previewLoading: true, error: null }));
     try {
-      const result = await assertQuota(limitName, requestedValue);
-
-      setState((prev) => ({
-        ...prev,
-        checking: false,
-        lastQuotaCheck: result,
-      }));
-
-      return result;
+      const preview = await readSubscriptionChangePreview(targetPlanCode);
+      setState((prev) => ({ ...prev, previewLoading: false, preview }));
     } catch (error) {
-      const normalized = toDomyliError(error);
-
-      setState((prev) => ({
-        ...prev,
-        checking: false,
-        error: normalized,
-      }));
-
-      throw normalized;
+      setState((prev) => ({ ...prev, previewLoading: false, error: error as DomyliError }));
     }
   }, []);
 
+  useEffect(() => {
+    if (!state.snapshot || !state.selectedTargetPlanCode) return;
+    if (state.preview?.target_plan_code === state.selectedTargetPlanCode) return;
+    void selectTargetPlan(state.selectedTargetPlanCode);
+  }, [state.snapshot, state.selectedTargetPlanCode, state.preview, selectTargetPlan]);
+
+  const currentPlan = useMemo(() => {
+    if (!state.snapshot) return null;
+    return state.pricingPlans.find((plan) => plan.plan_code === state.snapshot?.current_plan_code) ?? state.snapshot.plan;
+  }, [state.pricingPlans, state.snapshot]);
+
   return {
     ...state,
+    currentPlan,
     refresh,
-    checkQuota,
+    selectTargetPlan,
   };
 }
