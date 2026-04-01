@@ -1,147 +1,138 @@
 import { callRpc } from "@/src/services/rpc";
 import { toDomyliError } from "@/src/lib/errors";
 
-export type InventoryItemUpsertInput = {
-  p_household_id: string;
-  p_name: string;
-  p_category: string;
-  p_unit: string;
-  p_qty_on_hand: number;
-  p_min_qty?: number | null;
-  p_item_code: string;
-  p_category_code: string;
+type RpcObject = Record<string, unknown>;
+
+function pickRows<T>(value: T[] | T | null | undefined): T[] {
+  if (Array.isArray(value)) return value;
+  if (!value) return [];
+  return [value];
+}
+
+async function callRpcFallback<T>(names: string[], payload: RpcObject, options: RpcObject = {}): Promise<T> {
+  let lastError: unknown = null;
+  for (const name of names) {
+    try {
+      return (await callRpc(name, payload, options as never)) as T;
+    } catch (error) {
+      lastError = error;
+    }
+  }
+  throw lastError;
+}
+
+export type InventoryCatalogItem = {
+  item_code: string;
+  item_label: string;
+  category_code: string;
+  category_label: string;
+  unit_code: string;
+  image_url: string | null;
+  image_alt: string | null;
+  usage_scope: string | null;
+  sort_order: number;
 };
 
-export type InventoryItemUpsertOutput = {
-  item_id: string;
-  stock_key: string | null;
-  item_name: string;
+export type InventoryItem = {
+  inventory_item_id: string;
+  item_code: string;
+  item_label: string;
+  category_code: string;
+  category_label: string;
+  unit_code: string;
   qty_on_hand: number;
   min_qty: number;
-  unit: string | null;
+  stock_status: "OUT" | "LOW" | "HEALTHY" | string;
+  coverage_ratio: number | null;
+  image_url: string | null;
+  image_alt: string | null;
+  updated_at: string | null;
 };
 
-type RawInventoryItemUpsertOutput = {
-  item_id?: string | null;
-  inventory_item_id?: string | null;
-  id?: string | null;
-  stock_key?: string | null;
-  item_name?: string | null;
-  name?: string | null;
-  qty_on_hand?: number | string | null;
-  min_qty?: number | string | null;
-  unit?: string | null;
+export type InventoryUpsertPayload = {
+  p_item_code: string;
+  p_qty_on_hand: number;
+  p_min_qty: number;
 };
 
-type RawShoppingListRebuildOutput = {
-  inserted_count?: number | string | null;
-  existing_open_count?: number | string | null;
-  items_count?: number | string | null;
-  generated_at?: string | null;
-};
+export type InventoryUpsertResult = InventoryItem;
 
-export type ShoppingListRebuildOutput = {
-  rebuilt: boolean;
-  items_count: number;
-  generated_at: string;
-};
-
-function trimRequired(value: string, fieldLabel: string): string {
-  const normalized = value.trim();
-
-  if (!normalized) {
-    throw new Error(`${fieldLabel} est obligatoire.`);
-  }
-
-  return normalized;
-}
-
-function trimToNull(value?: string | null): string | null {
-  const normalized = value?.trim();
-  return normalized ? normalized : null;
-}
-
-function pickFirst<T>(value: T | T[] | null | undefined): T | null {
-  if (Array.isArray(value)) {
-    return value[0] ?? null;
-  }
-
-  return value ?? null;
-}
-
-function toNumber(value: number | string | null | undefined, fallback = 0): number {
-  const normalized = Number(value);
-
-  return Number.isFinite(normalized) ? normalized : fallback;
-}
-
-function normalizeInventoryItem(
-  raw:
-    | RawInventoryItemUpsertOutput
-    | RawInventoryItemUpsertOutput[]
-    | null
-    | undefined,
-  payload: InventoryItemUpsertInput,
-): InventoryItemUpsertOutput {
-  const row = pickFirst(raw);
-
+function normalizeCatalogItem(raw: RpcObject): InventoryCatalogItem {
   return {
-    item_id: row?.item_id ?? row?.inventory_item_id ?? row?.id ?? "",
-    stock_key: row?.stock_key ?? null,
-    item_name: row?.item_name ?? row?.name ?? payload.p_name,
-    qty_on_hand: toNumber(row?.qty_on_hand, payload.p_qty_on_hand),
-    min_qty: toNumber(row?.min_qty, payload.p_min_qty ?? 0),
-    unit: row?.unit ?? payload.p_unit,
+    item_code: typeof raw.item_code === "string" ? raw.item_code : "",
+    item_label: typeof raw.item_label === "string" ? raw.item_label : "Article",
+    category_code: typeof raw.category_code === "string" ? raw.category_code : "UNCLASSIFIED",
+    category_label: typeof raw.category_label === "string" ? raw.category_label : "À classer",
+    unit_code: typeof raw.unit_code === "string" ? raw.unit_code : "UNIT",
+    image_url: typeof raw.image_url === "string" ? raw.image_url : null,
+    image_alt: typeof raw.image_alt === "string" ? raw.image_alt : null,
+    usage_scope: typeof raw.usage_scope === "string" ? raw.usage_scope : null,
+    sort_order: Number(raw.sort_order ?? 0),
   };
 }
 
-export async function upsertInventoryItem(
-  payload: InventoryItemUpsertInput,
-): Promise<InventoryItemUpsertOutput> {
+function normalizeInventoryItem(raw: RpcObject): InventoryItem {
+  return {
+    inventory_item_id: typeof raw.inventory_item_id === "string" ? raw.inventory_item_id : "",
+    item_code: typeof raw.item_code === "string" ? raw.item_code : "",
+    item_label: typeof raw.item_label === "string" ? raw.item_label : "Article stock",
+    category_code: typeof raw.category_code === "string" ? raw.category_code : "UNCLASSIFIED",
+    category_label: typeof raw.category_label === "string" ? raw.category_label : "À classer",
+    unit_code: typeof raw.unit_code === "string" ? raw.unit_code : "UNIT",
+    qty_on_hand: Number(raw.qty_on_hand ?? 0),
+    min_qty: Number(raw.min_qty ?? 0),
+    stock_status: (typeof raw.stock_status === "string" ? raw.stock_status : "HEALTHY") as InventoryItem["stock_status"],
+    coverage_ratio: raw.coverage_ratio == null ? null : Number(raw.coverage_ratio),
+    image_url: typeof raw.image_url === "string" ? raw.image_url : null,
+    image_alt: typeof raw.image_alt === "string" ? raw.image_alt : null,
+    updated_at: typeof raw.updated_at === "string" ? raw.updated_at : null,
+  };
+}
+
+export async function listInventoryCatalog(): Promise<InventoryCatalogItem[]> {
   try {
-    const raw = await callRpc("rpc_inventory_item_upsert", {
-      p_household_id: payload.p_household_id,
-      p_name: trimRequired(payload.p_name, "Le nom de l’article"),
-      p_category: trimRequired(payload.p_category, "La catégorie"),
-      p_unit: trimRequired(payload.p_unit, "L’unité"),
-      p_qty_on_hand: Number(payload.p_qty_on_hand),
-      p_min_qty:
-        payload.p_min_qty === null || payload.p_min_qty === undefined
-          ? null
-          : Number(payload.p_min_qty),
-      p_item_code: trimRequired(payload.p_item_code, "Le code article"),
-      p_category_code: trimRequired(
-        payload.p_category_code,
-        "Le code catégorie",
-      ),
+    const raw = await callRpcFallback<unknown[]>(["rpc_inventory_catalog_list_v1"], {}, {
+      timeoutMs: 12_000,
+      retries: 1,
+      retryDelayMs: 800,
     });
 
-    return normalizeInventoryItem(
-      raw as RawInventoryItemUpsertOutput | RawInventoryItemUpsertOutput[] | null,
-      payload,
-    );
+    return pickRows(raw)
+      .map((row) => normalizeCatalogItem((row ?? {}) as RpcObject))
+      .filter((row) => Boolean(row.item_code))
+      .sort((a, b) => a.sort_order - b.sort_order || a.item_label.localeCompare(b.item_label, "fr"));
   } catch (error) {
     throw toDomyliError(error);
   }
 }
 
-export async function rebuildShoppingList(): Promise<ShoppingListRebuildOutput> {
+export async function listInventoryItems(): Promise<InventoryItem[]> {
   try {
-    const raw = (await callRpc(
-      "rpc_shopping_list_rebuild",
-      {},
-    )) as RawShoppingListRebuildOutput | RawShoppingListRebuildOutput[] | null;
+    const raw = await callRpcFallback<unknown[]>(["rpc_inventory_items_list_v2", "rpc_inventory_items_list_v1"], {}, {
+      timeoutMs: 12_000,
+      retries: 1,
+      retryDelayMs: 800,
+    });
 
-    const row = pickFirst(raw);
+    return pickRows(raw)
+      .map((row) => normalizeInventoryItem((row ?? {}) as RpcObject))
+      .filter((row) => Boolean(row.inventory_item_id || row.item_code))
+      .sort((a, b) => a.item_label.localeCompare(b.item_label, "fr"));
+  } catch (error) {
+    throw toDomyliError(error);
+  }
+}
 
-    return {
-      rebuilt: true,
-      items_count: toNumber(
-        row?.items_count ?? row?.inserted_count ?? row?.existing_open_count,
-        0,
-      ),
-      generated_at: trimToNull(row?.generated_at) ?? new Date().toISOString(),
-    };
+export async function upsertInventoryItem(payload: InventoryUpsertPayload): Promise<InventoryUpsertResult> {
+  try {
+    const raw = await callRpcFallback<RpcObject | null>(["rpc_inventory_item_upsert_v2", "rpc_inventory_item_upsert"], payload as unknown as RpcObject, {
+      unwrap: true,
+      timeoutMs: 12_000,
+      retries: 1,
+      retryDelayMs: 800,
+    });
+
+    return normalizeInventoryItem((raw ?? {}) as RpcObject);
   } catch (error) {
     throw toDomyliError(error);
   }
