@@ -253,6 +253,25 @@ function getShoppingStatusTone(
   return "default";
 }
 
+function getExecutionSourceTone(
+  value: string | null | undefined,
+): "default" | "warning" | "danger" | "success" {
+  if (value === "EVENT_LOG") return "success";
+  if (value === "MEAL_SLOT_FALLBACK") return "warning";
+  return "default";
+}
+
+function getExecutionSourceLabel(value: string | null | undefined): string {
+  switch (value) {
+    case "EVENT_LOG":
+      return "Journal serveur";
+    case "MEAL_SLOT_FALLBACK":
+      return "Fallback meal_slot";
+    default:
+      return value ?? "Aucune source";
+  }
+}
+
 function ToneBadge({
   label,
   tone = "default",
@@ -631,6 +650,7 @@ export default function MealsPage() {
     mappingSaving,
     mealFeedLoading,
     mealDetailLoading,
+    mealExecutionLoading,
     error,
     profiles,
     recipeCandidates,
@@ -640,6 +660,7 @@ export default function MealsPage() {
     confirmationHistory,
     mealFeed,
     selectedMealDetail,
+    selectedMealExecution,
     lastCreatedMealSlotId,
     lastUpdatedMealSlotId,
     lastConfirmResult,
@@ -652,6 +673,7 @@ export default function MealsPage() {
     refreshInventoryMappingCandidates,
     refreshMealFeed,
     refreshMealDetail,
+    refreshMealExecution,
     saveInventoryMapping,
   } = useMeals();
 
@@ -807,6 +829,12 @@ export default function MealsPage() {
     if (selectedMealDetail?.meal_slot_id === effectiveMealSlotId) return;
     void refreshMealDetail(effectiveMealSlotId);
   }, [effectiveMealSlotId, refreshMealDetail, selectedMealDetail?.meal_slot_id]);
+
+  useEffect(() => {
+    if (!effectiveMealSlotId.trim()) return;
+    if (selectedMealExecution?.meal_slot_id === effectiveMealSlotId) return;
+    void refreshMealExecution(effectiveMealSlotId);
+  }, [effectiveMealSlotId, refreshMealExecution, selectedMealExecution?.meal_slot_id]);
 
   const canSubmit = Boolean(
     selectedProfileId.trim() &&
@@ -1572,7 +1600,198 @@ export default function MealsPage() {
           </section>
         </div>
 
-        <div className="mt-8 grid gap-8 xl:grid-cols-[0.9fr_1.1fr]">
+        <div className="mt-8 grid gap-8 xl:grid-cols-[0.95fr_1.05fr]">
+          <section className="rounded-[36px] border border-white/10 bg-white/5 p-6">
+            <div className="flex items-center gap-3">
+              <CheckCircle2 className="h-5 w-5 text-gold" />
+              <div>
+                <p className="text-[11px] uppercase tracking-[0.18em] text-white/45">
+                  Étape 4C
+                </p>
+                <h2 className="mt-1 text-2xl font-semibold">
+                  Lecture détaillée de l’exécution serveur
+                </h2>
+              </div>
+            </div>
+
+            <p className="mt-4 text-sm text-white/60">
+              Ce bloc ne lit pas la réponse volatile du front. Il relit la trace
+              serveur la plus récente de confirmation du repas sélectionné, avec
+              ses lignes de consommation, le statut du rebuild shopping et les
+              alertes renvoyées par le back.
+            </p>
+
+            {mealExecutionLoading ? (
+              <div className="mt-6 rounded-[28px] border border-white/10 bg-black/20 p-6">
+                <div className="inline-flex items-center gap-3 text-sm text-white/70">
+                  <LoaderCircle className="h-5 w-5 animate-spin text-gold" />
+                  Lecture de l’exécution serveur...
+                </div>
+              </div>
+            ) : selectedMealExecution ? (
+              <>
+                <div className="mt-6 rounded-[28px] border border-white/10 bg-black/20 p-5">
+                  <div className="flex flex-wrap items-center gap-3">
+                    <ToneBadge
+                      label={selectedMealExecution.status ?? "INCONNU"}
+                      tone={
+                        (selectedMealExecution.status ?? "").toUpperCase() === "CONFIRMED"
+                          ? "success"
+                          : "default"
+                      }
+                    />
+                    <ToneBadge
+                      label={getExecutionSourceLabel(selectedMealExecution.execution_source)}
+                      tone={getExecutionSourceTone(selectedMealExecution.execution_source)}
+                    />
+                    <ToneBadge
+                      label={selectedMealExecution.shopping_rebuild_status ?? "shopping inconnu"}
+                      tone={getShoppingStatusTone(selectedMealExecution.shopping_rebuild_status)}
+                    />
+                    <ToneBadge
+                      label={`${selectedMealExecution.alert_count} alerte(s)`}
+                      tone={selectedMealExecution.alert_count > 0 ? "warning" : "success"}
+                    />
+                  </div>
+
+                  <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                    <div className="rounded-[22px] border border-white/10 bg-white/5 p-4">
+                      <p className="text-[11px] uppercase tracking-[0.16em] text-white/45">
+                        Lignes serveur
+                      </p>
+                      <p className="mt-3 text-2xl font-semibold text-white">
+                        {selectedMealExecution.consumption_line_count}
+                      </p>
+                    </div>
+
+                    <div className="rounded-[22px] border border-white/10 bg-white/5 p-4">
+                      <p className="text-[11px] uppercase tracking-[0.16em] text-white/45">
+                        Consommé
+                      </p>
+                      <p className="mt-3 text-2xl font-semibold text-emerald-200">
+                        {selectedMealExecution.consumed_count}
+                      </p>
+                    </div>
+
+                    <div className="rounded-[22px] border border-white/10 bg-white/5 p-4">
+                      <p className="text-[11px] uppercase tracking-[0.16em] text-white/45">
+                        Partiel
+                      </p>
+                      <p className="mt-3 text-2xl font-semibold text-amber-200">
+                        {selectedMealExecution.partial_count}
+                      </p>
+                    </div>
+
+                    <div className="rounded-[22px] border border-white/10 bg-white/5 p-4">
+                      <p className="text-[11px] uppercase tracking-[0.16em] text-white/45">
+                        Non mappé
+                      </p>
+                      <p className="mt-3 text-2xl font-semibold text-rose-200">
+                        {selectedMealExecution.unmapped_count}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="mt-5 rounded-[24px] border border-white/10 bg-white/5 p-4 text-sm text-white/65">
+                    <p>
+                      Trace serveur&nbsp;:{" "}
+                      <span className="text-white">
+                        {selectedMealExecution.event_name ?? "Aucun événement explicite"}
+                      </span>
+                    </p>
+                    <p className="mt-2">
+                      Horodatage serveur&nbsp;:{" "}
+                      <span className="text-white">
+                        {formatDateTime(
+                          selectedMealExecution.server_recorded_at ??
+                            selectedMealExecution.confirmed_at,
+                        )}
+                      </span>
+                    </p>
+                    <p className="mt-2 break-all">
+                      Actor user&nbsp;:{" "}
+                      <span className="text-white">
+                        {selectedMealExecution.actor_user_id ?? "Non renvoyé"}
+                      </span>
+                    </p>
+                  </div>
+                </div>
+
+                <div className="mt-6">
+                  <div className="flex items-center gap-3">
+                    <Target className="h-4 w-4 text-gold" />
+                    <p className="text-[11px] uppercase tracking-[0.16em] text-white/45">
+                      Lignes de consommation serveur
+                    </p>
+                  </div>
+
+                  <div className="mt-4 space-y-3">
+                    {selectedMealExecution.consumption_lines.length > 0 ? (
+                      selectedMealExecution.consumption_lines.map((line) => (
+                        <ConsumptionLineCard
+                          key={`${line.ingredient_code}-${line.inventory_item_id ?? "none"}-${line.quantity_confirmed ?? 0}`}
+                          line={line}
+                        />
+                      ))
+                    ) : (
+                      <div className="rounded-[24px] border border-dashed border-white/15 bg-black/20 p-5 text-sm text-white/60">
+                        Aucune ligne détaillée n’a été renvoyée par le serveur pour ce repas.
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                <div className="mt-6">
+                  <div className="flex items-center gap-3">
+                    <AlertTriangle className="h-4 w-4 text-gold" />
+                    <p className="text-[11px] uppercase tracking-[0.16em] text-white/45">
+                      Synchronisation alertes
+                    </p>
+                  </div>
+
+                  <div className="mt-4 space-y-3">
+                    {selectedMealExecution.alerts.length > 0 ? (
+                      selectedMealExecution.alerts.map((alert) => (
+                        <div
+                          key={`${alert.ingredient_code}-${alert.inventory_item_id ?? "none"}`}
+                          className="rounded-[24px] border border-white/10 bg-black/20 p-4"
+                        >
+                          <div className="flex flex-wrap items-center gap-3">
+                            <ToneBadge
+                              label={alert.ingredient_code}
+                              tone="default"
+                            />
+                            <ToneBadge
+                              label={alert.alert_sync_status ?? "Aucun statut"}
+                              tone={
+                                (alert.alert_sync_status ?? "").toUpperCase().startsWith("FAILED")
+                                  ? "danger"
+                                  : "success"
+                              }
+                            />
+                          </div>
+
+                          <p className="mt-3 text-sm text-white/60 break-all">
+                            inventory_item_id&nbsp;: {alert.inventory_item_id ?? "Non renvoyé"}
+                          </p>
+                        </div>
+                      ))
+                    ) : (
+                      <div className="rounded-[24px] border border-dashed border-white/15 bg-black/20 p-5 text-sm text-white/60">
+                        Aucune alerte synchronisée n’a été renvoyée pour cette confirmation.
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </>
+            ) : (
+              <div className="mt-6 rounded-[28px] border border-dashed border-white/15 bg-black/20 p-6 text-sm text-white/60">
+                Sélectionne un meal slot pour relire la trace serveur de confirmation.
+                Si le repas n’est pas encore confirmé, DOMYLI affichera ici un reçu vide ou un fallback de statut.
+              </div>
+            )}
+          </section>
+
           <section className="rounded-[36px] border border-white/10 bg-white/5 p-6">
             <div className="flex items-center gap-3">
               <Save className="h-5 w-5 text-gold" />

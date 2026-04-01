@@ -298,6 +298,45 @@ export type MealConfirmResult = {
 };
 
 
+type RawMealConfirmationRead = {
+  meal_slot_id?: string | null;
+  status?: string | null;
+  confirmed_at?: string | null;
+  execution_source?: string | null;
+  event_log_id?: string | null;
+  event_name?: string | null;
+  actor_user_id?: string | null;
+  server_recorded_at?: string | null;
+  shopping_rebuild_status?: string | null;
+  alert_count?: number | null;
+  consumption_line_count?: number | null;
+  consumed_count?: number | null;
+  partial_count?: number | null;
+  unmapped_count?: number | null;
+  consumption_lines?: RawConfirmConsumptionLine[] | null;
+  alerts?: RawConfirmAlert[] | null;
+};
+
+export type MealConfirmationServerDetail = {
+  meal_slot_id: string | null;
+  status: string | null;
+  confirmed_at: string | null;
+  execution_source: string | null;
+  event_log_id: string | null;
+  event_name: string | null;
+  actor_user_id: string | null;
+  server_recorded_at: string | null;
+  shopping_rebuild_status: string | null;
+  alert_count: number;
+  consumption_line_count: number;
+  consumed_count: number;
+  partial_count: number;
+  unmapped_count: number;
+  consumption_lines: MealConfirmConsumptionLine[];
+  alerts: MealConfirmAlert[];
+};
+
+
 type RawMealSlotDetailIngredient = {
   recipe_ingredient_id?: string | null;
   ingredient_code?: string | null;
@@ -598,6 +637,36 @@ function normalizeConfirmResult(
   };
 }
 
+
+function normalizeMealConfirmationServerDetail(
+  raw: RawMealConfirmationRead | null | undefined,
+): MealConfirmationServerDetail | null {
+  if (!raw?.meal_slot_id) return null;
+
+  return {
+    meal_slot_id: raw.meal_slot_id ?? null,
+    status: raw.status ?? null,
+    confirmed_at: raw.confirmed_at ?? null,
+    execution_source: raw.execution_source ?? null,
+    event_log_id: raw.event_log_id ?? null,
+    event_name: raw.event_name ?? null,
+    actor_user_id: raw.actor_user_id ?? null,
+    server_recorded_at: raw.server_recorded_at ?? null,
+    shopping_rebuild_status: raw.shopping_rebuild_status ?? null,
+    alert_count: Number(raw.alert_count ?? 0),
+    consumption_line_count: Number(raw.consumption_line_count ?? 0),
+    consumed_count: Number(raw.consumed_count ?? 0),
+    partial_count: Number(raw.partial_count ?? 0),
+    unmapped_count: Number(raw.unmapped_count ?? 0),
+    consumption_lines: Array.isArray(raw?.consumption_lines)
+      ? raw.consumption_lines.map(normalizeConfirmConsumptionLine)
+      : [],
+    alerts: Array.isArray(raw?.alerts)
+      ? raw.alerts.map(normalizeConfirmAlert)
+      : [],
+  };
+}
+
 function normalizeInventoryMappingTarget(
   raw: RawInventoryMappingTarget,
 ): InventoryMappingTarget {
@@ -828,6 +897,30 @@ export async function confirmMealSlot(
     })) as RawConfirmOutput | null;
 
     return normalizeConfirmResult(raw);
+  } catch (error) {
+    throw toDomyliError(error);
+  }
+}
+
+
+export async function readMealConfirmationServer(
+  mealSlotId: string,
+): Promise<MealConfirmationServerDetail | null> {
+  try {
+    if (!mealSlotId.trim()) {
+      return null;
+    }
+
+    const raw = (await callRpc("rpc_meal_confirmation_read_v1", {
+      p_meal_slot_id: mealSlotId.trim(),
+    }, {
+      unwrap: true,
+      timeoutMs: 15_000,
+      retries: 1,
+      retryDelayMs: 900,
+    })) as RawMealConfirmationRead | null;
+
+    return normalizeMealConfirmationServerDetail(raw);
   } catch (error) {
     throw toDomyliError(error);
   }
