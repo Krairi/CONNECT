@@ -1,61 +1,80 @@
-import { useCallback, useState } from "react";
-import {
-  upsertHumanProfile,
-  type HumanProfileUpsertInput,
-  type HumanProfileUpsertOutput,
-} from "../services/profiles/profileService";
-import { toDomyliError, type DomyliAppError } from "../lib/errors";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
-type UseProfilesState = {
-  saving: boolean;
+import { toDomyliError, type DomyliAppError } from "@/src/lib/errors";
+import {
+  listHouseholdProfileReadiness,
+  type HouseholdProfileReadinessItem,
+} from "@/src/services/profiles/householdProfilesService";
+
+type ProfilesState = {
+  loading: boolean;
   error: DomyliAppError | null;
-  lastSavedProfile: HumanProfileUpsertOutput | null;
+  profiles: HouseholdProfileReadinessItem[];
 };
 
-const initialState: UseProfilesState = {
-  saving: false,
+const initialState: ProfilesState = {
+  loading: false,
   error: null,
-  lastSavedProfile: null,
+  profiles: [],
 };
 
 export function useProfiles() {
-  const [state, setState] = useState<UseProfilesState>(initialState);
+  const [state, setState] = useState<ProfilesState>(initialState);
 
-  const saveProfile = useCallback(
-    async (payload: HumanProfileUpsertInput) => {
+  const refresh = useCallback(async () => {
+    setState((prev) => ({
+      ...prev,
+      loading: true,
+      error: null,
+    }));
+
+    try {
+      const profiles = await listHouseholdProfileReadiness();
+
+      setState({
+        loading: false,
+        error: null,
+        profiles,
+      });
+
+      return profiles;
+    } catch (error) {
+      const normalized = toDomyliError(error);
       setState((prev) => ({
         ...prev,
-        saving: true,
-        error: null,
+        loading: false,
+        error: normalized,
       }));
+      throw normalized;
+    }
+  }, []);
 
-      try {
-        const result = await upsertHumanProfile(payload);
+  useEffect(() => {
+    void refresh();
+  }, [refresh]);
 
-        setState({
-          saving: false,
-          error: null,
-          lastSavedProfile: result,
-        });
+  const summary = useMemo(() => {
+    const total = state.profiles.length;
+    const ready = state.profiles.filter((item) => item.onboarding_state === "READY").length;
+    const incomplete = state.profiles.filter(
+      (item) => item.onboarding_state === "PROFILE_INCOMPLETE",
+    ).length;
+    const required = state.profiles.filter(
+      (item) => item.onboarding_state === "PROFILE_REQUIRED",
+    ).length;
 
-        return result;
-      } catch (error) {
-        const normalized = toDomyliError(error);
-
-        setState((prev) => ({
-          ...prev,
-          saving: false,
-          error: normalized,
-        }));
-
-        throw normalized;
-      }
-    },
-    [],
-  );
+    return {
+      total,
+      ready,
+      incomplete,
+      required,
+      readinessRate: total > 0 ? Math.round((ready / total) * 100) : 0,
+    };
+  }, [state.profiles]);
 
   return {
     ...state,
-    saveProfile,
+    summary,
+    refresh,
   };
 }

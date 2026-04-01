@@ -1,9 +1,4 @@
-import {
-  useEffect,
-  useMemo,
-  useState,
-  type FormEvent,
-} from "react";
+import { useEffect, useMemo, useState, type FormEvent } from "react";
 import {
   ArrowLeft,
   HeartPulse,
@@ -16,10 +11,6 @@ import { useNavigate } from "react-router-dom";
 import { ROUTES } from "@/src/constants/routes";
 import { useMyProfile } from "@/src/hooks/useMyProfile";
 import { useAuth } from "@/src/providers/AuthProvider";
-import {
-  readMyProfileStatus,
-  type MyProfileStatus,
-} from "@/src/services/profiles/myProfileService";
 import {
   PROFILE_ACTIVITY_OPTIONS,
   PROFILE_ALLERGY_OPTIONS,
@@ -35,7 +26,6 @@ import {
 } from "@/src/constants/profileCatalog";
 
 type MyProfileFormState = {
-  displayName: string;
   birthDate: string;
   sex: string;
   heightCm: string;
@@ -50,7 +40,6 @@ type MyProfileFormState = {
 };
 
 const defaultFormState: MyProfileFormState = {
-  displayName: "",
   birthDate: "",
   sex: "",
   heightCm: "",
@@ -65,7 +54,6 @@ const defaultFormState: MyProfileFormState = {
 };
 
 const REQUIRED_FIELD_LABELS: Record<string, string> = {
-  DISPLAY_NAME: "Nom affiché",
   BIRTH_DATE: "Date de naissance",
   SEX: "Sexe",
   HEIGHT_CM: "Taille",
@@ -91,7 +79,6 @@ function renderSelectedSummary(
 function buildFormStateFromProfile(
   profile:
     | {
-        display_name: string;
         birth_date: string | null;
         sex: string | null;
         height_cm: number | null;
@@ -112,13 +99,10 @@ function buildFormStateFromProfile(
   }
 
   return {
-    displayName: profile.display_name ?? "",
     birthDate: profile.birth_date ?? "",
     sex: profile.sex ?? "",
-    heightCm:
-      profile.height_cm != null ? String(profile.height_cm) : "",
-    weightKg:
-      profile.weight_kg != null ? String(profile.weight_kg) : "",
+    heightCm: profile.height_cm != null ? String(profile.height_cm) : "",
+    weightKg: profile.weight_kg != null ? String(profile.weight_kg) : "",
     isPregnant: Boolean(profile.is_pregnant),
     hasDiabetes: Boolean(profile.has_diabetes),
     goal: profile.goal ?? "",
@@ -206,12 +190,8 @@ function FlowBadge({ flow }: { flow: ProfileFlow }) {
   );
 }
 
-function getMissingLabels(status: MyProfileStatus | null): string[] {
-  if (!status?.required_fields?.length) {
-    return [];
-  }
-
-  return status.required_fields.map(
+function getMissingLabels(requiredFields: string[]): string[] {
+  return requiredFields.map(
     (field) => REQUIRED_FIELD_LABELS[field] ?? field,
   );
 }
@@ -225,7 +205,6 @@ export default function MyProfilePage() {
     bootstrapLoading,
     activeMembership,
   } = useAuth();
-
   const {
     loading,
     saving,
@@ -240,26 +219,18 @@ export default function MyProfilePage() {
   const [message, setMessage] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!profile) {
-      if (status?.has_profile && status.profile_display_name) {
-        setForm((prev) => ({
-          ...prev,
-          displayName: prev.displayName || status.profile_display_name || "",
-        }));
-      }
-      return;
-    }
-
     setForm(buildFormStateFromProfile(profile));
-  }, [profile, status]);
+  }, [profile]);
 
-  const missingLabels = useMemo(() => getMissingLabels(status), [status]);
+  const missingLabels = useMemo(
+    () => getMissingLabels(status?.required_fields ?? []),
+    [status?.required_fields],
+  );
 
   const canSubmit = useMemo(
     () =>
       Boolean(
-        form.displayName.trim() &&
-          form.birthDate &&
+        form.birthDate &&
           form.sex &&
           form.heightCm &&
           form.weightKg &&
@@ -269,7 +240,6 @@ export default function MyProfilePage() {
     [
       form.activityLevel,
       form.birthDate,
-      form.displayName,
       form.goal,
       form.heightCm,
       form.sex,
@@ -277,10 +247,7 @@ export default function MyProfilePage() {
     ],
   );
 
-  const selectedGoalLabel = getOptionLabel(
-    PROFILE_GOAL_OPTIONS,
-    form.goal,
-  );
+  const selectedGoalLabel = getOptionLabel(PROFILE_GOAL_OPTIONS, form.goal);
   const selectedActivityLabel = getOptionLabel(
     PROFILE_ACTIVITY_OPTIONS,
     form.activityLevel,
@@ -297,10 +264,7 @@ export default function MyProfilePage() {
     PROFILE_CULTURAL_CONSTRAINT_OPTIONS,
     form.culturalConstraints,
   );
-  const selectedSexLabel = getOptionLabel(
-    PROFILE_SEX_OPTIONS,
-    form.sex,
-  );
+  const selectedSexLabel = getOptionLabel(PROFILE_SEX_OPTIONS, form.sex);
 
   const setField = <K extends keyof MyProfileFormState>(
     field: K,
@@ -336,8 +300,8 @@ export default function MyProfilePage() {
           </p>
           <h1 className="mt-4 text-3xl font-semibold">Contexte requis</h1>
           <p className="mt-3 text-white/70">
-            Un foyer actif et un contexte membre valide sont requis pour gérer
-            le profil humain.
+            Un foyer actif et un contexte membre valide sont requis pour gérer le
+            profil humain.
           </p>
         </div>
       </div>
@@ -350,7 +314,6 @@ export default function MyProfilePage() {
 
     try {
       const result = await save({
-        p_display_name: form.displayName.trim(),
         p_birth_date: form.birthDate || null,
         p_sex: form.sex || null,
         p_height_cm: form.heightCm ? Number(form.heightCm) : null,
@@ -361,24 +324,18 @@ export default function MyProfilePage() {
         p_activity_level: form.activityLevel || null,
         p_allergies: toNullableArray(form.allergies),
         p_food_constraints: toNullableArray(form.foodConstraints),
-        p_cultural_constraints: toNullableArray(
-          form.culturalConstraints,
-        ),
+        p_cultural_constraints: toNullableArray(form.culturalConstraints),
       });
 
-      const refreshedStatus = await readMyProfileStatus();
-
       setMessage(
-        refreshedStatus.profile_completed
-          ? `Profil enregistré : ${result.display_name}. DOMYLI débloque maintenant les parcours métier.`
-          : `Profil enregistré : ${result.display_name}. DOMYLI attend encore ${getMissingLabels(refreshedStatus).join(", ")}.`,
+        result.profile_completed
+          ? `Profil normalisé : ${result.display_name}. DOMYLI débloque maintenant les parcours métier.`
+          : `Profil normalisé : ${result.display_name}. DOMYLI attend encore ${getMissingLabels(result.required_fields).join(", ")}.`,
       );
 
       window.setTimeout(() => {
         navigate(
-          refreshedStatus.profile_completed
-            ? ROUTES.DASHBOARD
-            : ROUTES.MY_PROFILE,
+          result.profile_completed ? ROUTES.DASHBOARD : ROUTES.MY_PROFILE,
           { replace: true },
         );
       }, 350);
@@ -397,15 +354,16 @@ export default function MyProfilePage() {
             </p>
             <h1 className="mt-4 text-3xl font-semibold">Mon profil</h1>
             <p className="mt-3 max-w-3xl text-sm leading-7 text-white/70">
-              Cette étape est obligatoire pour tout membre adulte connecté qui
-              rejoint le foyer. Le profil humain devient ensuite exploitable par
-              les repas, règles, tâches et arbitrages DOMYLI.
+              Cette étape transforme le compte connecté en identité métier
+              exploitable. Aucun champ libre n’est utilisé ici : DOMYLI guide les
+              attributs qui pilotent repas, tâches, règles et arbitrages du
+              foyer.
             </p>
           </div>
 
           <button
             type="button"
-            onClick={() => navigate(ROUTES.ACTIVATE_HOUSEHOLD)}
+            onClick={() => navigate(ROUTES.PROFILES)}
             className="inline-flex h-10 w-10 items-center justify-center border border-white/10 transition-colors hover:border-gold/40"
             aria-label="Retour"
           >
@@ -430,10 +388,25 @@ export default function MyProfilePage() {
             </h2>
 
             <p className="mt-3 text-sm leading-7 text-white/70">
-              DOMYLI normalise ici l’identité métier du compte connecté. Cette
-              structure sert ensuite de base aux repas, aux règles, à la
-              faisabilité, aux tâches et aux arbitrages du foyer.
+              L’identité affichée est dérivée du compte et gouvernée par DOMYLI.
+              Le membre renseigne uniquement les attributs structurants utiles au
+              moteur métier.
             </p>
+
+            <div className="mt-6 grid gap-4 md:grid-cols-2">
+              <div className="rounded-[24px] border border-white/10 bg-black/20 p-5 md:col-span-2">
+                <p className="text-xs uppercase tracking-[0.24em] text-white/60">
+                  Identité affichée gouvernée
+                </p>
+                <p className="mt-3 text-lg font-medium text-white">
+                  {status.derived_display_name}
+                </p>
+                <p className="mt-2 text-sm leading-7 text-white/60">
+                  Cette identité est générée par DOMYLI à partir du compte membre.
+                  Aucun champ libre n’est demandé pour ce signal.
+                </p>
+              </div>
+            </div>
 
             {missingLabels.length > 0 ? (
               <div className="mt-6 rounded-[24px] border border-amber-500/20 bg-amber-500/5 p-5">
@@ -444,23 +417,19 @@ export default function MyProfilePage() {
                   DOMYLI exige encore : {missingLabels.join(", ")}.
                 </p>
               </div>
-            ) : null}
+            ) : (
+              <div className="mt-6 rounded-[24px] border border-emerald-500/20 bg-emerald-500/5 p-5">
+                <p className="text-xs uppercase tracking-[0.24em] text-emerald-300">
+                  Profil exploitable
+                </p>
+                <p className="mt-3 text-sm leading-7 text-white/80">
+                  Le profil humain est complet et peut gouverner les décisions
+                  Meals, Tasks, Capacity et Rules.
+                </p>
+              </div>
+            )}
 
             <div className="mt-8 grid gap-4 md:grid-cols-2">
-              <label className="block">
-                <span className="mb-3 block text-xs uppercase tracking-[0.24em] text-white/60">
-                  Nom affiché
-                </span>
-                <input
-                  value={form.displayName}
-                  onChange={(e) =>
-                    setField("displayName", e.target.value)
-                  }
-                  required
-                  className="w-full border border-white/10 bg-black/20 px-4 py-4 text-sm outline-none focus:border-gold/50"
-                />
-              </label>
-
               <label className="block">
                 <span className="mb-3 block text-xs uppercase tracking-[0.24em] text-white/60">
                   Date de naissance
@@ -468,9 +437,7 @@ export default function MyProfilePage() {
                 <input
                   type="date"
                   value={form.birthDate}
-                  onChange={(e) =>
-                    setField("birthDate", e.target.value)
-                  }
+                  onChange={(e) => setField("birthDate", e.target.value)}
                   required
                   className="w-full border border-white/10 bg-black/20 px-4 py-4 text-sm outline-none focus:border-gold/50"
                 />
@@ -478,7 +445,7 @@ export default function MyProfilePage() {
 
               <label className="block">
                 <span className="mb-3 block text-xs uppercase tracking-[0.24em] text-white/60">
-                  Sexe
+                  Sexe gouverné
                 </span>
                 <select
                   value={form.sex}
@@ -504,9 +471,7 @@ export default function MyProfilePage() {
                   min="0"
                   required
                   value={form.heightCm}
-                  onChange={(e) =>
-                    setField("heightCm", e.target.value)
-                  }
+                  onChange={(e) => setField("heightCm", e.target.value)}
                   className="w-full border border-white/10 bg-black/20 px-4 py-4 text-sm outline-none focus:border-gold/50"
                 />
               </label>
@@ -518,19 +483,16 @@ export default function MyProfilePage() {
                 <input
                   type="number"
                   min="0"
-                  step="0.1"
                   required
                   value={form.weightKg}
-                  onChange={(e) =>
-                    setField("weightKg", e.target.value)
-                  }
+                  onChange={(e) => setField("weightKg", e.target.value)}
                   className="w-full border border-white/10 bg-black/20 px-4 py-4 text-sm outline-none focus:border-gold/50"
                 />
               </label>
 
               <label className="block">
                 <span className="mb-3 block text-xs uppercase tracking-[0.24em] text-white/60">
-                  Objectif
+                  Objectif canonique
                 </span>
                 <select
                   value={form.goal}
@@ -538,9 +500,7 @@ export default function MyProfilePage() {
                   required
                   className="w-full border border-white/10 bg-black/20 px-4 py-4 text-sm outline-none focus:border-gold/50"
                 >
-                  <option value="">
-                    Sélectionner un objectif canonique
-                  </option>
+                  <option value="">Sélectionner un objectif canonique</option>
                   {PROFILE_GOAL_OPTIONS.map((option) => (
                     <option key={option.value} value={option.value}>
                       {option.label}
@@ -549,21 +509,17 @@ export default function MyProfilePage() {
                 </select>
               </label>
 
-              <label className="block md:col-span-2">
+              <label className="block">
                 <span className="mb-3 block text-xs uppercase tracking-[0.24em] text-white/60">
-                  Activité
+                  Niveau d’activité
                 </span>
                 <select
                   value={form.activityLevel}
-                  onChange={(e) =>
-                    setField("activityLevel", e.target.value)
-                  }
+                  onChange={(e) => setField("activityLevel", e.target.value)}
                   required
                   className="w-full border border-white/10 bg-black/20 px-4 py-4 text-sm outline-none focus:border-gold/50"
                 >
-                  <option value="">
-                    Sélectionner un niveau d’activité
-                  </option>
+                  <option value="">Sélectionner un niveau d’activité</option>
                   {PROFILE_ACTIVITY_OPTIONS.map((option) => (
                     <option key={option.value} value={option.value}>
                       {option.label}
@@ -573,45 +529,43 @@ export default function MyProfilePage() {
               </label>
             </div>
 
-            <div className="mt-6 flex flex-wrap gap-6 rounded-[24px] border border-white/10 bg-black/20 p-5">
-              <label className="inline-flex items-center gap-3 text-sm text-white/85">
+            <div className="mt-6 grid gap-4 md:grid-cols-2">
+              <label className="flex items-center gap-3 rounded-[24px] border border-white/10 bg-black/20 px-5 py-4 text-sm text-white/85">
                 <input
                   type="checkbox"
                   checked={form.isPregnant}
-                  onChange={(e) =>
-                    setField("isPregnant", e.target.checked)
-                  }
+                  onChange={(e) => setField("isPregnant", e.target.checked)}
                   className="h-4 w-4"
                 />
                 Grossesse
               </label>
 
-              <label className="inline-flex items-center gap-3 text-sm text-white/85">
+              <label className="flex items-center gap-3 rounded-[24px] border border-white/10 bg-black/20 px-5 py-4 text-sm text-white/85">
                 <input
                   type="checkbox"
                   checked={form.hasDiabetes}
-                  onChange={(e) =>
-                    setField("hasDiabetes", e.target.checked)
-                  }
+                  onChange={(e) => setField("hasDiabetes", e.target.checked)}
                   className="h-4 w-4"
                 />
                 Diabète
               </label>
             </div>
 
-            <div className="mt-6 grid gap-6">
+            <div className="mt-6 grid gap-4 xl:grid-cols-3">
               <MultiChoiceGroup
-                label="Allergies"
+                label="Allergies contrôlées"
                 options={PROFILE_ALLERGY_OPTIONS}
                 values={form.allergies}
                 onChange={(next) => setField("allergies", next)}
               />
+
               <MultiChoiceGroup
                 label="Contraintes alimentaires"
                 options={PROFILE_FOOD_CONSTRAINT_OPTIONS}
                 values={form.foodConstraints}
                 onChange={(next) => setField("foodConstraints", next)}
               />
+
               <MultiChoiceGroup
                 label="Contraintes culturelles"
                 options={PROFILE_CULTURAL_CONSTRAINT_OPTIONS}
@@ -620,98 +574,174 @@ export default function MyProfilePage() {
               />
             </div>
 
-            <div className="mt-8 flex flex-wrap items-center gap-4">
+            <div className="mt-8 flex flex-wrap gap-3">
               <button
                 type="submit"
-                disabled={saving || !canSubmit}
-                className="inline-flex items-center justify-center gap-3 bg-gold px-6 py-4 text-sm uppercase tracking-[0.24em] text-black disabled:opacity-50"
+                disabled={!canSubmit || saving}
+                className="inline-flex items-center justify-center gap-3 border border-gold/40 px-5 py-4 text-sm uppercase tracking-[0.24em] text-gold transition-colors hover:bg-gold hover:text-black disabled:cursor-not-allowed disabled:opacity-50"
               >
                 <Save className="h-4 w-4" />
-                {saving ? "Enregistrement..." : "Enregistrer le profil"}
+                {saving ? "Enregistrement..." : "Normaliser mon profil"}
               </button>
 
-              {(message || error?.message) && (
-                <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white/85">
-                  {message ?? error?.message}
-                </div>
-              )}
+              <button
+                type="button"
+                onClick={() => navigate(ROUTES.PROFILES)}
+                className="inline-flex items-center justify-center gap-3 border border-white/10 px-5 py-4 text-sm uppercase tracking-[0.24em] text-white transition-colors hover:border-gold/40 hover:text-gold"
+              >
+                Retour à Profiles
+              </button>
             </div>
+
+            {(message || error?.message || lastSavedProfile) && (
+              <div className="mt-6 rounded-[24px] border border-white/10 bg-black/20 p-5 text-sm leading-7 text-white/80">
+                {message ??
+                  error?.message ??
+                  (lastSavedProfile
+                    ? `Profil enregistré : ${lastSavedProfile.display_name}`
+                    : null)}
+              </div>
+            )}
           </form>
 
-          <aside className="rounded-[32px] border border-white/10 bg-white/5 p-8 backdrop-blur">
-            <div className="inline-flex items-center gap-2 rounded-full border border-white/10 px-4 py-2 text-xs uppercase tracking-[0.24em] text-white/70">
-              <ShieldCheck className="h-4 w-4" />
-              Lecture profil
-            </div>
-
-            <div className="mt-8 space-y-4">
-              <div className="rounded-3xl border border-white/10 bg-black/20 p-5">
-                <p className="text-xs uppercase tracking-[0.24em] text-white/45">
-                  Foyer
-                </p>
-                <p className="mt-2 text-sm text-white/85">
-                  {activeMembership?.household_name ?? "—"}
+          <div className="space-y-6">
+            <section className="rounded-[32px] border border-white/10 bg-white/5 p-8 backdrop-blur">
+              <div className="flex items-center gap-3">
+                <ShieldCheck className="h-5 w-5 text-gold" />
+                <p className="text-sm uppercase tracking-[0.24em] text-gold">
+                  Lecture métier DOMYLI
                 </p>
               </div>
 
-              <div className="rounded-3xl border border-white/10 bg-black/20 p-5">
-                <div className="inline-flex items-center gap-2 text-gold">
-                  <HeartPulse className="h-4 w-4" />
-                  <p className="text-xs uppercase tracking-[0.24em]">
-                    Synthèse contrôlée
+              <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-1">
+                <div className="rounded-[24px] border border-white/10 bg-black/20 p-5">
+                  <p className="text-xs uppercase tracking-[0.24em] text-white/60">
+                    Statut d’entrée
+                  </p>
+                  <p className="mt-3 text-lg font-medium text-white">
+                    {status.workflow_state}
                   </p>
                 </div>
 
-                <div className="mt-5 space-y-3 text-sm text-white/80">
-                  <p>Sexe : {selectedSexLabel ?? "À sélectionner"}</p>
-                  <p>Objectif : {selectedGoalLabel ?? "À sélectionner"}</p>
-                  <p>
-                    Activité : {selectedActivityLabel ?? "À sélectionner"}
+                <div className="rounded-[24px] border border-white/10 bg-black/20 p-5">
+                  <p className="text-xs uppercase tracking-[0.24em] text-white/60">
+                    Score de préparation profil
                   </p>
-                  <p>
-                    Allergies :{" "}
-                    {selectedAllergyLabels.length > 0
+                  <p className="mt-3 text-lg font-medium text-white">
+                    {status.profile_readiness_score}%
+                  </p>
+                </div>
+
+                <div className="rounded-[24px] border border-white/10 bg-black/20 p-5">
+                  <p className="text-xs uppercase tracking-[0.24em] text-white/60">
+                    Foyer
+                  </p>
+                  <p className="mt-3 text-lg font-medium text-white">
+                    {activeMembership?.household_name ?? "—"}
+                  </p>
+                </div>
+
+                <div className="rounded-[24px] border border-white/10 bg-black/20 p-5">
+                  <p className="text-xs uppercase tracking-[0.24em] text-white/60">
+                    Rôle
+                  </p>
+                  <p className="mt-3 text-lg font-medium text-white">
+                    {activeMembership?.role ?? status.active_role}
+                  </p>
+                </div>
+
+                <div className="rounded-[24px] border border-white/10 bg-black/20 p-5">
+                  <p className="text-xs uppercase tracking-[0.24em] text-white/60">
+                    Sexe
+                  </p>
+                  <p className="mt-3 text-lg font-medium text-white">
+                    {selectedSexLabel ?? "—"}
+                  </p>
+                </div>
+
+                <div className="rounded-[24px] border border-white/10 bg-black/20 p-5">
+                  <p className="text-xs uppercase tracking-[0.24em] text-white/60">
+                    Objectif canonique
+                  </p>
+                  <p className="mt-3 text-lg font-medium text-white">
+                    {selectedGoalLabel ?? "—"}
+                  </p>
+                </div>
+
+                <div className="rounded-[24px] border border-white/10 bg-black/20 p-5">
+                  <p className="text-xs uppercase tracking-[0.24em] text-white/60">
+                    Activité
+                  </p>
+                  <p className="mt-3 text-lg font-medium text-white">
+                    {selectedActivityLabel ?? "—"}
+                  </p>
+                </div>
+
+                <div className="rounded-[24px] border border-white/10 bg-black/20 p-5">
+                  <p className="text-xs uppercase tracking-[0.24em] text-white/60">
+                    Allergies
+                  </p>
+                  <p className="mt-3 text-sm leading-7 text-white/80">
+                    {selectedAllergyLabels.length
                       ? selectedAllergyLabels.join(", ")
-                      : "Aucune sélection"}
+                      : "Aucune"}
                   </p>
-                  <p>
-                    Contraintes alimentaires :{" "}
-                    {selectedFoodConstraintLabels.length > 0
+                </div>
+
+                <div className="rounded-[24px] border border-white/10 bg-black/20 p-5">
+                  <p className="text-xs uppercase tracking-[0.24em] text-white/60">
+                    Contraintes alimentaires
+                  </p>
+                  <p className="mt-3 text-sm leading-7 text-white/80">
+                    {selectedFoodConstraintLabels.length
                       ? selectedFoodConstraintLabels.join(", ")
-                      : "Aucune sélection"}
+                      : "Aucune"}
                   </p>
-                  <p>
-                    Contraintes culturelles :{" "}
-                    {selectedCulturalConstraintLabels.length > 0
+                </div>
+
+                <div className="rounded-[24px] border border-white/10 bg-black/20 p-5">
+                  <p className="text-xs uppercase tracking-[0.24em] text-white/60">
+                    Contraintes culturelles
+                  </p>
+                  <p className="mt-3 text-sm leading-7 text-white/80">
+                    {selectedCulturalConstraintLabels.length
                       ? selectedCulturalConstraintLabels.join(", ")
-                      : "Aucune sélection"}
+                      : "Aucune"}
+                  </p>
+                </div>
+
+                <div className="rounded-[24px] border border-white/10 bg-black/20 p-5">
+                  <p className="text-xs uppercase tracking-[0.24em] text-white/60">
+                    Conditions structurantes
+                  </p>
+                  <p className="mt-3 text-sm leading-7 text-white/80">
+                    {[form.isPregnant ? "Grossesse" : null, form.hasDiabetes ? "Diabète" : null]
+                      .filter(Boolean)
+                      .join(", ") || "Aucune"}
                   </p>
                 </div>
               </div>
+            </section>
 
-              <div className="rounded-3xl border border-gold/20 bg-gold/5 p-5">
-                <p className="text-xs uppercase tracking-[0.24em] text-gold">
-                  Domaines alimentés
+            <section className="rounded-[32px] border border-white/10 bg-white/5 p-8 backdrop-blur">
+              <div className="flex items-center gap-3">
+                <HeartPulse className="h-5 w-5 text-gold" />
+                <p className="text-sm uppercase tracking-[0.24em] text-gold">
+                  Flux impactés
                 </p>
-                <div className="mt-4 flex flex-wrap gap-2">
-                  {PROFILE_IMPACT_FLOWS.map((flow) => (
-                    <FlowBadge key={flow} flow={flow} />
-                  ))}
-                </div>
               </div>
-
-              {lastSavedProfile ? (
-                <div className="rounded-3xl border border-emerald-500/20 bg-emerald-500/5 p-5">
-                  <p className="text-xs uppercase tracking-[0.24em] text-emerald-300">
-                    Dernier enregistrement
-                  </p>
-                  <p className="mt-3 text-sm text-white/80">
-                    {lastSavedProfile.display_name}
-                  </p>
-                </div>
-              ) : null}
-            </div>
-          </aside>
+              <p className="mt-4 text-sm leading-7 text-white/70">
+                Une fois validé, ce profil humain devient la base réelle utilisée
+                par DOMYLI pour repas, tâches, règles, contraintes et arbitrages
+                du foyer.
+              </p>
+              <div className="mt-6 flex flex-wrap gap-2">
+                {PROFILE_IMPACT_FLOWS.map((flow) => (
+                  <FlowBadge key={flow} flow={flow} />
+                ))}
+              </div>
+            </section>
+          </div>
         </div>
       </div>
     </div>

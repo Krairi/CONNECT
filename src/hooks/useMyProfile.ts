@@ -38,13 +38,33 @@ function buildFallbackProfile(
   }
 
   if (!status?.has_profile) {
-    return null;
+    return {
+      profile_id: null,
+      household_id: status?.household_id ?? null,
+      display_name: status?.derived_display_name ?? "Profil DOMYLI",
+      birth_date: null,
+      sex: null,
+      height_cm: null,
+      weight_kg: null,
+      is_pregnant: false,
+      has_diabetes: false,
+      goal: null,
+      activity_level: null,
+      allergies: [],
+      food_constraints: [],
+      cultural_constraints: [],
+      updated_at: null,
+      required_fields: status?.required_fields ?? [],
+      completed_required_fields: status?.completed_required_fields ?? [],
+      profile_readiness_score: status?.profile_readiness_score ?? 0,
+      workflow_state: status?.workflow_state ?? "PROFILE_REQUIRED",
+    };
   }
 
   return {
     profile_id: status.profile_id ?? null,
     household_id: status.household_id ?? null,
-    display_name: status.profile_display_name ?? "",
+    display_name: status.derived_display_name,
     birth_date: null,
     sex: null,
     height_cm: null,
@@ -57,6 +77,10 @@ function buildFallbackProfile(
     food_constraints: [],
     cultural_constraints: [],
     updated_at: null,
+    required_fields: status.required_fields,
+    completed_required_fields: status.completed_required_fields,
+    profile_readiness_score: status.profile_readiness_score,
+    workflow_state: status.workflow_state,
   };
 }
 
