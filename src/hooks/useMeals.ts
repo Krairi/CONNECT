@@ -3,6 +3,7 @@ import { toDomyliError, type DomyliAppError } from "@/src/lib/errors";
 import {
   buildSessionMealDraft,
   confirmMealSlot,
+  reopenMealSlot as reopenMealSlotRpc,
   createMeal,
   listInventoryMappingCandidates,
   listInventoryMappingTargets,
@@ -21,6 +22,7 @@ import {
   type InventoryMappingUpsertResult,
   type MealConfirmResult,
   type MealConfirmationServerDetail,
+  type MealReopenResult,
   type MealDraft,
   type MealFeedItem,
   type MealFeedQuery,
@@ -56,6 +58,7 @@ type MealsState = {
   loadingProfiles: boolean;
   saving: boolean;
   confirming: boolean;
+  reopening: boolean;
   candidatesLoading: boolean;
   previewLoading: boolean;
   mappingTargetsLoading: boolean;
@@ -82,6 +85,7 @@ type MealsState = {
   lastCreatedMealSlotId: string | null;
   lastUpdatedMealSlotId: string | null;
   lastConfirmResult: MealConfirmResult | null;
+  lastReopenResult: MealReopenResult | null;
   lastInventoryMappingResult: InventoryMappingUpsertResult | null;
 };
 
@@ -89,6 +93,7 @@ const initialState: MealsState = {
   loadingProfiles: false,
   saving: false,
   confirming: false,
+  reopening: false,
   candidatesLoading: false,
   previewLoading: false,
   mappingTargetsLoading: false,
@@ -115,6 +120,7 @@ const initialState: MealsState = {
   lastCreatedMealSlotId: null,
   lastUpdatedMealSlotId: null,
   lastConfirmResult: null,
+  lastReopenResult: null,
   lastInventoryMappingResult: null,
 };
 
@@ -540,6 +546,7 @@ export function useMeals() {
       error: null,
       lastCreatedMealSlotId: null,
       lastUpdatedMealSlotId: null,
+      lastReopenResult: null,
     }));
 
     try {
@@ -590,6 +597,7 @@ export function useMeals() {
       error: null,
       lastCreatedMealSlotId: null,
       lastUpdatedMealSlotId: null,
+      lastReopenResult: null,
     }));
 
     try {
@@ -641,6 +649,7 @@ export function useMeals() {
       confirming: true,
       error: null,
       lastConfirmResult: null,
+      lastReopenResult: null,
     }));
 
     try {
@@ -700,6 +709,74 @@ export function useMeals() {
     }
   };
 
+  const reopenMealSlotAction = async (
+    mealSlotId: string,
+    reason?: string | null,
+  ): Promise<MealReopenResult> => {
+    setState((prev) => ({
+      ...prev,
+      reopening: true,
+      error: null,
+      lastReopenResult: null,
+    }));
+
+    try {
+      const result = await reopenMealSlotRpc(mealSlotId, reason);
+      const [selectedMealDetail, selectedMealExecution] = await Promise.all([
+        readMealSlotDetail(mealSlotId).catch(() => null),
+        readMealConfirmationServer(mealSlotId).catch(() => null),
+      ]);
+
+      setState((prev) => ({
+        ...prev,
+        reopening: false,
+        lastConfirmResult:
+          prev.lastConfirmResult?.meal_slot_id === mealSlotId
+            ? null
+            : prev.lastConfirmResult,
+        lastReopenResult: result,
+        selectedMealDetail:
+          selectedMealDetail ??
+          (prev.selectedMealDetail?.meal_slot_id === mealSlotId
+            ? {
+                ...prev.selectedMealDetail,
+                status: result.status ?? prev.selectedMealDetail.status,
+                updated_at: result.reopened_at ?? prev.selectedMealDetail.updated_at,
+              }
+            : prev.selectedMealDetail),
+        selectedMealExecution:
+          selectedMealExecution ??
+          (prev.selectedMealExecution?.meal_slot_id === mealSlotId
+            ? {
+                ...prev.selectedMealExecution,
+                status: result.status ?? prev.selectedMealExecution.status,
+              }
+            : prev.selectedMealExecution),
+        items: prev.items.map((item) =>
+          item.meal_slot_id === mealSlotId
+            ? {
+                ...item,
+                status: result.status ?? item.status,
+                updated_at: result.reopened_at ?? item.updated_at,
+              }
+            : item,
+        ),
+      }));
+
+      return result;
+    } catch (error) {
+      const normalized = toDomyliError(error);
+
+      setState((prev) => ({
+        ...prev,
+        reopening: false,
+        error: normalized,
+      }));
+
+      throw normalized;
+    }
+  };
+
   return {
     ...state,
     refreshActiveProfiles,
@@ -714,5 +791,6 @@ export function useMeals() {
     createMeal: createMealAction,
     updateMeal: updateMealAction,
     confirmMealSlot: confirmMealSlotAction,
+    reopenMealSlot: reopenMealSlotAction,
   };
 }

@@ -336,6 +336,84 @@ export type MealConfirmationServerDetail = {
   alerts: MealConfirmAlert[];
 };
 
+type RawMealReopenOutput = {
+  meal_slot_id?: string | null;
+  previous_status?: string | null;
+  status?: string | null;
+  reopened_at?: string | null;
+  execution_source?: string | null;
+  event_log_id?: string | null;
+  event_name?: string | null;
+  actor_user_id?: string | null;
+  shopping_rebuild_status?: string | null;
+  inventory_compensation_status?: string | null;
+  reason?: string | null;
+  previous_confirmation_status?: string | null;
+  previous_confirmation_recorded_at?: string | null;
+  previous_confirmation_consumption_line_count?: number | null;
+  previous_confirmation_alert_count?: number | null;
+  compensation_line_count?: number | null;
+  restored_count?: number | null;
+  failed_count?: number | null;
+  skipped_count?: number | null;
+  compensation_lines?: RawMealReopenCompensationLine[] | null;
+  detail_message?: string | null;
+};
+
+type RawMealReopenCompensationLine = {
+  ingredient_code?: string | null;
+  ingredient_label?: string | null;
+  unit_code?: string | null;
+  inventory_item_id?: string | null;
+  inventory_item_code?: string | null;
+  inventory_item_label?: string | null;
+  compensation_status?: string | null;
+  quantity_to_restore?: number | null;
+  quantity_restored?: number | null;
+  before_qty?: number | null;
+  after_qty?: number | null;
+  alert_sync_status?: string | null;
+};
+
+export type MealReopenCompensationLine = {
+  ingredient_code: string;
+  ingredient_label: string;
+  unit_code: string | null;
+  inventory_item_id: string | null;
+  inventory_item_code: string | null;
+  inventory_item_label: string | null;
+  compensation_status: string | null;
+  quantity_to_restore: number | null;
+  quantity_restored: number | null;
+  before_qty: number | null;
+  after_qty: number | null;
+  alert_sync_status: string | null;
+};
+
+export type MealReopenResult = {
+  meal_slot_id: string | null;
+  previous_status: string | null;
+  status: string | null;
+  reopened_at: string | null;
+  execution_source: string | null;
+  event_log_id: string | null;
+  event_name: string | null;
+  actor_user_id: string | null;
+  shopping_rebuild_status: string | null;
+  inventory_compensation_status: string | null;
+  reason: string | null;
+  previous_confirmation_status: string | null;
+  previous_confirmation_recorded_at: string | null;
+  previous_confirmation_consumption_line_count: number;
+  previous_confirmation_alert_count: number;
+  compensation_line_count: number;
+  restored_count: number;
+  failed_count: number;
+  skipped_count: number;
+  compensation_lines: MealReopenCompensationLine[];
+  detail_message: string | null;
+};
+
 
 type RawMealSlotDetailIngredient = {
   recipe_ingredient_id?: string | null;
@@ -667,6 +745,64 @@ function normalizeMealConfirmationServerDetail(
   };
 }
 
+function normalizeMealReopenCompensationLine(
+  raw: RawMealReopenCompensationLine,
+): MealReopenCompensationLine {
+  return {
+    ingredient_code: raw.ingredient_code ?? "UNKNOWN_INGREDIENT",
+    ingredient_label: raw.ingredient_label ?? "Ingrédient",
+    unit_code: raw.unit_code ?? null,
+    inventory_item_id: raw.inventory_item_id ?? null,
+    inventory_item_code: raw.inventory_item_code ?? null,
+    inventory_item_label: raw.inventory_item_label ?? null,
+    compensation_status: raw.compensation_status ?? null,
+    quantity_to_restore:
+      raw.quantity_to_restore != null ? Number(raw.quantity_to_restore) : null,
+    quantity_restored:
+      raw.quantity_restored != null ? Number(raw.quantity_restored) : null,
+    before_qty: raw.before_qty != null ? Number(raw.before_qty) : null,
+    after_qty: raw.after_qty != null ? Number(raw.after_qty) : null,
+    alert_sync_status: raw.alert_sync_status ?? null,
+  };
+}
+
+function normalizeMealReopenResult(
+  raw: RawMealReopenOutput | null | undefined,
+): MealReopenResult {
+  return {
+    meal_slot_id: raw?.meal_slot_id ?? null,
+    previous_status: raw?.previous_status ?? null,
+    status: raw?.status ?? null,
+    reopened_at: raw?.reopened_at ?? null,
+    execution_source: raw?.execution_source ?? null,
+    event_log_id: raw?.event_log_id ?? null,
+    event_name: raw?.event_name ?? null,
+    actor_user_id: raw?.actor_user_id ?? null,
+    shopping_rebuild_status: raw?.shopping_rebuild_status ?? null,
+    inventory_compensation_status:
+      raw?.inventory_compensation_status ?? null,
+    reason: raw?.reason ?? null,
+    previous_confirmation_status:
+      raw?.previous_confirmation_status ?? null,
+    previous_confirmation_recorded_at:
+      raw?.previous_confirmation_recorded_at ?? null,
+    previous_confirmation_consumption_line_count: Number(
+      raw?.previous_confirmation_consumption_line_count ?? 0,
+    ),
+    previous_confirmation_alert_count: Number(
+      raw?.previous_confirmation_alert_count ?? 0,
+    ),
+    compensation_line_count: Number(raw?.compensation_line_count ?? 0),
+    restored_count: Number(raw?.restored_count ?? 0),
+    failed_count: Number(raw?.failed_count ?? 0),
+    skipped_count: Number(raw?.skipped_count ?? 0),
+    compensation_lines: Array.isArray(raw?.compensation_lines)
+      ? raw.compensation_lines.map(normalizeMealReopenCompensationLine)
+      : [],
+    detail_message: raw?.detail_message ?? null,
+  };
+}
+
 function normalizeInventoryMappingTarget(
   raw: RawInventoryMappingTarget,
 ): InventoryMappingTarget {
@@ -921,6 +1057,31 @@ export async function readMealConfirmationServer(
     })) as RawMealConfirmationRead | null;
 
     return normalizeMealConfirmationServerDetail(raw);
+  } catch (error) {
+    throw toDomyliError(error);
+  }
+}
+
+export async function reopenMealSlot(
+  mealSlotId: string,
+  reason?: string | null,
+): Promise<MealReopenResult> {
+  try {
+    if (!mealSlotId.trim()) {
+      throw new Error("DOMYLI_MEAL_SLOT_ID_REQUIRED");
+    }
+
+    const raw = (await callRpc("rpc_meal_reopen_v2", {
+      p_meal_slot_id: mealSlotId.trim(),
+      p_reason: reason?.trim() || null,
+    }, {
+      unwrap: true,
+      timeoutMs: 15_000,
+      retries: 1,
+      retryDelayMs: 900,
+    })) as RawMealReopenOutput | null;
+
+    return normalizeMealReopenResult(raw);
   } catch (error) {
     throw toDomyliError(error);
   }

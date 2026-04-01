@@ -34,6 +34,7 @@ import type {
   InventoryMappingTarget,
   MealConfirmConsumptionLine,
   MealFeedItem,
+  MealReopenCompensationLine,
   MealType,
   RecipeCandidate,
   RecipePreviewIngredient,
@@ -251,6 +252,43 @@ function getShoppingStatusTone(
   if (value === "MISSING") return "warning";
   if (value?.startsWith("FAILED")) return "danger";
   return "default";
+}
+
+function getInventoryCompensationTone(
+  value: string | null | undefined,
+): "default" | "warning" | "danger" | "success" {
+  if (value?.startsWith("APPLIED")) return "success";
+  if (value?.startsWith("FAILED")) return "danger";
+  if (value?.startsWith("NOT_IMPLEMENTED")) return "warning";
+  return "default";
+}
+
+function getReopenCompensationLineTone(
+  value: string | null | undefined,
+): "default" | "warning" | "danger" | "success" {
+  if (value === "RESTORED") return "success";
+  if (value?.includes("FAILED") || value?.includes("NOT_FOUND")) return "danger";
+  if (value?.includes("SKIP") || value?.includes("NO_")) return "warning";
+  return "default";
+}
+
+function getReopenCompensationLineLabel(
+  value: string | null | undefined,
+): string {
+  switch (value) {
+    case "RESTORED":
+      return "Restauré";
+    case "NO_COMPENSATION_UNMAPPED":
+      return "Non compensé";
+    case "NO_CONSUMPTION_TO_RESTORE":
+      return "Aucune restauration";
+    case "INVENTORY_ITEM_NOT_FOUND":
+      return "Article introuvable";
+    case "ALERT_SYNC_FAILED":
+      return "Alerte non synchro";
+    default:
+      return value ?? "Inconnu";
+  }
 }
 
 function getExecutionSourceTone(
@@ -529,6 +567,74 @@ function ConsumptionLineCard({
   );
 }
 
+function ReopenCompensationLineCard({
+  line,
+}: {
+  line: MealReopenCompensationLine;
+}) {
+  return (
+    <div className="rounded-[24px] border border-white/10 bg-black/20 p-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <p className="text-sm font-semibold text-white">{line.ingredient_code}</p>
+          <p className="mt-1 text-sm text-white/60">{line.ingredient_label}</p>
+          <p className="mt-1 text-xs uppercase tracking-[0.16em] text-gold/75">
+            {line.inventory_item_label ?? line.inventory_item_code ?? "Article stock"}
+          </p>
+        </div>
+        <ToneBadge
+          label={getReopenCompensationLineLabel(line.compensation_status)}
+          tone={getReopenCompensationLineTone(line.compensation_status)}
+        />
+      </div>
+
+      <div className="mt-4 grid gap-3 sm:grid-cols-4">
+        <div className="rounded-2xl border border-white/10 bg-black/20 p-3">
+          <p className="text-[11px] uppercase tracking-[0.16em] text-white/45">
+            À restaurer
+          </p>
+          <p className="mt-2 text-sm font-semibold text-white">
+            {formatMetricValue(line.quantity_to_restore)} {line.unit_code ?? ""}
+          </p>
+        </div>
+
+        <div className="rounded-2xl border border-white/10 bg-black/20 p-3">
+          <p className="text-[11px] uppercase tracking-[0.16em] text-white/45">
+            Restauré
+          </p>
+          <p className="mt-2 text-sm font-semibold text-white">
+            {formatMetricValue(line.quantity_restored)} {line.unit_code ?? ""}
+          </p>
+        </div>
+
+        <div className="rounded-2xl border border-white/10 bg-black/20 p-3">
+          <p className="text-[11px] uppercase tracking-[0.16em] text-white/45">
+            Avant
+          </p>
+          <p className="mt-2 text-sm font-semibold text-white">
+            {formatMetricValue(line.before_qty)} {line.unit_code ?? ""}
+          </p>
+        </div>
+
+        <div className="rounded-2xl border border-white/10 bg-black/20 p-3">
+          <p className="text-[11px] uppercase tracking-[0.16em] text-white/45">
+            Après
+          </p>
+          <p className="mt-2 text-sm font-semibold text-white">
+            {formatMetricValue(line.after_qty)} {line.unit_code ?? ""}
+          </p>
+        </div>
+      </div>
+
+      {line.alert_sync_status ? (
+        <p className="mt-3 text-xs uppercase tracking-[0.16em] text-white/45">
+          Sync alerte : <span className="text-white">{line.alert_sync_status}</span>
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
 function HistoryEntryCard({
   entry,
   onSelect,
@@ -643,6 +749,7 @@ export default function MealsPage() {
     loadingProfiles,
     saving,
     confirming,
+    reopening,
     candidatesLoading,
     previewLoading,
     mappingTargetsLoading,
@@ -664,10 +771,12 @@ export default function MealsPage() {
     lastCreatedMealSlotId,
     lastUpdatedMealSlotId,
     lastConfirmResult,
+    lastReopenResult,
     lastInventoryMappingResult,
     createMeal,
     updateMeal,
     confirmMealSlot,
+    reopenMealSlot,
     refreshRecipeCandidates,
     refreshRecipePreview,
     refreshInventoryMappingCandidates,
@@ -688,6 +797,7 @@ export default function MealsPage() {
   const [sortMode, setSortMode] = useState<RecipeSortMode>("COMPATIBILITY");
   const [selectedRecipeId, setSelectedRecipeId] = useState("");
   const [operatorNotes, setOperatorNotes] = useState("");
+  const [reopenReason, setReopenReason] = useState("");
   const [mappingSearch, setMappingSearch] = useState("");
   const [activeMappingTargetCode, setActiveMappingTargetCode] = useState("");
   const [localMessage, setLocalMessage] = useState<string | null>(null);
@@ -844,6 +954,8 @@ export default function MealsPage() {
   );
 
   const canConfirm = Boolean(effectiveMealSlotId);
+  const currentMealStatus = (selectedMealDetail?.status ?? selectedMealExecution?.status ?? lastConfirmResult?.status ?? "").toUpperCase();
+  const canReopen = Boolean(effectiveMealSlotId && currentMealStatus === "CONFIRMED");
 
   function toggleIntent(code: SearchIntentCode) {
     setSelectedIntentCodes((current) =>
@@ -936,7 +1048,7 @@ export default function MealsPage() {
     });
     await refreshMealDetail(result.meal_slot_id);
 
-    setLocalMessage("Repas créé avec succès dans Meals V3.5 et snapshot back rechargé.");
+    setLocalMessage("Repas créé avec succès dans Meals V3.7 et snapshot back rechargé.");
   }
 
   async function handleConfirm() {
@@ -960,6 +1072,28 @@ export default function MealsPage() {
     );
   }
 
+  async function handleReopen() {
+    if (!effectiveMealSlotId) return;
+
+    setLocalMessage(null);
+
+    await reopenMealSlot(effectiveMealSlotId, reopenReason);
+
+    await refreshMealFeed({
+      p_from_date: feedFromDate,
+      p_to_date: feedToDate,
+      p_profile_id: selectedProfileId || null,
+      p_meal_type: mealType,
+      p_limit: 80,
+    });
+    await refreshMealDetail(effectiveMealSlotId);
+    await refreshMealExecution(effectiveMealSlotId);
+
+    setLocalMessage(
+      "Repas rouvert. Le statut est repassé à PLANNED et le shopping a été relancé si disponible.",
+    );
+  }
+
   if (authLoading || bootstrapLoading || loadingProfiles) {
     return (
       <div className="min-h-screen bg-black px-6 py-16 text-white">
@@ -970,7 +1104,7 @@ export default function MealsPage() {
               DOMYLI
             </p>
             <h1 className="mt-2 text-2xl font-semibold">
-              Chargement Meals V3.5...
+              Chargement Meals V3.7...
             </h1>
           </div>
         </div>
@@ -1817,6 +1951,18 @@ export default function MealsPage() {
               />
             </label>
 
+            <label className="mt-4 block rounded-[24px] border border-white/10 bg-black/20 p-4">
+              <p className="text-[11px] uppercase tracking-[0.16em] text-white/45">
+                Motif de réouverture contrôlée
+              </p>
+              <textarea
+                value={reopenReason}
+                onChange={(event) => setReopenReason(event.target.value)}
+                placeholder="Erreur de validation, changement de recette, correction humaine, stock mal interprété..."
+                className="mt-3 min-h-[96px] w-full resize-none bg-transparent text-sm text-white outline-none placeholder:text-white/30"
+              />
+            </label>
+
             <div className="mt-6 space-y-3">
               <button
                 type="button"
@@ -1845,6 +1991,21 @@ export default function MealsPage() {
                 )}
                 Confirmer le repas
               </button>
+
+
+              <button
+                type="button"
+                disabled={!canReopen || reopening}
+                onClick={() => void handleReopen()}
+                className="inline-flex w-full items-center justify-center gap-3 rounded-full border border-amber-400/30 px-6 py-4 text-sm uppercase tracking-[0.2em] text-amber-100 transition hover:bg-amber-300 hover:text-black disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                {reopening ? (
+                  <LoaderCircle className="h-5 w-5 animate-spin" />
+                ) : (
+                  <RefreshCw className="h-5 w-5" />
+                )}
+                Rouvrir le repas
+              </button>
             </div>
 
             <div className="mt-6 flex flex-wrap gap-3">
@@ -1859,6 +2020,10 @@ export default function MealsPage() {
               <ToneBadge
                 label={selectedRecipe?.recipe_code ?? "aucune recette"}
                 tone="default"
+              />
+              <ToneBadge
+                label={currentMealStatus || "STATUT_INCONNU"}
+                tone={currentMealStatus === "CONFIRMED" ? "success" : "default"}
               />
             </div>
 
@@ -1886,6 +2051,121 @@ export default function MealsPage() {
                       line={line}
                     />
                   ))}
+                </div>
+              </div>
+            ) : null}
+
+
+            {lastReopenResult ? (
+              <div className="mt-6 rounded-[28px] border border-amber-400/20 bg-amber-500/10 p-5">
+                <div className="flex flex-wrap items-center gap-3">
+                  <ToneBadge
+                    label={`${lastReopenResult.previous_status ?? "CONFIRMED"} → ${lastReopenResult.status ?? "PLANNED"}`}
+                    tone="warning"
+                  />
+                  <ToneBadge
+                    label={lastReopenResult.shopping_rebuild_status ?? "shopping inconnu"}
+                    tone={getShoppingStatusTone(lastReopenResult.shopping_rebuild_status)}
+                  />
+                  <ToneBadge
+                    label={lastReopenResult.inventory_compensation_status ?? "compensation inconnue"}
+                    tone={getInventoryCompensationTone(lastReopenResult.inventory_compensation_status)}
+                  />
+                </div>
+
+                <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                  <div className="rounded-[22px] border border-white/10 bg-black/20 p-4">
+                    <p className="text-[11px] uppercase tracking-[0.16em] text-white/45">
+                      Réouvert le
+                    </p>
+                    <p className="mt-3 text-lg font-semibold text-white">
+                      {formatDateTime(lastReopenResult.reopened_at)}
+                    </p>
+                  </div>
+
+                  <div className="rounded-[22px] border border-white/10 bg-black/20 p-4">
+                    <p className="text-[11px] uppercase tracking-[0.16em] text-white/45">
+                      Confirmation précédente
+                    </p>
+                    <p className="mt-3 text-lg font-semibold text-white">
+                      {lastReopenResult.previous_confirmation_status ?? "Non relue"}
+                    </p>
+                  </div>
+
+                  <div className="rounded-[22px] border border-white/10 bg-black/20 p-4">
+                    <p className="text-[11px] uppercase tracking-[0.16em] text-white/45">
+                      Lignes compensées
+                    </p>
+                    <p className="mt-3 text-lg font-semibold text-white">
+                      {lastReopenResult.compensation_line_count}
+                    </p>
+                  </div>
+
+                  <div className="rounded-[22px] border border-white/10 bg-black/20 p-4">
+                    <p className="text-[11px] uppercase tracking-[0.16em] text-white/45">
+                      Alertes relues
+                    </p>
+                    <p className="mt-3 text-lg font-semibold text-white">
+                      {lastReopenResult.previous_confirmation_alert_count}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="mt-5 grid gap-3 sm:grid-cols-3">
+                  <div className="rounded-[22px] border border-emerald-400/15 bg-emerald-500/10 p-4">
+                    <p className="text-[11px] uppercase tracking-[0.16em] text-white/45">
+                      Restaurées
+                    </p>
+                    <p className="mt-3 text-lg font-semibold text-white">
+                      {lastReopenResult.restored_count}
+                    </p>
+                  </div>
+
+                  <div className="rounded-[22px] border border-red-400/15 bg-red-500/10 p-4">
+                    <p className="text-[11px] uppercase tracking-[0.16em] text-white/45">
+                      En échec
+                    </p>
+                    <p className="mt-3 text-lg font-semibold text-white">
+                      {lastReopenResult.failed_count}
+                    </p>
+                  </div>
+
+                  <div className="rounded-[22px] border border-amber-400/15 bg-amber-500/10 p-4">
+                    <p className="text-[11px] uppercase tracking-[0.16em] text-white/45">
+                      Ignorées
+                    </p>
+                    <p className="mt-3 text-lg font-semibold text-white">
+                      {lastReopenResult.skipped_count}
+                    </p>
+                  </div>
+                </div>
+
+                {lastReopenResult.compensation_lines.length > 0 ? (
+                  <div className="mt-5 space-y-3">
+                    {lastReopenResult.compensation_lines.map((line) => (
+                      <ReopenCompensationLineCard
+                        key={`${line.ingredient_code}-${line.inventory_item_id ?? "none"}-${line.compensation_status ?? "status"}`}
+                        line={line}
+                      />
+                    ))}
+                  </div>
+                ) : null}
+
+                <div className="mt-5 rounded-[24px] border border-white/10 bg-black/20 p-4 text-sm text-white/65">
+                  <p>
+                    Détail serveur&nbsp;: <span className="text-white">{lastReopenResult.detail_message ?? "Réouverture compensatrice exécutée."}</span>
+                  </p>
+                  <p className="mt-2">
+                    Trace&nbsp;: <span className="text-white">{lastReopenResult.event_name ?? "MEAL_REOPEN_V2"}</span>
+                  </p>
+                  <p className="mt-2 break-all">
+                    Actor user&nbsp;: <span className="text-white">{lastReopenResult.actor_user_id ?? "Non renvoyé"}</span>
+                  </p>
+                  {lastReopenResult.reason ? (
+                    <p className="mt-2">
+                      Motif&nbsp;: <span className="text-white">{lastReopenResult.reason}</span>
+                    </p>
+                  ) : null}
                 </div>
               </div>
             ) : null}
