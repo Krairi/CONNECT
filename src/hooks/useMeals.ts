@@ -7,6 +7,8 @@ import {
   listInventoryMappingCandidates,
   listInventoryMappingTargets,
   listMealActiveProfiles,
+  listMealSlotsFeed,
+  readMealSlotDetail,
   readRecipeCandidatesForMeal,
   readRecipePreviewForMeal,
   updateMeal,
@@ -18,20 +20,18 @@ import {
   type InventoryMappingUpsertResult,
   type MealConfirmResult,
   type MealDraft,
+  type MealFeedItem,
+  type MealFeedQuery,
   type MealMutationResult,
+  type MealSlotDetail,
   type MealType,
   type RecipeCandidate,
   type RecipePreview,
   type UpdateMealRpcInput,
 } from "@/src/services/meals/mealService";
 
-type CreateMealActionInput = CreateMealRpcInput & {
-  title?: string | null;
-};
-
-type UpdateMealActionInput = UpdateMealRpcInput & {
-  title?: string | null;
-};
+type CreateMealActionInput = CreateMealRpcInput & { title?: string | null };
+type UpdateMealActionInput = UpdateMealRpcInput & { title?: string | null };
 
 export type MealExecutionHistoryEntry = {
   meal_slot_id: string;
@@ -60,6 +60,8 @@ type MealsState = {
   mappingCandidatesLoading: boolean;
   mappingSaving: boolean;
   historyLoading: boolean;
+  mealFeedLoading: boolean;
+  mealDetailLoading: boolean;
   error: DomyliAppError | null;
   items: MealDraft[];
   profiles: ActiveMealProfile[];
@@ -68,6 +70,8 @@ type MealsState = {
   inventoryMappingTargets: InventoryMappingTarget[];
   inventoryMappingCandidates: InventoryMappingCandidate[];
   confirmationHistory: MealExecutionHistoryEntry[];
+  mealFeed: MealFeedItem[];
+  selectedMealDetail: MealSlotDetail | null;
   selectedMealType: MealType;
   selectedProfileId: string;
   selectedRecipeId: string;
@@ -87,6 +91,8 @@ const initialState: MealsState = {
   mappingCandidatesLoading: false,
   mappingSaving: false,
   historyLoading: true,
+  mealFeedLoading: false,
+  mealDetailLoading: false,
   error: null,
   items: [],
   profiles: [],
@@ -95,6 +101,8 @@ const initialState: MealsState = {
   inventoryMappingTargets: [],
   inventoryMappingCandidates: [],
   confirmationHistory: [],
+  mealFeed: [],
+  selectedMealDetail: null,
   selectedMealType: "LUNCH",
   selectedProfileId: "",
   selectedRecipeId: "",
@@ -150,6 +158,7 @@ function upsertHistoryEntry(
   next: MealExecutionHistoryEntry,
 ): MealExecutionHistoryEntry[] {
   const filtered = current.filter((item) => item.meal_slot_id !== next.meal_slot_id);
+
   return [next, ...filtered]
     .sort((a, b) => b.confirmed_at.localeCompare(a.confirmed_at))
     .slice(0, HISTORY_LIMIT);
@@ -194,6 +203,7 @@ export function useMeals() {
 
   useEffect(() => {
     const storedHistory = readHistoryStorage();
+
     setState((prev) => ({
       ...prev,
       historyLoading: false,
@@ -220,11 +230,13 @@ export function useMeals() {
       return profiles;
     } catch (error) {
       const normalized = toDomyliError(error);
+
       setState((prev) => ({
         ...prev,
         loadingProfiles: false,
         error: normalized,
       }));
+
       throw normalized;
     }
   }, []);
@@ -259,11 +271,13 @@ export function useMeals() {
         return recipeCandidates;
       } catch (error) {
         const normalized = toDomyliError(error);
+
         setState((prev) => ({
           ...prev,
           candidatesLoading: false,
           error: normalized,
         }));
+
         throw normalized;
       }
     },
@@ -301,48 +315,48 @@ export function useMeals() {
         return recipePreview;
       } catch (error) {
         const normalized = toDomyliError(error);
+
         setState((prev) => ({
           ...prev,
           previewLoading: false,
           error: normalized,
         }));
+
         throw normalized;
       }
     },
     [state.selectedMealType, state.selectedProfileId, state.selectedRecipeId],
   );
 
-  const refreshInventoryMappingTargets = useCallback(
-    async (includeMapped = true) => {
+  const refreshInventoryMappingTargets = useCallback(async (includeMapped = true) => {
+    setState((prev) => ({
+      ...prev,
+      mappingTargetsLoading: true,
+      error: null,
+    }));
+
+    try {
+      const inventoryMappingTargets = await listInventoryMappingTargets(includeMapped);
+
       setState((prev) => ({
         ...prev,
-        mappingTargetsLoading: true,
-        error: null,
+        mappingTargetsLoading: false,
+        inventoryMappingTargets,
       }));
 
-      try {
-        const inventoryMappingTargets =
-          await listInventoryMappingTargets(includeMapped);
+      return inventoryMappingTargets;
+    } catch (error) {
+      const normalized = toDomyliError(error);
 
-        setState((prev) => ({
-          ...prev,
-          mappingTargetsLoading: false,
-          inventoryMappingTargets,
-        }));
+      setState((prev) => ({
+        ...prev,
+        mappingTargetsLoading: false,
+        error: normalized,
+      }));
 
-        return inventoryMappingTargets;
-      } catch (error) {
-        const normalized = toDomyliError(error);
-        setState((prev) => ({
-          ...prev,
-          mappingTargetsLoading: false,
-          error: normalized,
-        }));
-        throw normalized;
-      }
-    },
-    [],
-  );
+      throw normalized;
+    }
+  }, []);
 
   const refreshInventoryMappingCandidates = useCallback(async (search: string) => {
     setState((prev) => ({
@@ -352,10 +366,7 @@ export function useMeals() {
     }));
 
     try {
-      const inventoryMappingCandidates = await listInventoryMappingCandidates(
-        search,
-        25,
-      );
+      const inventoryMappingCandidates = await listInventoryMappingCandidates(search, 25);
 
       setState((prev) => ({
         ...prev,
@@ -366,11 +377,13 @@ export function useMeals() {
       return inventoryMappingCandidates;
     } catch (error) {
       const normalized = toDomyliError(error);
+
       setState((prev) => ({
         ...prev,
         mappingCandidatesLoading: false,
         error: normalized,
       }));
+
       throw normalized;
     }
   }, []);
@@ -390,7 +403,6 @@ export function useMeals() {
           inventoryItemId,
           notes,
         );
-
         const refreshedTargets = await listInventoryMappingTargets(true);
 
         setState((prev) => ({
@@ -403,16 +415,79 @@ export function useMeals() {
         return result;
       } catch (error) {
         const normalized = toDomyliError(error);
+
         setState((prev) => ({
           ...prev,
           mappingSaving: false,
           error: normalized,
         }));
+
         throw normalized;
       }
     },
     [],
   );
+
+  const refreshMealFeed = useCallback(async (query: MealFeedQuery = {}) => {
+    setState((prev) => ({
+      ...prev,
+      mealFeedLoading: true,
+      error: null,
+    }));
+
+    try {
+      const mealFeed = await listMealSlotsFeed(query);
+
+      setState((prev) => ({
+        ...prev,
+        mealFeedLoading: false,
+        mealFeed,
+      }));
+
+      return mealFeed;
+    } catch (error) {
+      const normalized = toDomyliError(error);
+
+      setState((prev) => ({
+        ...prev,
+        mealFeedLoading: false,
+        error: normalized,
+      }));
+
+      throw normalized;
+    }
+  }, []);
+
+  const refreshMealDetail = useCallback(async (mealSlotId: string) => {
+    setState((prev) => ({
+      ...prev,
+      mealDetailLoading: true,
+      error: null,
+    }));
+
+    try {
+      const selectedMealDetail = await readMealSlotDetail(mealSlotId);
+
+      setState((prev) => ({
+        ...prev,
+        mealDetailLoading: false,
+        selectedMealDetail,
+      }));
+
+      return selectedMealDetail;
+    } catch (error) {
+      const normalized = toDomyliError(error);
+
+      setState((prev) => ({
+        ...prev,
+        mealDetailLoading: false,
+        error: normalized,
+      }));
+
+      throw normalized;
+    }
+  }, []);
+
 
   useEffect(() => {
     void refreshActiveProfiles();
@@ -450,9 +525,7 @@ export function useMeals() {
                 updated_at: result.updated_at,
                 inserted_ingredient_count: result.inserted_ingredient_count,
               }),
-              ...prev.items.filter(
-                (item) => item.meal_slot_id !== result.meal_slot_id,
-              ),
+              ...prev.items.filter((item) => item.meal_slot_id !== result.meal_slot_id),
             ]
           : prev.items,
       }));
@@ -460,11 +533,13 @@ export function useMeals() {
       return result;
     } catch (error) {
       const normalized = toDomyliError(error);
+
       setState((prev) => ({
         ...prev,
         saving: false,
         error: normalized,
       }));
+
       throw normalized;
     }
   };
@@ -510,11 +585,13 @@ export function useMeals() {
       return result;
     } catch (error) {
       const normalized = toDomyliError(error);
+
       setState((prev) => ({
         ...prev,
         saving: false,
         error: normalized,
       }));
+
       throw normalized;
     }
   };
@@ -531,35 +608,40 @@ export function useMeals() {
 
     try {
       const result = await confirmMealSlot(mealSlotId);
-      const sourceItem = state.items.find((item) => item.meal_slot_id === mealSlotId);
-      const historyEntry = buildHistoryEntry(result, sourceItem);
-      const nextHistory = upsertHistoryEntry(state.confirmationHistory, historyEntry);
 
-      writeHistoryStorage(nextHistory);
+      setState((prev) => {
+        const sourceItem = prev.items.find((item) => item.meal_slot_id === mealSlotId);
+        const historyEntry = buildHistoryEntry(result, sourceItem);
+        const nextHistory = upsertHistoryEntry(prev.confirmationHistory, historyEntry);
 
-      setState((prev) => ({
-        ...prev,
-        confirming: false,
-        lastConfirmResult: result,
-        confirmationHistory: nextHistory,
-        items: prev.items.map((item) =>
-          item.meal_slot_id === mealSlotId
-            ? {
-                ...item,
-                status: result.status ?? item.status,
-              }
-            : item,
-        ),
-      }));
+        writeHistoryStorage(nextHistory);
+
+        return {
+          ...prev,
+          confirming: false,
+          lastConfirmResult: result,
+          confirmationHistory: nextHistory,
+          items: prev.items.map((item) =>
+            item.meal_slot_id === mealSlotId
+              ? {
+                  ...item,
+                  status: result.status ?? item.status,
+                }
+              : item,
+          ),
+        };
+      });
 
       return result;
     } catch (error) {
       const normalized = toDomyliError(error);
+
       setState((prev) => ({
         ...prev,
         confirming: false,
         error: normalized,
       }));
+
       throw normalized;
     }
   };
@@ -571,6 +653,8 @@ export function useMeals() {
     refreshRecipePreview,
     refreshInventoryMappingTargets,
     refreshInventoryMappingCandidates,
+    refreshMealFeed,
+    refreshMealDetail,
     saveInventoryMapping,
     createMeal: createMealAction,
     updateMeal: updateMealAction,

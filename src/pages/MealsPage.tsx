@@ -18,9 +18,8 @@ import {
   Utensils,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
-
 import { useAuth } from "@/src/providers/AuthProvider";
-import { useMeals } from "@/src/hooks/useMeals";
+import { useMeals, type MealExecutionHistoryEntry } from "@/src/hooks/useMeals";
 import { ROUTES } from "@/src/constants/routes";
 import {
   RECIPE_MEAL_TYPE_OPTIONS,
@@ -34,7 +33,7 @@ import {
 import type {
   InventoryMappingTarget,
   MealConfirmConsumptionLine,
-  MealExecutionHistoryEntry,
+  MealFeedItem,
   MealType,
   RecipeCandidate,
   RecipePreviewIngredient,
@@ -70,11 +69,14 @@ function todayIsoDate(): string {
   return new Date().toISOString().slice(0, 10);
 }
 
+function addDays(dateIso: string, days: number): string {
+  const date = new Date(`${dateIso}T00:00:00`);
+  date.setDate(date.getDate() + days);
+  return date.toISOString().slice(0, 10);
+}
+
 function normalizeText(value: string): string {
-  return value
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toLowerCase();
+  return value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
 }
 
 function formatCodeLabel(value: string): string {
@@ -93,6 +95,7 @@ function formatDateTime(value: string | null | undefined): string {
   if (!value) return "—";
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return value;
+
   return date.toLocaleString("fr-FR", {
     dateStyle: "short",
     timeStyle: "short",
@@ -149,6 +152,7 @@ function sortRecipes(
     if (sortMode === "FAST") {
       const aTime = a.prep_minutes + a.cook_minutes;
       const bTime = b.prep_minutes + b.cook_minutes;
+
       return (
         aTime - bTime ||
         b.fit.fit_score - a.fit.fit_score ||
@@ -267,7 +271,7 @@ function ToneBadge({
 
   return (
     <span
-      className={`inline-flex items-center rounded-full px-3 py-1 text-[11px] uppercase tracking-[0.18em] ${className}`}
+      className={`inline-flex items-center rounded-full px-3 py-1 text-[11px] font-medium uppercase tracking-[0.18em] ${className}`}
     >
       {label}
     </span>
@@ -291,23 +295,24 @@ function ProfileCard({
     <button
       type="button"
       onClick={onClick}
-      className={`rounded-3xl border p-5 text-left transition-all ${
+      className={`group rounded-[28px] border p-5 text-left transition ${
         isActive
-          ? "border-gold bg-gold/10 shadow-[0_0_0_1px_rgba(212,175,55,0.25)]"
-          : "border-white/10 bg-white/5 hover:border-gold/40 hover:bg-white/10"
+          ? "border-gold/50 bg-gold/10 shadow-[0_0_0_1px_rgba(255,215,0,0.12)]"
+          : "border-white/10 bg-white/5 hover:border-white/20 hover:bg-white/[0.07]"
       }`}
     >
-      <div className="flex items-start justify-between gap-4">
+      <div className="flex items-center justify-between gap-3">
         <div>
-          <p className="text-sm uppercase tracking-[0.25em] text-white/45">
+          <p className="text-[11px] uppercase tracking-[0.18em] text-white/45">
             Profil actif
           </p>
           <h3 className="mt-2 text-lg font-semibold text-white">{label}</h3>
         </div>
-        {isActive ? <ToneBadge label="Sélectionné" /> : null}
+        {isActive ? <ToneBadge label="Sélectionné" tone="success" /> : null}
       </div>
+
       <p className="mt-3 text-sm text-white/70">{summary}</p>
-      <p className="mt-4 text-xs uppercase tracking-[0.18em] text-gold/80">
+      <p className="mt-3 text-xs uppercase tracking-[0.18em] text-gold/80">
         {meta}
       </p>
     </button>
@@ -334,33 +339,39 @@ function RecipeCard({
     <button
       type="button"
       onClick={onSelect}
-      className={`rounded-3xl border p-5 text-left transition-all ${
+      className={`rounded-[28px] border p-5 text-left transition ${
         isSelected
-          ? "border-gold bg-gold/10 shadow-[0_0_0_1px_rgba(212,175,55,0.25)]"
-          : "border-white/10 bg-white/5 hover:border-gold/40 hover:bg-white/10"
+          ? "border-gold/50 bg-gold/10 shadow-[0_0_0_1px_rgba(255,215,0,0.12)]"
+          : "border-white/10 bg-white/5 hover:border-white/20 hover:bg-white/[0.07]"
       }`}
     >
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <p className="text-xs uppercase tracking-[0.22em] text-gold/80">
-            {recipe.personalized_serving_label}
-          </p>
-          <h3 className="mt-2 text-lg font-semibold text-white">
-            {recipe.title}
-          </h3>
-          <p className="mt-2 text-sm text-white/65">{recipe.short_description}</p>
-        </div>
+      <div className="flex flex-wrap items-center gap-2">
         <ToneBadge
           label={getRecipeFitStatusLabel(recipe.fit.fit_status)}
           tone={fitTone}
         />
+        <ToneBadge
+          label={getRecipeDifficultyLabel(recipe.difficulty)}
+          tone="default"
+        />
+        <ToneBadge
+          label={getRecipeStockIntensityLabel(recipe.stock_intensity)}
+          tone="default"
+        />
       </div>
 
-      <div className="mt-4 flex flex-wrap gap-2">
-        <ToneBadge label={`${recipe.prep_minutes + recipe.cook_minutes} min`} />
-        <ToneBadge label={getRecipeDifficultyLabel(recipe.difficulty)} />
-        <ToneBadge label={getRecipeStockIntensityLabel(recipe.stock_intensity)} />
-        <ToneBadge label={`Score ${recipe.fit.fit_score}`} />
+      <p className="mt-4 text-[11px] uppercase tracking-[0.18em] text-gold/80">
+        {recipe.personalized_serving_label}
+      </p>
+      <h3 className="mt-2 text-lg font-semibold text-white">{recipe.title}</h3>
+      <p className="mt-2 text-sm text-white/70">{recipe.short_description}</p>
+
+      <div className="mt-4 flex flex-wrap gap-2 text-xs text-white/55">
+        <span>{recipe.prep_minutes} min prep</span>
+        <span>·</span>
+        <span>{recipe.cook_minutes} min cuisson</span>
+        <span>·</span>
+        <span>score {formatMetricValue(recipe.fit.fit_score)}</span>
       </div>
 
       {recipe.tags.length > 0 ? (
@@ -368,7 +379,7 @@ function RecipeCard({
           {recipe.tags.slice(0, 6).map((tag) => (
             <span
               key={`${recipe.recipe_id}-${tag.code}`}
-              className="inline-flex rounded-full border border-white/10 bg-black/20 px-3 py-1 text-xs text-white/70"
+              className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-[11px] uppercase tracking-[0.18em] text-white/55"
             >
               {tag.label}
             </span>
@@ -381,66 +392,66 @@ function RecipeCard({
 
 function IngredientLine({ ingredient }: { ingredient: RecipePreviewIngredient }) {
   return (
-    <div className="grid grid-cols-[1fr_auto] gap-3 border-b border-white/6 py-3 last:border-b-0">
-      <div>
-        <p className="text-sm font-medium text-white">{ingredient.ingredient_label}</p>
-        <p className="mt-1 text-xs uppercase tracking-[0.18em] text-white/45">
-          {getIngredientRoleLabel(ingredient.nutrition_role)} ·{" "}
-          {ingredient.scaling_policy}
-        </p>
-      </div>
-      <div className="text-right">
-        <p className="text-sm font-semibold text-gold">
-          {ingredient.qty_adjusted} {ingredient.unit_code}
-        </p>
-        <p className="mt-1 text-xs text-white/45">
-          base {ingredient.qty_base} {ingredient.unit_code}
-        </p>
+    <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <p className="text-sm font-medium text-white">
+            {ingredient.ingredient_label}
+          </p>
+          <p className="mt-1 text-[11px] uppercase tracking-[0.16em] text-white/45">
+            {getIngredientRoleLabel(ingredient.nutrition_role)} ·{" "}
+            {ingredient.scaling_policy}
+          </p>
+        </div>
+
+        <div className="text-right">
+          <p className="text-sm font-semibold text-gold">
+            {formatMetricValue(ingredient.qty_adjusted)} {ingredient.unit_code}
+          </p>
+          <p className="text-xs text-white/45">
+            base {formatMetricValue(ingredient.qty_base)} {ingredient.unit_code}
+          </p>
+        </div>
       </div>
     </div>
   );
 }
 
-function MappingStatusCard({
+function MappingTargetCard({
   target,
   isActive,
-  onSelect,
+  onClick,
 }: {
   target: InventoryMappingTarget;
   isActive: boolean;
-  onSelect: () => void;
+  onClick: () => void;
 }) {
   const isMapped = Boolean(target.mapped_inventory_item_id);
 
   return (
     <button
       type="button"
-      onClick={onSelect}
-      className={`w-full rounded-3xl border p-4 text-left transition ${
+      onClick={onClick}
+      className={`rounded-[24px] border p-4 text-left transition ${
         isActive
-          ? "border-gold bg-gold/10"
-          : "border-white/10 bg-black/20 hover:border-white/20"
+          ? "border-gold/50 bg-gold/10"
+          : "border-white/10 bg-white/5 hover:border-white/20"
       }`}
     >
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <p className="text-xs uppercase tracking-[0.18em] text-white/45">
-            {target.ingredient_code}
-          </p>
-          <h3 className="mt-2 text-sm font-semibold text-white">
-            {target.ingredient_label}
-          </h3>
-          <p className="mt-2 text-xs text-white/55">
-            Recettes {target.recipe_usage_count} · Repas {target.meal_usage_count}
-          </p>
-        </div>
+      <div className="flex flex-wrap items-center gap-2">
         <ToneBadge
-          label={isMapped ? "Mappé" : "À mapper"}
+          label={isMapped ? "Mappé" : "À relier"}
           tone={isMapped ? "success" : "warning"}
         />
       </div>
 
-      <p className="mt-3 text-xs uppercase tracking-[0.18em] text-gold/80">
+      <h3 className="mt-3 text-base font-semibold text-white">
+        {target.ingredient_label}
+      </h3>
+      <p className="mt-2 text-xs uppercase tracking-[0.16em] text-white/45">
+        Recettes {target.recipe_usage_count} · Repas {target.meal_usage_count}
+      </p>
+      <p className="mt-2 text-sm text-white/65">
         {isMapped
           ? target.mapped_item_label || target.mapped_item_code || "Article stock lié"
           : "Aucun article stock lié"}
@@ -455,18 +466,11 @@ function ConsumptionLineCard({
   line: MealConfirmConsumptionLine;
 }) {
   return (
-    <div className="rounded-3xl border border-white/10 bg-black/20 p-5">
-      <div className="flex items-start justify-between gap-4">
+    <div className="rounded-[24px] border border-white/10 bg-white/5 p-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <p className="text-xs uppercase tracking-[0.18em] text-white/45">
-            {line.ingredient_code}
-          </p>
-          <h3 className="mt-2 text-sm font-semibold text-white">
-            {line.ingredient_label}
-          </h3>
-          <p className="mt-2 text-xs uppercase tracking-[0.18em] text-gold/80">
-            {line.nutrition_role ? formatCodeLabel(line.nutrition_role) : "Rôle non défini"}
-          </p>
+          <p className="text-sm font-semibold text-white">{line.ingredient_code}</p>
+          <p className="mt-1 text-sm text-white/60">{line.ingredient_label}</p>
         </div>
         <ToneBadge
           label={getConsumptionLabel(line.inventory_status)}
@@ -474,9 +478,9 @@ function ConsumptionLineCard({
         />
       </div>
 
-      <div className="mt-4 grid gap-3 sm:grid-cols-2">
-        <div className="rounded-2xl border border-white/8 bg-white/[0.03] p-3">
-          <p className="text-[11px] uppercase tracking-[0.18em] text-white/45">
+      <div className="mt-4 grid gap-3 sm:grid-cols-3">
+        <div className="rounded-2xl border border-white/10 bg-black/20 p-3">
+          <p className="text-[11px] uppercase tracking-[0.16em] text-white/45">
             Planifié
           </p>
           <p className="mt-2 text-sm font-semibold text-white">
@@ -484,108 +488,121 @@ function ConsumptionLineCard({
           </p>
         </div>
 
-        <div className="rounded-2xl border border-white/8 bg-white/[0.03] p-3">
-          <p className="text-[11px] uppercase tracking-[0.18em] text-white/45">
-            Confirmé
-          </p>
-          <p className="mt-2 text-sm font-semibold text-white">
-            {formatMetricValue(line.quantity_confirmed)} {line.unit_code ?? ""}
-          </p>
-        </div>
-
-        <div className="rounded-2xl border border-white/8 bg-white/[0.03] p-3">
-          <p className="text-[11px] uppercase tracking-[0.18em] text-white/45">
-            Avant stock
-          </p>
-          <p className="mt-2 text-sm font-semibold text-white">
-            {formatMetricValue(line.before_qty)}
-          </p>
-        </div>
-
-        <div className="rounded-2xl border border-white/8 bg-white/[0.03] p-3">
-          <p className="text-[11px] uppercase tracking-[0.18em] text-white/45">
-            Après stock
-          </p>
-          <p className="mt-2 text-sm font-semibold text-white">
-            {formatMetricValue(line.after_qty)}
-          </p>
-        </div>
-
-        <div className="rounded-2xl border border-white/8 bg-white/[0.03] p-3">
-          <p className="text-[11px] uppercase tracking-[0.18em] text-white/45">
+        <div className="rounded-2xl border border-white/10 bg-black/20 p-3">
+          <p className="text-[11px] uppercase tracking-[0.16em] text-white/45">
             Consommé
           </p>
           <p className="mt-2 text-sm font-semibold text-white">
-            {formatMetricValue(line.consumed_qty)}
+            {formatMetricValue(line.consumed_qty)} {line.unit_code ?? ""}
           </p>
         </div>
 
-        <div className="rounded-2xl border border-white/8 bg-white/[0.03] p-3">
-          <p className="text-[11px] uppercase tracking-[0.18em] text-white/45">
-            Manque
+        <div className="rounded-2xl border border-white/10 bg-black/20 p-3">
+          <p className="text-[11px] uppercase tracking-[0.16em] text-white/45">
+            Manquant
           </p>
           <p className="mt-2 text-sm font-semibold text-white">
-            {formatMetricValue(line.shortage_qty)}
+            {formatMetricValue(line.shortage_qty)} {line.unit_code ?? ""}
           </p>
         </div>
       </div>
-
-      <p className="mt-4 text-xs uppercase tracking-[0.18em] text-white/45">
-        {line.inventory_item_id
-          ? `Inventory item ${line.inventory_item_id}`
-          : "Aucun inventory item lié"}
-      </p>
     </div>
   );
 }
 
-function HistoryCard({
+function HistoryEntryCard({
   entry,
-  isActive,
-  onOpen,
+  onSelect,
 }: {
   entry: MealExecutionHistoryEntry;
-  isActive: boolean;
-  onOpen: () => void;
+  onSelect: () => void;
 }) {
   return (
     <button
       type="button"
-      onClick={onOpen}
-      className={`w-full rounded-3xl border p-5 text-left transition ${
-        isActive
-          ? "border-gold bg-gold/10"
-          : "border-white/10 bg-black/20 hover:border-white/20"
-      }`}
+      onClick={onSelect}
+      className="rounded-[24px] border border-white/10 bg-white/5 p-4 text-left transition hover:border-white/20"
     >
-      <div className="flex items-start justify-between gap-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <p className="text-xs uppercase tracking-[0.18em] text-white/45">
-            {entry.meal_slot_id}
-          </p>
-          <h3 className="mt-2 text-sm font-semibold text-white">
+          <h3 className="text-base font-semibold text-white">
             {entry.title ?? "Repas DOMYLI"}
           </h3>
-          <p className="mt-2 text-xs text-white/55">
-            {entry.planned_for ?? "Date non renseignée"} · {entry.meal_type ?? "Meal"}
+          <p className="mt-1 text-sm text-white/60">
+            {entry.planned_for ?? "Date non renseignée"} ·{" "}
+            {entry.meal_type ?? "Meal"}
           </p>
         </div>
-        <ToneBadge label={entry.status ?? "CONFIRMED"} tone="success" />
+        <ToneBadge
+          label={entry.status ?? "Historique"}
+          tone={entry.unmapped_count > 0 ? "warning" : "success"}
+        />
       </div>
 
       <div className="mt-4 flex flex-wrap gap-2">
-        <ToneBadge label={`${entry.consumption_line_count} lignes`} />
-        <ToneBadge label={`${entry.consumed_count} consommés`} tone="success" />
         {entry.unmapped_count > 0 ? (
-          <ToneBadge label={`${entry.unmapped_count} non mappés`} tone="danger" />
+          <ToneBadge label={`${entry.unmapped_count} non mappé(s)`} tone="warning" />
         ) : null}
         {entry.partial_count > 0 ? (
-          <ToneBadge label={`${entry.partial_count} partiels`} tone="warning" />
+          <ToneBadge label={`${entry.partial_count} partiel(s)`} tone="warning" />
         ) : null}
       </div>
 
-      <p className="mt-4 text-xs uppercase tracking-[0.18em] text-gold/80">
+      <p className="mt-4 text-xs uppercase tracking-[0.16em] text-white/45">
         Confirmé le {formatDateTime(entry.confirmed_at)}
+      </p>
+    </button>
+  );
+}
+
+function FeedMealCard({
+  item,
+  isActive,
+  onSelect,
+}: {
+  item: MealFeedItem;
+  isActive: boolean;
+  onSelect: () => void;
+}) {
+  const isConfirmed = (item.status ?? "").toUpperCase() === "CONFIRMED";
+
+  return (
+    <button
+      type="button"
+      onClick={onSelect}
+      className={`rounded-[24px] border p-4 text-left transition ${
+        isActive
+          ? "border-gold/50 bg-gold/10"
+          : "border-white/10 bg-white/5 hover:border-white/20"
+      }`}
+    >
+      <div className="flex flex-wrap items-center gap-2">
+        <ToneBadge
+          label={item.status ?? "PLANNED"}
+          tone={isConfirmed ? "success" : "default"}
+        />
+        <ToneBadge label={item.meal_type} tone="default" />
+      </div>
+
+      <h3 className="mt-3 text-base font-semibold text-white">
+        {item.title ?? item.recipe_title ?? "Repas DOMYLI"}
+      </h3>
+
+      <p className="mt-2 text-sm text-white/60">
+        {item.planned_for} · {item.profile_label ?? "Profil"} ·{" "}
+        {item.recipe_code ?? "recette"}
+      </p>
+
+      <div className="mt-4 flex flex-wrap gap-2 text-xs uppercase tracking-[0.16em] text-white/45">
+        <span>{item.inserted_ingredient_count} ingrédients figés</span>
+        <span>·</span>
+        <span>portion {formatMetricValue(item.portion_factor)}</span>
+      </div>
+
+      <p className="mt-4 text-xs uppercase tracking-[0.16em] text-gold/75">
+        {isConfirmed
+          ? `Confirmé ${formatDateTime(item.confirmed_at ?? item.updated_at)}`
+          : `Mis à jour ${formatDateTime(item.updated_at ?? item.created_at)}`}
       </p>
     </button>
   );
@@ -593,6 +610,7 @@ function HistoryCard({
 
 export default function MealsPage() {
   const navigate = useNavigate();
+
   const {
     sessionEmail,
     activeMembership,
@@ -611,15 +629,17 @@ export default function MealsPage() {
     mappingTargetsLoading,
     mappingCandidatesLoading,
     mappingSaving,
-    historyLoading,
+    mealFeedLoading,
+    mealDetailLoading,
     error,
-    items,
     profiles,
     recipeCandidates,
     recipePreview,
     inventoryMappingTargets,
     inventoryMappingCandidates,
     confirmationHistory,
+    mealFeed,
+    selectedMealDetail,
     lastCreatedMealSlotId,
     lastUpdatedMealSlotId,
     lastConfirmResult,
@@ -629,31 +649,31 @@ export default function MealsPage() {
     confirmMealSlot,
     refreshRecipeCandidates,
     refreshRecipePreview,
-    refreshInventoryMappingTargets,
     refreshInventoryMappingCandidates,
+    refreshMealFeed,
+    refreshMealDetail,
     saveInventoryMapping,
   } = useMeals();
 
   const [selectedMealSlotId, setSelectedMealSlotId] = useState("");
   const [selectedProfileId, setSelectedProfileId] = useState("");
   const [plannedFor, setPlannedFor] = useState(todayIsoDate());
+  const [feedFromDate, setFeedFromDate] = useState(todayIsoDate());
+  const [feedToDate, setFeedToDate] = useState(addDays(todayIsoDate(), 7));
   const [mealType, setMealType] = useState<MealType>("LUNCH");
   const [recipeSearch, setRecipeSearch] = useState("");
   const [selectedIntentCodes, setSelectedIntentCodes] = useState<SearchIntentCode[]>([]);
   const [sortMode, setSortMode] = useState<RecipeSortMode>("COMPATIBILITY");
   const [selectedRecipeId, setSelectedRecipeId] = useState("");
   const [operatorNotes, setOperatorNotes] = useState("");
-  const [localMessage, setLocalMessage] = useState<string | null>(null);
-
-  const [activeMappingIngredientCode, setActiveMappingIngredientCode] = useState("");
   const [mappingSearch, setMappingSearch] = useState("");
-  const [mappingNotes, setMappingNotes] = useState("");
-
-  const [activeHistoryMealSlotId, setActiveHistoryMealSlotId] = useState("");
+  const [activeMappingTargetCode, setActiveMappingTargetCode] = useState("");
+  const [localMessage, setLocalMessage] = useState<string | null>(null);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
     const savedProfileId = window.localStorage.getItem(PROFILE_STORAGE_KEY)?.trim();
+
     if (savedProfileId) {
       setSelectedProfileId(savedProfileId);
     }
@@ -686,6 +706,18 @@ export default function MealsPage() {
   }, [mealType, recipeSearch, refreshRecipeCandidates, selectedProfileId]);
 
   useEffect(() => {
+    if (!feedFromDate || !feedToDate) return;
+
+    void refreshMealFeed({
+      p_from_date: feedFromDate,
+      p_to_date: feedToDate,
+      p_profile_id: selectedProfileId || null,
+      p_meal_type: mealType,
+      p_limit: 80,
+    });
+  }, [feedFromDate, feedToDate, mealType, refreshMealFeed, selectedProfileId]);
+
+  useEffect(() => {
     const recipeStillExists = recipeCandidates.some(
       (recipe) => recipe.recipe_id === selectedRecipeId,
     );
@@ -705,20 +737,9 @@ export default function MealsPage() {
     void refreshRecipePreview(mealType, selectedProfileId, selectedRecipeId);
   }, [mealType, refreshRecipePreview, selectedProfileId, selectedRecipeId]);
 
-  useEffect(() => {
-    if (!recipePreview?.ingredients.length) return;
-    void refreshInventoryMappingTargets(true);
-  }, [recipePreview, refreshInventoryMappingTargets]);
-
-  useEffect(() => {
-    if (!confirmationHistory.length) return;
-    if (!activeHistoryMealSlotId) {
-      setActiveHistoryMealSlotId(confirmationHistory[0]?.meal_slot_id ?? "");
-    }
-  }, [activeHistoryMealSlotId, confirmationHistory]);
-
   const selectedProfile = useMemo(
-    () => profiles.find((profile) => profile.profile_id === selectedProfileId) ?? null,
+    () =>
+      profiles.find((profile) => profile.profile_id === selectedProfileId) ?? null,
     [profiles, selectedProfileId],
   );
 
@@ -767,131 +788,31 @@ export default function MealsPage() {
     [recipeCandidates, selectedRecipeId, visibleRecipes],
   );
 
-  const selectedRecipeBlocked =
-    recipePreview?.fit_status === "BLOCKED" ||
-    selectedRecipe?.fit.fit_status === "BLOCKED";
+  const activeMappingTarget = useMemo(
+    () =>
+      inventoryMappingTargets.find(
+        (target) => target.ingredient_code === activeMappingTargetCode,
+      ) ?? inventoryMappingTargets[0] ?? null,
+    [activeMappingTargetCode, inventoryMappingTargets],
+  );
 
   const effectiveMealSlotId = useMemo(
     () =>
-      selectedMealSlotId ||
-      lastUpdatedMealSlotId ||
-      lastCreatedMealSlotId ||
-      "",
+      selectedMealSlotId || lastUpdatedMealSlotId || lastCreatedMealSlotId || "",
     [lastCreatedMealSlotId, lastUpdatedMealSlotId, selectedMealSlotId],
   );
 
-  const mappingIndex = useMemo(() => {
-    return new Map(
-      inventoryMappingTargets.map((target) => [target.ingredient_code, target]),
-    );
-  }, [inventoryMappingTargets]);
-
-  const currentRecipeMappingTargets = useMemo(() => {
-    if (!recipePreview?.ingredients.length) return [];
-
-    return recipePreview.ingredients.map((ingredient) => {
-      return (
-        mappingIndex.get(ingredient.ingredient_code) ?? {
-          ingredient_code: ingredient.ingredient_code,
-          ingredient_label: ingredient.ingredient_label,
-          meal_usage_count: 0,
-          recipe_usage_count: 0,
-          mapped_inventory_item_id: null,
-          mapped_item_code: null,
-          mapped_item_label: null,
-        }
-      );
-    });
-  }, [mappingIndex, recipePreview]);
-
-  const mappedIngredientCount = currentRecipeMappingTargets.filter((target) =>
-    Boolean(target.mapped_inventory_item_id),
-  ).length;
-
   useEffect(() => {
-    if (!currentRecipeMappingTargets.length) {
-      if (activeMappingIngredientCode) {
-        setActiveMappingIngredientCode("");
-      }
-      return;
-    }
-
-    const exists = currentRecipeMappingTargets.some(
-      (target) => target.ingredient_code === activeMappingIngredientCode,
-    );
-
-    if (!exists) {
-      const firstUnmapped =
-        currentRecipeMappingTargets.find((target) => !target.mapped_inventory_item_id) ??
-        currentRecipeMappingTargets[0];
-      setActiveMappingIngredientCode(firstUnmapped?.ingredient_code ?? "");
-    }
-  }, [activeMappingIngredientCode, currentRecipeMappingTargets]);
-
-  const activeMappingTarget = useMemo(
-    () =>
-      currentRecipeMappingTargets.find(
-        (target) => target.ingredient_code === activeMappingIngredientCode,
-      ) ?? null,
-    [activeMappingIngredientCode, currentRecipeMappingTargets],
-  );
-
-  useEffect(() => {
-    if (!activeMappingTarget) return;
-    setMappingSearch(
-      activeMappingTarget.mapped_item_label ||
-        activeMappingTarget.ingredient_label ||
-        activeMappingTarget.ingredient_code,
-    );
-  }, [activeMappingTarget?.ingredient_code]);
-
-  useEffect(() => {
-    if (!activeMappingTarget) return;
-    if (!mappingSearch.trim()) return;
-    void refreshInventoryMappingCandidates(mappingSearch);
-  }, [activeMappingTarget, mappingSearch, refreshInventoryMappingCandidates]);
-
-  const activeHistoryEntry = useMemo(
-    () =>
-      confirmationHistory.find(
-        (entry) => entry.meal_slot_id === activeHistoryMealSlotId,
-      ) ?? confirmationHistory[0] ?? null,
-    [activeHistoryMealSlotId, confirmationHistory],
-  );
-
-  const confirmationSummary = useMemo(() => {
-    if (!lastConfirmResult) {
-      return {
-        consumed: 0,
-        partial: 0,
-        unmapped: 0,
-        shortage: 0,
-      };
-    }
-
-    return lastConfirmResult.consumption_lines.reduce(
-      (acc, line) => {
-        if (line.inventory_status === "CONSUMED") acc.consumed += 1;
-        if (line.inventory_status === "PARTIAL_STOCK") acc.partial += 1;
-        if (line.inventory_status === "NO_INVENTORY_ITEM") acc.unmapped += 1;
-        if ((line.shortage_qty ?? 0) > 0) acc.shortage += 1;
-        return acc;
-      },
-      {
-        consumed: 0,
-        partial: 0,
-        unmapped: 0,
-        shortage: 0,
-      },
-    );
-  }, [lastConfirmResult]);
+    if (!effectiveMealSlotId.trim()) return;
+    if (selectedMealDetail?.meal_slot_id === effectiveMealSlotId) return;
+    void refreshMealDetail(effectiveMealSlotId);
+  }, [effectiveMealSlotId, refreshMealDetail, selectedMealDetail?.meal_slot_id]);
 
   const canSubmit = Boolean(
     selectedProfileId.trim() &&
       selectedRecipe?.recipe_id &&
       plannedFor &&
-      mealType &&
-      !selectedRecipeBlocked,
+      mealType,
   );
 
   const canConfirm = Boolean(effectiveMealSlotId);
@@ -902,6 +823,28 @@ export default function MealsPage() {
         ? current.filter((item) => item !== code)
         : [...current, code],
     );
+  }
+
+  function hydrateMealSelection(item: {
+    meal_slot_id?: string | null;
+    profile_id?: string | null;
+    recipe_id?: string | null;
+    planned_for?: string | null;
+    meal_type?: MealType | null;
+    operator_notes?: string | null;
+  }) {
+    if (!item.profile_id || !item.recipe_id || !item.planned_for || !item.meal_type) {
+      return;
+    }
+
+    setSelectedMealSlotId(item.meal_slot_id ?? "");
+    setSelectedProfileId(item.profile_id);
+    setSelectedRecipeId(item.recipe_id);
+    setPlannedFor(item.planned_for);
+    setMealType(item.meal_type);
+    setRecipeSearch("");
+    setSelectedIntentCodes([]);
+    setOperatorNotes(item.operator_notes ?? "");
   }
 
   async function handleCreateOrUpdate() {
@@ -929,7 +872,19 @@ export default function MealsPage() {
       });
 
       setSelectedMealSlotId(result.meal_slot_id);
-      setLocalMessage("Repas mis à jour avec la recette personnalisée sélectionnée.");
+
+      await refreshMealFeed({
+        p_from_date: feedFromDate,
+        p_to_date: feedToDate,
+        p_profile_id: selectedProfile.profile_id,
+        p_meal_type: mealType,
+        p_limit: 80,
+      });
+      await refreshMealDetail(result.meal_slot_id);
+
+      setLocalMessage(
+        "Repas mis à jour avec la recette personnalisée sélectionnée.",
+      );
       return;
     }
 
@@ -943,69 +898,52 @@ export default function MealsPage() {
     });
 
     setSelectedMealSlotId(result.meal_slot_id);
-    setLocalMessage("Repas créé avec succès dans Meals V3.");
+
+    await refreshMealFeed({
+      p_from_date: feedFromDate,
+      p_to_date: feedToDate,
+      p_profile_id: selectedProfile.profile_id,
+      p_meal_type: mealType,
+      p_limit: 80,
+    });
+    await refreshMealDetail(result.meal_slot_id);
+
+    setLocalMessage("Repas créé avec succès dans Meals V3.5 et snapshot back rechargé.");
   }
 
   async function handleConfirm() {
     if (!effectiveMealSlotId) return;
+
     setLocalMessage(null);
+
     await confirmMealSlot(effectiveMealSlotId);
+
+    await refreshMealFeed({
+      p_from_date: feedFromDate,
+      p_to_date: feedToDate,
+      p_profile_id: selectedProfileId || null,
+      p_meal_type: mealType,
+      p_limit: 80,
+    });
+    await refreshMealDetail(effectiveMealSlotId);
+
     setLocalMessage(
-      "Repas confirmé. Les lignes de consommation, le rebuild shopping et les alertes sont maintenant visibles ci-dessous.",
+      "Repas confirmé. Le back a lancé la consommation stock et le rebuild shopping.",
     );
   }
 
-  async function handleMapCandidate(inventoryItemId: string) {
-    if (!activeMappingTarget) return;
-
-    setLocalMessage(null);
-
-    const result = await saveInventoryMapping(
-      activeMappingTarget.ingredient_code,
-      inventoryItemId,
-      mappingNotes,
-    );
-
-    setLocalMessage(
-      `Mapping enregistré pour ${result.ingredient_code} → ${
-        result.item_label || result.item_code || result.inventory_item_id
-      }.`,
-    );
-  }
-
-  function openHistoryEntry(entry: MealExecutionHistoryEntry) {
-    setActiveHistoryMealSlotId(entry.meal_slot_id);
-    setSelectedMealSlotId(entry.meal_slot_id);
-
-    const matchingSessionMeal = items.find(
-      (item) => item.meal_slot_id === entry.meal_slot_id,
-    );
-
-    if (matchingSessionMeal) {
-      setSelectedProfileId(matchingSessionMeal.profile_id ?? "");
-      setSelectedRecipeId(matchingSessionMeal.recipe_id ?? "");
-      setMealType(matchingSessionMeal.meal_type);
-      setPlannedFor(matchingSessionMeal.planned_for);
-      setOperatorNotes(matchingSessionMeal.notes ?? "");
-      setLocalMessage("Repas de session rechargé dans le formulaire.");
-      return;
-    }
-
-    setLocalMessage(
-      "Historique local chargé. La relecture détaillée cross-session complète demandera ensuite une RPC back canonique de lecture des meal slots.",
-    );
-  }
-
-  if (authLoading || bootstrapLoading || loadingProfiles || historyLoading) {
+  if (authLoading || bootstrapLoading || loadingProfiles) {
     return (
-      <div className="min-h-screen bg-black text-white">
-        <div className="mx-auto flex min-h-screen max-w-7xl items-center justify-center px-6">
-          <div className="rounded-3xl border border-white/10 bg-white/5 px-8 py-7 text-center">
-            <LoaderCircle className="mx-auto h-8 w-8 animate-spin text-gold" />
-            <p className="mt-4 text-sm uppercase tracking-[0.25em] text-white/45">
+      <div className="min-h-screen bg-black px-6 py-16 text-white">
+        <div className="mx-auto flex max-w-3xl items-center gap-4 rounded-[32px] border border-white/10 bg-white/5 px-8 py-10">
+          <LoaderCircle className="h-6 w-6 animate-spin text-gold" />
+          <div>
+            <p className="text-[11px] uppercase tracking-[0.24em] text-white/45">
               DOMYLI
             </p>
-            <h1 className="mt-2 text-xl font-semibold">Chargement Meals V3...</h1>
+            <h1 className="mt-2 text-2xl font-semibold">
+              Chargement Meals V3.5...
+            </h1>
           </div>
         </div>
       </div>
@@ -1014,27 +952,25 @@ export default function MealsPage() {
 
   if (!isAuthenticated || !hasHousehold) {
     return (
-      <div className="min-h-screen bg-black text-white">
-        <div className="mx-auto flex min-h-screen max-w-5xl items-center justify-center px-6">
-          <div className="rounded-[32px] border border-white/10 bg-white/5 p-10 text-center">
-            <ShieldCheck className="mx-auto h-10 w-10 text-gold" />
-            <p className="mt-5 text-sm uppercase tracking-[0.25em] text-gold/80">
-              DOMYLI
-            </p>
-            <h1 className="mt-3 text-3xl font-semibold">Foyer actif requis</h1>
-            <p className="mt-4 max-w-xl text-sm leading-7 text-white/65">
-              Meals V3 exige une session authentifiée, un foyer actif et au moins un
-              profil humain meal-ready.
-            </p>
-            <button
-              type="button"
-              onClick={() => navigate(ROUTES.HOME)}
-              className="mt-8 inline-flex items-center gap-2 rounded-full border border-gold/30 px-6 py-3 text-sm uppercase tracking-[0.2em] text-gold transition hover:bg-gold hover:text-black"
-            >
-              <ArrowLeft className="h-4 w-4" />
-              Retour à l’accueil
-            </button>
-          </div>
+      <div className="min-h-screen bg-black px-6 py-16 text-white">
+        <div className="mx-auto max-w-4xl rounded-[40px] border border-white/10 bg-white/5 p-8">
+          <button
+            type="button"
+            onClick={() => navigate(ROUTES.HOME)}
+            className="inline-flex items-center gap-2 text-sm uppercase tracking-[0.2em] text-white/45 transition hover:text-gold"
+          >
+            <ArrowLeft className="h-4 w-4" />
+            Retour à l’accueil
+          </button>
+
+          <p className="mt-8 text-[11px] uppercase tracking-[0.22em] text-gold/80">
+            DOMYLI
+          </p>
+          <h1 className="mt-3 text-3xl font-semibold">Foyer actif requis</h1>
+          <p className="mt-4 max-w-2xl text-white/70">
+            Meals V3.5 exige une session authentifiée, un foyer actif et au moins
+            un profil humain meal-ready.
+          </p>
         </div>
       </div>
     );
@@ -1042,8 +978,8 @@ export default function MealsPage() {
 
   if (!profiles.length) {
     return (
-      <div className="min-h-screen bg-black text-white">
-        <div className="mx-auto max-w-5xl px-6 py-16">
+      <div className="min-h-screen bg-black px-6 py-16 text-white">
+        <div className="mx-auto max-w-4xl rounded-[40px] border border-white/10 bg-white/5 p-8">
           <button
             type="button"
             onClick={() => navigate(ROUTES.DASHBOARD)}
@@ -1053,29 +989,26 @@ export default function MealsPage() {
             Retour dashboard
           </button>
 
-          <div className="mt-10 rounded-[32px] border border-white/10 bg-white/5 p-10">
-            <UserRound className="h-10 w-10 text-gold" />
-            <p className="mt-5 text-sm uppercase tracking-[0.25em] text-gold/80">
-              Meals V3
-            </p>
-            <h1 className="mt-3 text-3xl font-semibold">
-              Aucun profil actif prêt pour Meals
-            </h1>
-            <p className="mt-4 max-w-2xl text-sm leading-7 text-white/65">
-              Complète au moins un profil avec un poids valide pour débloquer la
-              personnalisation unipersonnelle des recettes et des quantités.
-            </p>
+          <p className="mt-8 text-[11px] uppercase tracking-[0.22em] text-gold/80">
+            Meals V3.4
+          </p>
+          <h1 className="mt-3 text-3xl font-semibold">
+            Aucun profil actif prêt pour Meals
+          </h1>
+          <p className="mt-4 max-w-2xl text-white/70">
+            Complète au moins un profil avec un poids valide pour débloquer la
+            personnalisation unipersonnelle des recettes et des quantités.
+          </p>
 
-            <div className="mt-8 flex flex-wrap gap-4">
-              <button
-                type="button"
-                onClick={() => navigate(ROUTES.PROFILES)}
-                className="inline-flex items-center gap-2 rounded-full border border-gold/30 px-6 py-3 text-sm uppercase tracking-[0.2em] text-gold transition hover:bg-gold hover:text-black"
-              >
-                Aller aux profils
-                <ChevronRight className="h-4 w-4" />
-              </button>
-            </div>
+          <div className="mt-8">
+            <button
+              type="button"
+              onClick={() => navigate(ROUTES.PROFILES)}
+              className="inline-flex items-center gap-2 rounded-full border border-gold/30 px-6 py-3 text-sm uppercase tracking-[0.2em] text-gold transition hover:bg-gold hover:text-black"
+            >
+              Voir les profils
+              <ChevronRight className="h-4 w-4" />
+            </button>
           </div>
         </div>
       </div>
@@ -1083,255 +1016,655 @@ export default function MealsPage() {
   }
 
   return (
-    <div className="min-h-screen bg-black text-white">
-      <div className="mx-auto max-w-7xl px-6 py-10">
-        <div className="flex flex-wrap items-center justify-between gap-5">
-          <div>
-            <button
-              type="button"
-              onClick={() => navigate(ROUTES.DASHBOARD)}
-              className="inline-flex items-center gap-2 text-sm uppercase tracking-[0.2em] text-white/45 transition hover:text-gold"
-            >
-              <ArrowLeft className="h-4 w-4" />
-              Dashboard
-            </button>
+    <div className="min-h-screen bg-black px-6 py-10 text-white">
+      <div className="mx-auto max-w-[1480px]">
+        <div className="rounded-[40px] border border-white/10 bg-[radial-gradient(circle_at_top,rgba(255,215,0,0.08),transparent_40%),rgba(255,255,255,0.03)] p-8">
+          <div className="flex flex-col gap-6 xl:flex-row xl:items-end xl:justify-between">
+            <div>
+              <button
+                type="button"
+                onClick={() => navigate(ROUTES.DASHBOARD)}
+                className="inline-flex items-center gap-2 text-sm uppercase tracking-[0.2em] text-white/45 transition hover:text-gold"
+              >
+                <ArrowLeft className="h-4 w-4" />
+                Dashboard
+              </button>
 
-            <p className="mt-6 text-sm uppercase tracking-[0.28em] text-gold/80">
-              DOMYLI · Meals V3.3
-            </p>
-            <h1 className="mt-3 text-4xl font-semibold tracking-tight">
-              Exécution visible + historique local
-            </h1>
-            <p className="mt-4 max-w-3xl text-sm leading-7 text-white/65">
-              La page Meals conserve maintenant un historique local persistant des
-              confirmations et permet de recharger rapidement un repas déjà manipulé.
-            </p>
+              <p className="mt-8 text-[11px] uppercase tracking-[0.22em] text-gold/80">
+                DOMYLI · Meals V3.4
+              </p>
+              <h1 className="mt-3 text-4xl font-semibold">
+                Planification réelle + reprise canonique des repas
+              </h1>
+              <p className="mt-4 max-w-4xl text-white/70">
+                Une seule personne. Un seul profil actif. Des recettes directement
+                sélectionnables. Des quantités recalculées à partir du poids. Et
+                désormais une lecture back des repas déjà créés pour les reprendre
+                proprement en multi-session.
+              </p>
+            </div>
+
+            <div className="grid gap-3 sm:grid-cols-2 xl:min-w-[420px]">
+              <div className="rounded-[28px] border border-white/10 bg-black/20 p-4">
+                <p className="text-[11px] uppercase tracking-[0.18em] text-white/45">
+                  Session
+                </p>
+                <p className="mt-2 text-sm font-semibold text-white">
+                  {sessionEmail ?? "Utilisateur DOMYLI"}
+                </p>
+                <p className="mt-2 text-xs uppercase tracking-[0.18em] text-gold/75">
+                  {activeMembership?.role ?? "MEMBER"}
+                </p>
+              </div>
+
+              <div className="rounded-[28px] border border-white/10 bg-black/20 p-4">
+                <p className="text-[11px] uppercase tracking-[0.18em] text-white/45">
+                  Lot actif
+                </p>
+                <p className="mt-2 text-sm font-semibold text-white">
+                  Front Meals V3.4
+                </p>
+                <p className="mt-2 text-xs uppercase tracking-[0.18em] text-gold/75">
+                  lecture canonique + édition
+                </p>
+              </div>
+            </div>
           </div>
 
-          <div className="rounded-3xl border border-white/10 bg-white/5 px-5 py-4 text-right">
-            <p className="text-xs uppercase tracking-[0.2em] text-white/45">
-              Session
-            </p>
-            <p className="mt-2 text-sm font-medium text-white">
-              {sessionEmail ?? "Utilisateur DOMYLI"}
-            </p>
-            <p className="mt-2 text-xs uppercase tracking-[0.18em] text-gold/80">
-              {activeMembership?.role ?? "MEMBER"}
-            </p>
-          </div>
+          {error ? (
+            <div className="mt-8 rounded-[28px] border border-red-400/20 bg-red-500/10 p-5">
+              <div className="flex items-start gap-3">
+                <AlertTriangle className="mt-0.5 h-5 w-5 text-red-200" />
+                <div>
+                  <p className="text-sm font-semibold text-red-100">Erreur Meals</p>
+                  <p className="mt-2 text-sm text-red-100/85">{error.message}</p>
+                  {error.hint ? (
+                    <p className="mt-2 text-xs uppercase tracking-[0.16em] text-red-100/70">
+                      {error.hint}
+                    </p>
+                  ) : null}
+                </div>
+              </div>
+            </div>
+          ) : null}
+
+          {localMessage ? (
+            <div className="mt-8 rounded-[28px] border border-emerald-400/20 bg-emerald-500/10 p-5 text-sm text-emerald-100">
+              {localMessage}
+            </div>
+          ) : null}
         </div>
 
-        {error ? (
-          <div className="mt-8 rounded-3xl border border-red-400/20 bg-red-500/10 p-5 text-red-100">
-            <div className="flex items-start gap-3">
-              <AlertTriangle className="mt-0.5 h-5 w-5" />
+        <div className="mt-8 grid gap-8 xl:grid-cols-[1.1fr_1fr]">
+          <section className="rounded-[36px] border border-white/10 bg-white/5 p-6">
+            <div className="flex items-center gap-3">
+              <UserRound className="h-5 w-5 text-gold" />
               <div>
-                <p className="text-sm font-semibold uppercase tracking-[0.18em]">
-                  Erreur Meals
+                <p className="text-[11px] uppercase tracking-[0.18em] text-white/45">
+                  Étape 1
                 </p>
-                <p className="mt-2 text-sm">{error.message}</p>
-                {error.hint ? (
-                  <p className="mt-2 text-xs uppercase tracking-[0.18em] text-red-200/80">
-                    {error.hint}
-                  </p>
-                ) : null}
+                <h2 className="mt-1 text-2xl font-semibold">
+                  Choisir la personne
+                </h2>
               </div>
             </div>
-          </div>
-        ) : null}
 
-        {localMessage ? (
-          <div className="mt-8 rounded-3xl border border-emerald-400/20 bg-emerald-500/10 p-5 text-emerald-100">
-            <div className="flex items-start gap-3">
-              <CheckCircle2 className="mt-0.5 h-5 w-5" />
-              <p className="text-sm">{localMessage}</p>
+            <div className="mt-6 grid gap-4 md:grid-cols-2">
+              {profiles.map((profile) => (
+                <ProfileCard
+                  key={profile.profile_id}
+                  isActive={profile.profile_id === selectedProfileId}
+                  label={profile.display_name}
+                  summary={profile.summary}
+                  meta={`poids ${formatMetricValue(profile.weight_kg)} kg`}
+                  onClick={() => setSelectedProfileId(profile.profile_id)}
+                />
+              ))}
             </div>
-          </div>
-        ) : null}
+          </section>
 
-        <div className="mt-10 grid gap-8 xl:grid-cols-[1.2fr_1fr]">
-          <section className="space-y-8">
-            <div className="rounded-[32px] border border-white/10 bg-white/5 p-8">
-              <div className="flex items-center justify-between gap-4">
-                <div>
-                  <p className="text-sm uppercase tracking-[0.25em] text-gold/80">
-                    Étape 1
-                  </p>
-                  <h2 className="mt-2 text-2xl font-semibold">
-                    Choisir la personne
-                  </h2>
+          <section className="rounded-[36px] border border-white/10 bg-white/5 p-6">
+            <div className="flex items-center gap-3">
+              <CalendarDays className="h-5 w-5 text-gold" />
+              <div>
+                <p className="text-[11px] uppercase tracking-[0.18em] text-white/45">
+                  Étape 2
+                </p>
+                <h2 className="mt-1 text-2xl font-semibold">
+                  Planning réel du foyer
+                </h2>
+              </div>
+            </div>
+
+            <div className="mt-6 grid gap-4 lg:grid-cols-[1fr_1fr_auto]">
+              <label className="rounded-[24px] border border-white/10 bg-black/20 p-4">
+                <p className="text-[11px] uppercase tracking-[0.16em] text-white/45">
+                  Du
+                </p>
+                <input
+                  type="date"
+                  value={feedFromDate}
+                  onChange={(event) => setFeedFromDate(event.target.value)}
+                  className="mt-3 w-full bg-transparent text-sm text-white outline-none"
+                />
+              </label>
+
+              <label className="rounded-[24px] border border-white/10 bg-black/20 p-4">
+                <p className="text-[11px] uppercase tracking-[0.16em] text-white/45">
+                  Au
+                </p>
+                <input
+                  type="date"
+                  value={feedToDate}
+                  onChange={(event) => setFeedToDate(event.target.value)}
+                  className="mt-3 w-full bg-transparent text-sm text-white outline-none"
+                />
+              </label>
+
+              <button
+                type="button"
+                onClick={() =>
+                  void refreshMealFeed({
+                    p_from_date: feedFromDate,
+                    p_to_date: feedToDate,
+                    p_profile_id: selectedProfileId || null,
+                    p_meal_type: mealType,
+                    p_limit: 80,
+                  })
+                }
+                className="inline-flex items-center justify-center gap-2 rounded-full border border-white/15 px-5 py-3 text-sm uppercase tracking-[0.18em] text-white/70 transition hover:border-white/30 hover:text-white"
+              >
+                <RefreshCw className={`h-4 w-4 ${mealFeedLoading ? "animate-spin" : ""}`} />
+                Actualiser
+              </button>
+            </div>
+
+            <div className="mt-6 flex flex-wrap gap-3">
+              <ToneBadge
+                label={`profil ${selectedProfile?.display_name ?? "—"}`}
+                tone="default"
+              />
+              <ToneBadge label={`type ${mealType}`} tone="default" />
+              <ToneBadge label={`${mealFeed.length} repas remonté(s)`} tone="success" />
+            </div>
+
+            <div className="mt-6 space-y-4">
+              {mealFeedLoading ? (
+                <div className="rounded-[28px] border border-white/10 bg-black/20 p-6">
+                  <div className="inline-flex items-center gap-3 text-sm text-white/70">
+                    <LoaderCircle className="h-5 w-5 animate-spin text-gold" />
+                    Chargement du feed Meals depuis le back...
+                  </div>
                 </div>
-                <button
-                  type="button"
-                  onClick={() =>
-                    void refreshRecipeCandidates(mealType, selectedProfileId, recipeSearch)
-                  }
-                  className="inline-flex items-center gap-2 rounded-full border border-white/15 px-4 py-2 text-xs uppercase tracking-[0.18em] text-white/70 transition hover:border-white/30 hover:text-white"
+              ) : mealFeed.length > 0 ? (
+                mealFeed.map((item) => (
+                  <FeedMealCard
+                    key={item.meal_slot_id}
+                    item={item}
+                    isActive={item.meal_slot_id === effectiveMealSlotId}
+                    onSelect={() => {
+                      hydrateMealSelection(item);
+                      void refreshMealDetail(item.meal_slot_id);
+                      setLocalMessage("Repas existant rechargé avec son snapshot back.");
+                    }}
+                  />
+                ))
+              ) : (
+                <div className="rounded-[28px] border border-dashed border-white/15 bg-black/20 p-6 text-sm text-white/60">
+                  Aucun repas remonté sur cette fenêtre. Le lot Back Meals 6 est
+                  prêt à alimenter cette zone dès que la RPC est déployée.
+                </div>
+              )}
+            </div>
+          </section>
+        </div>
+
+        <div className="mt-8 grid gap-8 xl:grid-cols-[1.1fr_1fr]">
+          <section className="rounded-[36px] border border-white/10 bg-white/5 p-6">
+            <div className="flex items-center gap-3">
+              <Search className="h-5 w-5 text-gold" />
+              <div>
+                <p className="text-[11px] uppercase tracking-[0.18em] text-white/45">
+                  Étape 3
+                </p>
+                <h2 className="mt-1 text-2xl font-semibold">
+                  Sélectionner la recette
+                </h2>
+              </div>
+            </div>
+
+            <div className="mt-6 grid gap-4 xl:grid-cols-2">
+              <label className="rounded-[24px] border border-white/10 bg-black/20 p-4">
+                <p className="text-[11px] uppercase tracking-[0.16em] text-white/45">
+                  Date planifiée
+                </p>
+                <input
+                  type="date"
+                  value={plannedFor}
+                  onChange={(event) => setPlannedFor(event.target.value)}
+                  className="mt-3 w-full bg-transparent text-sm text-white outline-none"
+                />
+              </label>
+
+              <label className="rounded-[24px] border border-white/10 bg-black/20 p-4">
+                <p className="text-[11px] uppercase tracking-[0.16em] text-white/45">
+                  Type de repas
+                </p>
+                <select
+                  value={mealType}
+                  onChange={(event) => setMealType(event.target.value as MealType)}
+                  className="mt-3 w-full bg-transparent text-sm text-white outline-none"
                 >
-                  <RefreshCw className="h-4 w-4" />
-                  Rafraîchir
-                </button>
-              </div>
+                  {RECIPE_MEAL_TYPE_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value} className="bg-black">
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
 
-              <div className="mt-6 grid gap-4 md:grid-cols-2">
-                {profiles.map((profile) => {
-                  const meta = [
-                    profile.weight_kg ? `${profile.weight_kg} kg` : null,
-                    profile.goal,
-                    profile.activity_level,
-                  ]
-                    .filter(Boolean)
-                    .join(" · ");
+            <div className="mt-4 grid gap-4 xl:grid-cols-[1fr_auto]">
+              <label className="rounded-[24px] border border-white/10 bg-black/20 p-4">
+                <p className="text-[11px] uppercase tracking-[0.16em] text-white/45">
+                  Recherche libre
+                </p>
+                <input
+                  value={recipeSearch}
+                  onChange={(event) => setRecipeSearch(event.target.value)}
+                  placeholder="Titre, code recette, tags, raisons, vigilance..."
+                  className="mt-3 w-full bg-transparent text-sm text-white outline-none placeholder:text-white/30"
+                />
+              </label>
 
-                  return (
-                    <ProfileCard
-                      key={profile.profile_id}
-                      isActive={selectedProfileId === profile.profile_id}
-                      label={profile.display_name}
-                      summary={profile.summary}
-                      meta={meta || "Profil meal-ready"}
-                      onClick={() => setSelectedProfileId(profile.profile_id)}
-                    />
-                  );
-                })}
+              <label className="rounded-[24px] border border-white/10 bg-black/20 p-4">
+                <p className="text-[11px] uppercase tracking-[0.16em] text-white/45">
+                  Tri
+                </p>
+                <select
+                  value={sortMode}
+                  onChange={(event) =>
+                    setSortMode(event.target.value as RecipeSortMode)
+                  }
+                  className="mt-3 w-full bg-transparent text-sm text-white outline-none"
+                >
+                  {RECIPE_SORT_MODE_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value} className="bg-black">
+                      {getRecipeSortModeLabel(option.value)}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
+
+            <div className="mt-4 flex flex-wrap gap-2">
+              {SEARCH_INTENTS.map((intent) => {
+                const active = selectedIntentCodes.includes(intent.code);
+
+                return (
+                  <button
+                    key={intent.code}
+                    type="button"
+                    onClick={() => toggleIntent(intent.code)}
+                    className={`rounded-full border px-4 py-2 text-[11px] uppercase tracking-[0.18em] transition ${
+                      active
+                        ? "border-gold/50 bg-gold/10 text-gold"
+                        : "border-white/10 bg-white/5 text-white/60 hover:border-white/20 hover:text-white"
+                    }`}
+                  >
+                    {intent.label}
+                  </button>
+                );
+              })}
+            </div>
+
+            <div className="mt-6 flex flex-wrap gap-3">
+              <ToneBadge
+                label={`${visibleRecipes.length} recette(s) visibles`}
+                tone="success"
+              />
+              {selectedRecipe ? (
+                <ToneBadge label={selectedRecipe.recipe_code} tone="default" />
+              ) : null}
+            </div>
+
+            <div className="mt-6 grid gap-4">
+              {candidatesLoading ? (
+                <div className="rounded-[28px] border border-white/10 bg-black/20 p-6">
+                  <div className="inline-flex items-center gap-3 text-sm text-white/70">
+                    <LoaderCircle className="h-5 w-5 animate-spin text-gold" />
+                    Recherche des recettes personnalisées...
+                  </div>
+                </div>
+              ) : visibleRecipes.length === 0 ? (
+                <div className="rounded-[28px] border border-dashed border-white/15 bg-black/20 p-6 text-sm text-white/60">
+                  Aucune recette ne correspond aux filtres actifs pour ce profil.
+                </div>
+              ) : (
+                visibleRecipes.map((recipe) => (
+                  <RecipeCard
+                    key={recipe.recipe_id}
+                    recipe={recipe}
+                    isSelected={recipe.recipe_id === selectedRecipeId}
+                    onSelect={() => setSelectedRecipeId(recipe.recipe_id)}
+                  />
+                ))
+              )}
+            </div>
+          </section>
+
+          <section className="rounded-[36px] border border-white/10 bg-white/5 p-6">
+            <div className="flex items-center gap-3">
+              <Sparkles className="h-5 w-5 text-gold" />
+              <div>
+                <p className="text-[11px] uppercase tracking-[0.18em] text-white/45">
+                  Étape 4
+                </p>
+                <h2 className="mt-1 text-2xl font-semibold">
+                  Aperçu quantitatif personnalisé
+                </h2>
               </div>
             </div>
 
-            <div className="rounded-[32px] border border-white/10 bg-white/5 p-8">
-              <div className="flex items-center gap-3">
-                <Utensils className="h-5 w-5 text-gold" />
-                <div>
-                  <p className="text-sm uppercase tracking-[0.25em] text-gold/80">
-                    Étape 2
+            {previewLoading ? (
+              <div className="mt-6 rounded-[28px] border border-white/10 bg-black/20 p-6">
+                <div className="inline-flex items-center gap-3 text-sm text-white/70">
+                  <LoaderCircle className="h-5 w-5 animate-spin text-gold" />
+                  Calcul des quantités personnalisées...
+                </div>
+              </div>
+            ) : selectedRecipe && recipePreview ? (
+              <>
+                <div className="mt-6 rounded-[28px] border border-white/10 bg-black/20 p-5">
+                  <div className="flex flex-wrap items-center gap-3">
+                    <ToneBadge
+                      label={selectedProfile?.display_name ?? "Profil sélectionné"}
+                      tone="default"
+                    />
+                    <ToneBadge
+                      label={getRecipeFitStatusLabel(recipePreview.fit_status)}
+                      tone={
+                        recipePreview.fit_status === "OK"
+                          ? "success"
+                          : recipePreview.fit_status === "BLOCKED"
+                            ? "danger"
+                            : "warning"
+                      }
+                    />
+                    <ToneBadge
+                      label={`portion ${formatMetricValue(recipePreview.portion_factor)}`}
+                      tone="success"
+                    />
+                  </div>
+
+                  <h3 className="mt-4 text-xl font-semibold text-white">
+                    {recipePreview.title}
+                  </h3>
+
+                  {recipePreview.fit_reasons.length > 0 ? (
+                    <div className="mt-5">
+                      <p className="text-[11px] uppercase tracking-[0.16em] text-gold/75">
+                        Raisons
+                      </p>
+                      <ul className="mt-3 space-y-2 text-sm text-white/70">
+                        {recipePreview.fit_reasons.map((reason) => (
+                          <li key={reason}>• {reason}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  ) : null}
+
+                  {recipePreview.warnings.length > 0 ? (
+                    <div className="mt-5">
+                      <p className="text-[11px] uppercase tracking-[0.16em] text-amber-200/85">
+                        Vigilances
+                      </p>
+                      <ul className="mt-3 space-y-2 text-sm text-white/70">
+                        {recipePreview.warnings.map((warning) => (
+                          <li key={warning}>• {warning}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  ) : null}
+                </div>
+
+                <div className="mt-6">
+                  <div className="flex items-center gap-3">
+                    <Target className="h-4 w-4 text-gold" />
+                    <p className="text-[11px] uppercase tracking-[0.16em] text-white/45">
+                      Ingrédients recalculés
+                    </p>
+                  </div>
+
+                  <div className="mt-4 space-y-3">
+                    {recipePreview.ingredients.length > 0 ? (
+                      recipePreview.ingredients.map((ingredient) => (
+                        <IngredientLine
+                          key={`${ingredient.ingredient_code}-${ingredient.sort_order}`}
+                          ingredient={ingredient}
+                        />
+                      ))
+                    ) : (
+                      <div className="rounded-[24px] border border-dashed border-white/15 bg-black/20 p-5 text-sm text-white/60">
+                        Aucun détail ingrédient n’a été renvoyé pour cette recette.
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </>
+            ) : (
+              <div className="mt-6 rounded-[28px] border border-dashed border-white/15 bg-black/20 p-6 text-sm text-white/60">
+                Choisis une recette compatible pour afficher le recalcul précis des
+                quantités selon le profil actif.
+              </div>
+            )}
+          </section>
+
+          <section className="rounded-[36px] border border-white/10 bg-white/5 p-6">
+            <div className="flex items-center gap-3">
+              <ShieldCheck className="h-5 w-5 text-gold" />
+              <div>
+                <p className="text-[11px] uppercase tracking-[0.18em] text-white/45">
+                  Étape 4B
+                </p>
+                <h2 className="mt-1 text-2xl font-semibold">
+                  Snapshot réel figé du repas
+                </h2>
+              </div>
+            </div>
+
+            <p className="mt-4 text-sm text-white/60">
+              Ce bloc lit le meal slot réellement enregistré côté back. Il ne
+              recalcule pas la recette&nbsp;: il restitue le snapshot figé utilisé
+              par DOMYLI pour l’exécution réelle.
+            </p>
+
+            {mealDetailLoading ? (
+              <div className="mt-6 rounded-[28px] border border-white/10 bg-black/20 p-6">
+                <div className="inline-flex items-center gap-3 text-sm text-white/70">
+                  <LoaderCircle className="h-5 w-5 animate-spin text-gold" />
+                  Lecture du snapshot back du repas...
+                </div>
+              </div>
+            ) : selectedMealDetail ? (
+              <>
+                <div className="mt-6 rounded-[28px] border border-white/10 bg-black/20 p-5">
+                  <div className="flex flex-wrap items-center gap-3">
+                    <ToneBadge
+                      label={selectedMealDetail.status ?? "PLANNED"}
+                      tone={
+                        (selectedMealDetail.status ?? "").toUpperCase() === "CONFIRMED"
+                          ? "success"
+                          : "default"
+                      }
+                    />
+                    <ToneBadge
+                      label={selectedMealDetail.profile_label ?? "Profil"}
+                      tone="default"
+                    />
+                    <ToneBadge
+                      label={`portion ${formatMetricValue(selectedMealDetail.portion_factor)}`}
+                      tone="success"
+                    />
+                    <ToneBadge
+                      label={`${selectedMealDetail.inserted_ingredient_count} ingrédient(s) figé(s)`}
+                      tone="default"
+                    />
+                  </div>
+
+                  <h3 className="mt-4 text-xl font-semibold text-white">
+                    {selectedMealDetail.title ?? selectedMealDetail.recipe_title ?? "Repas DOMYLI"}
+                  </h3>
+
+                  <p className="mt-2 text-sm text-white/60">
+                    {selectedMealDetail.planned_for} · {selectedMealDetail.meal_type} ·{" "}
+                    {selectedMealDetail.recipe_code ?? "RECETTE"}
                   </p>
-                  <h2 className="mt-1 text-2xl font-semibold">
-                    Voir les recettes personnalisées
-                  </h2>
+
+                  {selectedMealDetail.operator_notes ? (
+                    <div className="mt-5 rounded-[24px] border border-white/10 bg-white/5 p-4">
+                      <p className="text-[11px] uppercase tracking-[0.16em] text-white/45">
+                        Notes opérateur enregistrées
+                      </p>
+                      <pre className="mt-3 whitespace-pre-wrap text-sm text-white/70">
+                        {selectedMealDetail.operator_notes}
+                      </pre>
+                    </div>
+                  ) : null}
+
+                  <p className="mt-5 text-xs uppercase tracking-[0.16em] text-gold/75">
+                    {(selectedMealDetail.status ?? "").toUpperCase() === "CONFIRMED"
+                      ? `Confirmé ${formatDateTime(selectedMealDetail.confirmed_at ?? selectedMealDetail.updated_at)}`
+                      : `Snapshot mis à jour ${formatDateTime(selectedMealDetail.updated_at ?? selectedMealDetail.created_at)}`}
+                  </p>
                 </div>
-              </div>
 
-              <div className="mt-6 grid gap-4 lg:grid-cols-[220px_1fr_220px]">
-                <label className="block">
-                  <span className="text-xs uppercase tracking-[0.18em] text-white/45">
-                    Type de repas
-                  </span>
-                  <select
-                    value={mealType}
-                    onChange={(event) => setMealType(event.target.value as MealType)}
-                    className="mt-2 w-full rounded-2xl border border-white/10 bg-black/30 px-4 py-3 text-sm text-white outline-none transition focus:border-gold/50"
-                  >
-                    {RECIPE_MEAL_TYPE_OPTIONS.map((item) => (
-                      <option key={item.value} value={item.value}>
-                        {item.label}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-
-                <label className="block">
-                  <span className="text-xs uppercase tracking-[0.18em] text-white/45">
-                    Recherche
-                  </span>
-                  <div className="mt-2 flex items-center gap-3 rounded-2xl border border-white/10 bg-black/30 px-4 py-3">
-                    <Search className="h-4 w-4 text-white/35" />
-                    <input
-                      value={recipeSearch}
-                      onChange={(event) => setRecipeSearch(event.target.value)}
-                      placeholder="Bowl, transportable, halal, faible sucre..."
-                      className="w-full bg-transparent text-sm text-white outline-none placeholder:text-white/25"
-                    />
-                  </div>
-                </label>
-
-                <label className="block">
-                  <span className="text-xs uppercase tracking-[0.18em] text-white/45">
-                    Tri
-                  </span>
-                  <select
-                    value={sortMode}
-                    onChange={(event) =>
-                      setSortMode(event.target.value as RecipeSortMode)
-                    }
-                    className="mt-2 w-full rounded-2xl border border-white/10 bg-black/30 px-4 py-3 text-sm text-white outline-none transition focus:border-gold/50"
-                  >
-                    {RECIPE_SORT_MODE_OPTIONS.map((item) => (
-                      <option key={item.value} value={item.value}>
-                        {getRecipeSortModeLabel(item.value)}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-              </div>
-
-              <div className="mt-5 flex flex-wrap gap-2">
-                {SEARCH_INTENTS.map((intent) => {
-                  const isActive = selectedIntentCodes.includes(intent.code);
-                  return (
-                    <button
-                      key={intent.code}
-                      type="button"
-                      onClick={() => toggleIntent(intent.code)}
-                      className={`rounded-full border px-4 py-2 text-xs uppercase tracking-[0.18em] transition ${
-                        isActive
-                          ? "border-gold bg-gold/10 text-gold"
-                          : "border-white/10 bg-black/20 text-white/60 hover:border-white/25 hover:text-white"
-                      }`}
-                    >
-                      {intent.label}
-                    </button>
-                  );
-                })}
-              </div>
-
-              <div className="mt-8">
-                {candidatesLoading ? (
-                  <div className="rounded-3xl border border-white/10 bg-black/20 p-8 text-center text-white/50">
-                    <LoaderCircle className="mx-auto h-6 w-6 animate-spin text-gold" />
-                    <p className="mt-3 text-sm">Chargement des recettes personnalisées...</p>
-                  </div>
-                ) : visibleRecipes.length === 0 ? (
-                  <div className="rounded-3xl border border-white/10 bg-black/20 p-8 text-center text-white/55">
-                    <Sparkles className="mx-auto h-7 w-7 text-gold/80" />
-                    <p className="mt-3 text-sm">
-                      Aucune recette ne correspond aux filtres actifs pour ce profil.
+                <div className="mt-6">
+                  <div className="flex items-center gap-3">
+                    <Target className="h-4 w-4 text-gold" />
+                    <p className="text-[11px] uppercase tracking-[0.16em] text-white/45">
+                      Ingrédients figés enregistrés
                     </p>
                   </div>
-                ) : (
-                  <div className="grid gap-4 xl:grid-cols-2">
-                    {visibleRecipes.map((recipe) => (
-                      <RecipeCard
-                        key={recipe.recipe_id}
-                        recipe={recipe}
-                        isSelected={selectedRecipeId === recipe.recipe_id}
-                        onSelect={() => setSelectedRecipeId(recipe.recipe_id)}
-                      />
-                    ))}
+
+                  <div className="mt-4 space-y-3">
+                    {selectedMealDetail.ingredients.length > 0 ? (
+                      selectedMealDetail.ingredients.map((ingredient) => (
+                        <IngredientLine
+                          key={`${ingredient.ingredient_code}-${ingredient.sort_order}`}
+                          ingredient={ingredient}
+                        />
+                      ))
+                    ) : (
+                      <div className="rounded-[24px] border border-dashed border-white/15 bg-black/20 p-5 text-sm text-white/60">
+                        Aucun ingrédient figé n’a été renvoyé pour ce meal slot.
+                      </div>
+                    )}
                   </div>
-                )}
+                </div>
+              </>
+            ) : (
+              <div className="mt-6 rounded-[28px] border border-dashed border-white/15 bg-black/20 p-6 text-sm text-white/60">
+                Recharge un repas existant depuis le feed ou crée un repas pour
+                afficher ici le snapshot figé réellement persisté côté back.
+              </div>
+            )}
+          </section>
+        </div>
+
+        <div className="mt-8 grid gap-8 xl:grid-cols-[0.9fr_1.1fr]">
+          <section className="rounded-[36px] border border-white/10 bg-white/5 p-6">
+            <div className="flex items-center gap-3">
+              <Save className="h-5 w-5 text-gold" />
+              <div>
+                <p className="text-[11px] uppercase tracking-[0.18em] text-white/45">
+                  Étape 5
+                </p>
+                <h2 className="mt-1 text-2xl font-semibold">
+                  Sauvegarder puis confirmer
+                </h2>
               </div>
             </div>
 
-            {confirmationHistory.length > 0 ? (
-              <div className="rounded-[32px] border border-white/10 bg-white/5 p-8">
-                <div className="flex items-center gap-3">
-                  <History className="h-5 w-5 text-gold" />
-                  <div>
-                    <p className="text-sm uppercase tracking-[0.25em] text-gold/80">
-                      Étape 6
-                    </p>
-                    <h2 className="mt-1 text-2xl font-semibold">
-                      Historique local des confirmations
-                    </h2>
-                  </div>
+            <label className="mt-6 block rounded-[24px] border border-white/10 bg-black/20 p-4">
+              <p className="text-[11px] uppercase tracking-[0.16em] text-white/45">
+                Notes opérateur
+              </p>
+              <textarea
+                value={operatorNotes}
+                onChange={(event) => setOperatorNotes(event.target.value)}
+                placeholder="Contexte, substitution, préférence du jour, remarque d’exécution..."
+                className="mt-3 min-h-[140px] w-full resize-none bg-transparent text-sm text-white outline-none placeholder:text-white/30"
+              />
+            </label>
+
+            <div className="mt-6 space-y-3">
+              <button
+                type="button"
+                disabled={!canSubmit || saving}
+                onClick={() => void handleCreateOrUpdate()}
+                className="inline-flex w-full items-center justify-center gap-3 rounded-full border border-gold/30 px-6 py-4 text-sm uppercase tracking-[0.2em] text-gold transition hover:bg-gold hover:text-black disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                {saving ? (
+                  <LoaderCircle className="h-5 w-5 animate-spin" />
+                ) : (
+                  <Save className="h-5 w-5" />
+                )}
+                {effectiveMealSlotId ? "Mettre à jour le repas" : "Créer le repas"}
+              </button>
+
+              <button
+                type="button"
+                disabled={!canConfirm || confirming}
+                onClick={() => void handleConfirm()}
+                className="inline-flex w-full items-center justify-center gap-3 rounded-full border border-emerald-400/30 px-6 py-4 text-sm uppercase tracking-[0.2em] text-emerald-200 transition hover:bg-emerald-300 hover:text-black disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                {confirming ? (
+                  <LoaderCircle className="h-5 w-5 animate-spin" />
+                ) : (
+                  <CheckCircle2 className="h-5 w-5" />
+                )}
+                Confirmer le repas
+              </button>
+            </div>
+
+            <div className="mt-6 flex flex-wrap gap-3">
+              <ToneBadge
+                label={
+                  effectiveMealSlotId
+                    ? `meal_slot ${effectiveMealSlotId.slice(0, 8)}`
+                    : "aucun meal_slot"
+                }
+                tone={effectiveMealSlotId ? "success" : "warning"}
+              />
+              <ToneBadge
+                label={selectedRecipe?.recipe_code ?? "aucune recette"}
+                tone="default"
+              />
+            </div>
+
+            {lastConfirmResult ? (
+              <div className="mt-6 rounded-[28px] border border-white/10 bg-black/20 p-5">
+                <div className="flex flex-wrap items-center gap-3">
+                  <ToneBadge
+                    label={lastConfirmResult.status ?? "CONFIRMED"}
+                    tone="success"
+                  />
+                  <ToneBadge
+                    label={lastConfirmResult.shopping_rebuild_status ?? "shopping"}
+                    tone={getShoppingStatusTone(lastConfirmResult.shopping_rebuild_status)}
+                  />
+                  <ToneBadge
+                    label={`${lastConfirmResult.alerts.length} alerte(s)`}
+                    tone={lastConfirmResult.alerts.length > 0 ? "warning" : "success"}
+                  />
                 </div>
 
-                <div className="mt-6 grid gap-4 xl:grid-cols-2">
-                  {confirmationHistory.map((entry) => (
-                    <HistoryCard
-                      key={entry.meal_slot_id}
-                      entry={entry}
-                      isActive={activeHistoryMealSlotId === entry.meal_slot_id}
-                      onOpen={() => openHistoryEntry(entry)}
+                <div className="mt-5 space-y-3">
+                  {lastConfirmResult.consumption_lines.map((line) => (
+                    <ConsumptionLineCard
+                      key={`${line.ingredient_code}-${line.inventory_item_id ?? "none"}`}
+                      line={line}
                     />
                   ))}
                 </div>
@@ -1339,626 +1672,249 @@ export default function MealsPage() {
             ) : null}
           </section>
 
-          <aside className="space-y-8">
-            <div className="rounded-[32px] border border-white/10 bg-white/5 p-8">
-              <div className="flex items-center gap-3">
-                <Sparkles className="h-5 w-5 text-gold" />
-                <div>
-                  <p className="text-sm uppercase tracking-[0.25em] text-gold/80">
-                    Étape 3
-                  </p>
-                  <h2 className="mt-1 text-2xl font-semibold">
-                    Aperçu quantitatif
-                  </h2>
-                </div>
+          <section className="rounded-[36px] border border-white/10 bg-white/5 p-6">
+            <div className="flex items-center gap-3">
+              <Link2 className="h-5 w-5 text-gold" />
+              <div>
+                <p className="text-[11px] uppercase tracking-[0.18em] text-white/45">
+                  Étape 6
+                </p>
+                <h2 className="mt-1 text-2xl font-semibold">
+                  Mapping inventaire exploitable
+                </h2>
+              </div>
+            </div>
+
+            <div className="mt-6 grid gap-4 xl:grid-cols-[1fr_1fr]">
+              <div className="space-y-4">
+                {mappingTargetsLoading ? (
+                  <div className="rounded-[24px] border border-white/10 bg-black/20 p-5 text-sm text-white/70">
+                    Chargement des cibles de mapping...
+                  </div>
+                ) : (
+                  inventoryMappingTargets.map((target) => (
+                    <MappingTargetCard
+                      key={target.ingredient_code}
+                      target={target}
+                      isActive={target.ingredient_code === activeMappingTarget?.ingredient_code}
+                      onClick={() => setActiveMappingTargetCode(target.ingredient_code)}
+                    />
+                  ))
+                )}
               </div>
 
-              {previewLoading ? (
-                <div className="mt-6 rounded-3xl border border-white/10 bg-black/20 p-8 text-center text-white/50">
-                  <LoaderCircle className="mx-auto h-6 w-6 animate-spin text-gold" />
-                  <p className="mt-3 text-sm">Calcul des quantités personnalisées...</p>
+              <div className="rounded-[28px] border border-white/10 bg-black/20 p-5">
+                <div className="flex items-center gap-3">
+                  <ShieldCheck className="h-4 w-4 text-gold" />
+                  <p className="text-[11px] uppercase tracking-[0.16em] text-white/45">
+                    Candidat stock
+                  </p>
                 </div>
-              ) : selectedRecipe && recipePreview ? (
-                <div className="mt-6">
-                  <div className="rounded-3xl border border-white/10 bg-black/20 p-5">
-                    <p className="text-xs uppercase tracking-[0.18em] text-gold/80">
-                      {selectedProfile?.display_name ?? "Profil sélectionné"}
+
+                {activeMappingTarget ? (
+                  <>
+                    <h3 className="mt-4 text-lg font-semibold text-white">
+                      {activeMappingTarget.ingredient_label}
+                    </h3>
+                    <p className="mt-2 text-sm text-white/60">
+                      {activeMappingTarget.mapped_item_label ||
+                        activeMappingTarget.mapped_item_code ||
+                        "Aucun article stock lié"}
                     </p>
-                    <h3 className="mt-2 text-xl font-semibold">{recipePreview.title}</h3>
-                    <div className="mt-4 flex flex-wrap gap-2">
-                      <ToneBadge label={getRecipeFitStatusLabel(recipePreview.fit_status)} />
-                      <ToneBadge label={`Score ${recipePreview.fit_score}`} />
-                      <ToneBadge label={`Facteur ${recipePreview.portion_factor.toFixed(2)}x`} />
-                    </div>
 
-                    {recipePreview.fit_reasons.length > 0 ? (
-                      <div className="mt-5">
-                        <p className="text-xs uppercase tracking-[0.18em] text-white/45">
-                          Raisons
-                        </p>
-                        <ul className="mt-3 space-y-2 text-sm text-white/70">
-                          {recipePreview.fit_reasons.map((reason) => (
-                            <li key={reason} className="flex gap-2">
-                              <Target className="mt-0.5 h-4 w-4 shrink-0 text-gold/80" />
-                              <span>{reason}</span>
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
-                    ) : null}
-
-                    {recipePreview.warnings.length > 0 ? (
-                      <div className="mt-5 rounded-2xl border border-amber-400/20 bg-amber-500/10 p-4">
-                        <p className="text-xs uppercase tracking-[0.18em] text-amber-100/80">
-                          Vigilances
-                        </p>
-                        <ul className="mt-3 space-y-2 text-sm text-amber-50">
-                          {recipePreview.warnings.map((warning) => (
-                            <li key={warning} className="flex gap-2">
-                              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
-                              <span>{warning}</span>
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
-                    ) : null}
-                  </div>
-
-                  <div className="mt-6 rounded-3xl border border-white/10 bg-black/20 p-5">
-                    <div className="flex items-center justify-between gap-4">
-                      <p className="text-xs uppercase tracking-[0.18em] text-white/45">
-                        Ingrédients recalculés
-                      </p>
-                      <ToneBadge
-                        label={`${mappedIngredientCount}/${currentRecipeMappingTargets.length} mappés`}
-                        tone={
-                          mappedIngredientCount === currentRecipeMappingTargets.length
-                            ? "success"
-                            : "warning"
-                        }
+                    <div className="mt-5 flex gap-3">
+                      <input
+                        value={mappingSearch}
+                        onChange={(event) => setMappingSearch(event.target.value)}
+                        placeholder="Rechercher un article stock..."
+                        className="min-w-0 flex-1 rounded-full border border-white/10 bg-white/5 px-4 py-3 text-sm text-white outline-none placeholder:text-white/30"
                       />
+
+                      <button
+                        type="button"
+                        onClick={() => void refreshInventoryMappingCandidates(mappingSearch)}
+                        className="inline-flex items-center gap-2 rounded-full border border-white/15 px-4 py-3 text-xs uppercase tracking-[0.18em] text-white/70 transition hover:border-white/30 hover:text-white"
+                      >
+                        <Search className="h-4 w-4" />
+                        Rechercher
+                      </button>
                     </div>
 
-                    <div className="mt-4">
-                      {recipePreview.ingredients.length > 0 ? (
-                        recipePreview.ingredients.map((ingredient) => (
-                          <IngredientLine
-                            key={
-                              ingredient.recipe_ingredient_id ??
-                              `${ingredient.ingredient_code}-${ingredient.sort_order}`
+                    {lastInventoryMappingResult?.ingredient_code ===
+                    activeMappingTarget.ingredient_code ? (
+                      <div className="mt-4 rounded-2xl border border-emerald-400/20 bg-emerald-500/10 p-3 text-sm text-emerald-100">
+                        Mapping sauvegardé sur{" "}
+                        {lastInventoryMappingResult.item_label ??
+                          lastInventoryMappingResult.item_code ??
+                          "article stock"}.
+                      </div>
+                    ) : null}
+
+                    <div className="mt-5 space-y-3">
+                      {mappingCandidatesLoading ? (
+                        <div className="text-sm text-white/60">
+                          Recherche des candidats stock...
+                        </div>
+                      ) : inventoryMappingCandidates.length > 0 ? (
+                        inventoryMappingCandidates.map((candidate) => (
+                          <button
+                            key={candidate.inventory_item_id}
+                            type="button"
+                            disabled={mappingSaving}
+                            onClick={() =>
+                              void saveInventoryMapping(
+                                activeMappingTarget.ingredient_code,
+                                candidate.inventory_item_id,
+                                `Mapping Meals V3.4 pour ${activeMappingTarget.ingredient_label}`,
+                              )
                             }
-                            ingredient={ingredient}
-                          />
+                            className="flex w-full items-center justify-between gap-3 rounded-[22px] border border-white/10 bg-white/5 p-4 text-left transition hover:border-white/20 disabled:cursor-not-allowed disabled:opacity-50"
+                          >
+                            <div>
+                              <p className="text-sm font-medium text-white">
+                                {candidate.item_label}
+                              </p>
+                              <p className="mt-1 text-xs uppercase tracking-[0.16em] text-white/45">
+                                {candidate.item_code ?? "sans code"} · stock{" "}
+                                {formatMetricValue(candidate.qty_on_hand)}
+                              </p>
+                            </div>
+
+                            <ChevronRight className="h-4 w-4 text-gold" />
+                          </button>
                         ))
                       ) : (
-                        <p className="text-sm text-white/45">
-                          Aucun détail ingrédient n’a été renvoyé pour cette recette.
-                        </p>
+                        <div className="rounded-2xl border border-dashed border-white/15 p-4 text-sm text-white/55">
+                          Lance une recherche pour afficher les articles stock
+                          candidats.
+                        </div>
                       )}
                     </div>
+                  </>
+                ) : (
+                  <div className="mt-4 text-sm text-white/55">
+                    Sélectionne une cible de mapping pour continuer.
                   </div>
-                </div>
-              ) : (
-                <div className="mt-6 rounded-3xl border border-white/10 bg-black/20 p-8 text-center text-white/50">
-                  <p className="text-sm">
-                    Sélectionne un profil actif puis une recette pour afficher le
-                    preview quantitatif Meals V3.
-                  </p>
-                </div>
-              )}
-            </div>
-
-            <div className="rounded-[32px] border border-white/10 bg-white/5 p-8">
-              <div className="flex items-center gap-3">
-                <Link2 className="h-5 w-5 text-gold" />
-                <div>
-                  <p className="text-sm uppercase tracking-[0.25em] text-gold/80">
-                    Étape 3B
-                  </p>
-                  <h2 className="mt-1 text-2xl font-semibold">
-                    Mapping inventaire
-                  </h2>
-                </div>
-              </div>
-
-              {recipePreview?.ingredients.length ? (
-                <div className="mt-6">
-                  <div className="grid gap-3">
-                    {currentRecipeMappingTargets.map((target) => (
-                      <MappingStatusCard
-                        key={target.ingredient_code}
-                        target={target}
-                        isActive={activeMappingIngredientCode === target.ingredient_code}
-                        onSelect={() => setActiveMappingIngredientCode(target.ingredient_code)}
-                      />
-                    ))}
-                  </div>
-
-                  {activeMappingTarget ? (
-                    <div className="mt-6 rounded-3xl border border-white/10 bg-black/20 p-5">
-                      <p className="text-xs uppercase tracking-[0.18em] text-white/45">
-                        Ingrédient actif
-                      </p>
-                      <h3 className="mt-2 text-lg font-semibold text-white">
-                        {activeMappingTarget.ingredient_label}
-                      </h3>
-                      <p className="mt-2 text-xs uppercase tracking-[0.18em] text-gold/80">
-                        {activeMappingTarget.ingredient_code}
-                      </p>
-
-                      <label className="mt-5 block">
-                        <span className="text-xs uppercase tracking-[0.18em] text-white/45">
-                          Recherche article stock
-                        </span>
-                        <div className="mt-2 flex items-center gap-3 rounded-2xl border border-white/10 bg-black/30 px-4 py-3">
-                          <Search className="h-4 w-4 text-white/35" />
-                          <input
-                            value={mappingSearch}
-                            onChange={(event) => setMappingSearch(event.target.value)}
-                            placeholder="huile, tomate, quinoa, sel..."
-                            className="w-full bg-transparent text-sm text-white outline-none placeholder:text-white/25"
-                          />
-                        </div>
-                      </label>
-
-                      <label className="mt-4 block">
-                        <span className="text-xs uppercase tracking-[0.18em] text-white/45">
-                          Note mapping
-                        </span>
-                        <input
-                          value={mappingNotes}
-                          onChange={(event) => setMappingNotes(event.target.value)}
-                          className="mt-2 w-full rounded-2xl border border-white/10 bg-black/30 px-4 py-3 text-sm text-white outline-none transition focus:border-gold/50"
-                          placeholder="Ex. mapping manuel validé"
-                        />
-                      </label>
-
-                      <div className="mt-4 flex items-center gap-3">
-                        <button
-                          type="button"
-                          onClick={() =>
-                            void refreshInventoryMappingCandidates(mappingSearch)
-                          }
-                          className="inline-flex items-center gap-2 rounded-full border border-white/15 px-4 py-2 text-xs uppercase tracking-[0.18em] text-white/70 transition hover:border-white/30 hover:text-white"
-                        >
-                          <RefreshCw className="h-4 w-4" />
-                          Rechercher
-                        </button>
-
-                        {lastInventoryMappingResult?.ingredient_code ===
-                        activeMappingTarget.ingredient_code ? (
-                          <ToneBadge label="Dernier mapping enregistré" tone="success" />
-                        ) : null}
-                      </div>
-
-                      <div className="mt-5">
-                        {mappingCandidatesLoading ? (
-                          <div className="rounded-2xl border border-white/10 bg-black/30 p-5 text-center text-white/50">
-                            <LoaderCircle className="mx-auto h-5 w-5 animate-spin text-gold" />
-                            <p className="mt-3 text-sm">Recherche des candidats stock...</p>
-                          </div>
-                        ) : inventoryMappingCandidates.length > 0 ? (
-                          <div className="space-y-3">
-                            {inventoryMappingCandidates.map((candidate) => (
-                              <button
-                                key={candidate.inventory_item_id}
-                                type="button"
-                                onClick={() =>
-                                  void handleMapCandidate(candidate.inventory_item_id)
-                                }
-                                disabled={mappingSaving}
-                                className="w-full rounded-2xl border border-white/10 bg-black/30 p-4 text-left transition hover:border-gold/35 hover:bg-black/40 disabled:cursor-not-allowed disabled:opacity-60"
-                              >
-                                <div className="flex items-start justify-between gap-4">
-                                  <div>
-                                    <p className="text-sm font-semibold text-white">
-                                      {candidate.item_label}
-                                    </p>
-                                    <p className="mt-2 text-xs uppercase tracking-[0.18em] text-white/45">
-                                      {candidate.item_code || "Sans code article"}
-                                    </p>
-                                  </div>
-                                  <ToneBadge
-                                    label={
-                                      candidate.qty_on_hand != null
-                                        ? `${candidate.qty_on_hand} dispo`
-                                        : "Stock inconnu"
-                                    }
-                                  />
-                                </div>
-                              </button>
-                            ))}
-                          </div>
-                        ) : (
-                          <div className="rounded-2xl border border-white/10 bg-black/30 p-5 text-sm text-white/45">
-                            Aucun candidat stock trouvé pour cette recherche.
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  ) : null}
-                </div>
-              ) : (
-                <div className="mt-6 rounded-3xl border border-white/10 bg-black/20 p-8 text-center text-white/50">
-                  <p className="text-sm">
-                    Le mapping inventaire s’active dès qu’une recette affiche ses
-                    ingrédients recalculés.
-                  </p>
-                </div>
-              )}
-            </div>
-
-            <div className="rounded-[32px] border border-white/10 bg-white/5 p-8">
-              <div className="flex items-center gap-3">
-                <CalendarDays className="h-5 w-5 text-gold" />
-                <div>
-                  <p className="text-sm uppercase tracking-[0.25em] text-gold/80">
-                    Étape 4
-                  </p>
-                  <h2 className="mt-1 text-2xl font-semibold">
-                    Créer ou confirmer
-                  </h2>
-                </div>
-              </div>
-
-              <div className="mt-6 space-y-5">
-                <label className="block">
-                  <span className="text-xs uppercase tracking-[0.18em] text-white/45">
-                    Date
-                  </span>
-                  <input
-                    type="date"
-                    value={plannedFor}
-                    onChange={(event) => setPlannedFor(event.target.value)}
-                    className="mt-2 w-full rounded-2xl border border-white/10 bg-black/30 px-4 py-3 text-sm text-white outline-none transition focus:border-gold/50"
-                  />
-                </label>
-
-                <label className="block">
-                  <span className="text-xs uppercase tracking-[0.18em] text-white/45">
-                    Notes opérateur
-                  </span>
-                  <textarea
-                    value={operatorNotes}
-                    onChange={(event) => setOperatorNotes(event.target.value)}
-                    rows={5}
-                    className="mt-2 w-full rounded-2xl border border-white/10 bg-black/30 px-4 py-3 text-sm text-white outline-none transition focus:border-gold/50"
-                    placeholder="Contexte, préférence, précision utile..."
-                  />
-                </label>
-
-                <div className="rounded-3xl border border-white/10 bg-black/20 p-5">
-                  <p className="text-xs uppercase tracking-[0.18em] text-white/45">
-                    Résumé
-                  </p>
-                  <div className="mt-4 space-y-3 text-sm text-white/75">
-                    <div className="flex items-center justify-between gap-4">
-                      <span>Profil</span>
-                      <span className="text-right font-medium text-white">
-                        {selectedProfile?.display_name ?? "—"}
-                      </span>
-                    </div>
-                    <div className="flex items-center justify-between gap-4">
-                      <span>Recette</span>
-                      <span className="text-right font-medium text-white">
-                        {selectedRecipe?.title ?? "—"}
-                      </span>
-                    </div>
-                    <div className="flex items-center justify-between gap-4">
-                      <span>Repas</span>
-                      <span className="text-right font-medium text-white">
-                        {
-                          RECIPE_MEAL_TYPE_OPTIONS.find((item) => item.value === mealType)
-                            ?.label
-                        }
-                      </span>
-                    </div>
-                    <div className="flex items-center justify-between gap-4">
-                      <span>Meal slot</span>
-                      <span className="text-right font-medium text-gold">
-                        {effectiveMealSlotId || "Nouveau"}
-                      </span>
-                    </div>
-                    <div className="flex items-center justify-between gap-4">
-                      <span>Mapping stock</span>
-                      <span className="text-right font-medium text-white">
-                        {mappedIngredientCount}/{currentRecipeMappingTargets.length || 0}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="flex flex-col gap-3">
-                  <button
-                    type="button"
-                    onClick={() => void handleCreateOrUpdate()}
-                    disabled={!canSubmit || saving}
-                    className="inline-flex items-center justify-center gap-2 rounded-full border border-gold/30 px-6 py-3 text-sm uppercase tracking-[0.2em] text-gold transition hover:bg-gold hover:text-black disabled:cursor-not-allowed disabled:opacity-50"
-                  >
-                    {saving ? (
-                      <LoaderCircle className="h-4 w-4 animate-spin" />
-                    ) : (
-                      <Save className="h-4 w-4" />
-                    )}
-                    {effectiveMealSlotId ? "Mettre à jour le repas" : "Créer le repas"}
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => void handleConfirm()}
-                    disabled={!canConfirm || confirming}
-                    className="inline-flex items-center justify-center gap-2 rounded-full border border-white/15 px-6 py-3 text-sm uppercase tracking-[0.2em] text-white/75 transition hover:border-white/30 hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
-                  >
-                    {confirming ? (
-                      <LoaderCircle className="h-4 w-4 animate-spin" />
-                    ) : (
-                      <CheckCircle2 className="h-4 w-4" />
-                    )}
-                    Confirmer le repas
-                  </button>
-                </div>
+                )}
               </div>
             </div>
+          </section>
+        </div>
 
-            {lastConfirmResult ? (
-              <div className="rounded-[32px] border border-white/10 bg-white/5 p-8">
-                <div className="flex items-center justify-between gap-4">
-                  <div>
-                    <p className="text-sm uppercase tracking-[0.25em] text-gold/80">
-                      Étape 5
-                    </p>
-                    <h2 className="mt-2 text-2xl font-semibold">
-                      Exécution confirmée
-                    </h2>
-                  </div>
-                  <ToneBadge
-                    label={lastConfirmResult.status ?? "CONFIRMED"}
-                    tone="success"
-                  />
-                </div>
-
-                <div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-                  <div className="rounded-3xl border border-white/10 bg-black/20 p-5">
-                    <p className="text-xs uppercase tracking-[0.18em] text-white/45">
-                      Consommés
-                    </p>
-                    <p className="mt-3 text-3xl font-semibold text-emerald-100">
-                      {confirmationSummary.consumed}
-                    </p>
-                  </div>
-
-                  <div className="rounded-3xl border border-white/10 bg-black/20 p-5">
-                    <p className="text-xs uppercase tracking-[0.18em] text-white/45">
-                      Partiels
-                    </p>
-                    <p className="mt-3 text-3xl font-semibold text-amber-100">
-                      {confirmationSummary.partial}
-                    </p>
-                  </div>
-
-                  <div className="rounded-3xl border border-white/10 bg-black/20 p-5">
-                    <p className="text-xs uppercase tracking-[0.18em] text-white/45">
-                      Non mappés
-                    </p>
-                    <p className="mt-3 text-3xl font-semibold text-red-100">
-                      {confirmationSummary.unmapped}
-                    </p>
-                  </div>
-
-                  <div className="rounded-3xl border border-white/10 bg-black/20 p-5">
-                    <p className="text-xs uppercase tracking-[0.18em] text-white/45">
-                      Rebuild shopping
-                    </p>
-                    <div className="mt-3">
-                      <ToneBadge
-                        label={
-                          lastConfirmResult.shopping_rebuild_status ??
-                          "NON_RENSEIGNÉ"
-                        }
-                        tone={getShoppingStatusTone(
-                          lastConfirmResult.shopping_rebuild_status,
-                        )}
-                      />
-                    </div>
-                  </div>
-                </div>
-
-                <div className="mt-6 rounded-3xl border border-white/10 bg-black/20 p-5">
-                  <div className="flex items-center justify-between gap-4">
-                    <p className="text-xs uppercase tracking-[0.18em] text-white/45">
-                      Alertes synchronisées
-                    </p>
-                    <ToneBadge
-                      label={`${lastConfirmResult.alerts.length} alertes`}
-                      tone={
-                        lastConfirmResult.alerts.length > 0 ? "warning" : "default"
-                      }
-                    />
-                  </div>
-
-                  {lastConfirmResult.alerts.length > 0 ? (
-                    <div className="mt-4 space-y-3">
-                      {lastConfirmResult.alerts.map((alert) => (
-                        <div
-                          key={`${alert.ingredient_code}-${alert.inventory_item_id ?? "none"}`}
-                          className="rounded-2xl border border-white/10 bg-white/[0.03] p-4"
-                        >
-                          <p className="text-sm font-semibold text-white">
-                            {alert.ingredient_code}
-                          </p>
-                          <p className="mt-2 text-xs uppercase tracking-[0.18em] text-gold/80">
-                            {alert.alert_sync_status ?? "Statut non renseigné"}
-                          </p>
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <p className="mt-4 text-sm text-white/45">
-                      Aucune alerte renvoyée pour cette confirmation.
-                    </p>
-                  )}
-                </div>
-
-                <div className="mt-6">
-                  <p className="text-xs uppercase tracking-[0.18em] text-white/45">
-                    Lignes de consommation
-                  </p>
-                  <div className="mt-4 grid gap-4 xl:grid-cols-2">
-                    {lastConfirmResult.consumption_lines.map((line) => (
-                      <ConsumptionLineCard
-                        key={`${line.ingredient_code}-${line.inventory_item_id ?? "none"}`}
-                        line={line}
-                      />
-                    ))}
-                  </div>
-                </div>
-              </div>
-            ) : null}
-
-            {activeHistoryEntry ? (
-              <div className="rounded-[32px] border border-white/10 bg-white/5 p-8">
-                <div className="flex items-center gap-3">
-                  <History className="h-5 w-5 text-gold" />
-                  <div>
-                    <p className="text-sm uppercase tracking-[0.25em] text-gold/80">
-                      Étape 7
-                    </p>
-                    <h2 className="mt-1 text-2xl font-semibold">
-                      Relecture d’une confirmation
-                    </h2>
-                  </div>
-                </div>
-
-                <div className="mt-6 rounded-3xl border border-white/10 bg-black/20 p-5">
-                  <p className="text-xs uppercase tracking-[0.18em] text-white/45">
-                    Meal slot
-                  </p>
-                  <p className="mt-2 text-sm font-semibold text-white">
-                    {activeHistoryEntry.meal_slot_id}
-                  </p>
-
-                  <div className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-                    <div className="rounded-2xl border border-white/8 bg-white/[0.03] p-4">
-                      <p className="text-[11px] uppercase tracking-[0.18em] text-white/45">
-                        Titre
-                      </p>
-                      <p className="mt-2 text-sm font-semibold text-white">
-                        {activeHistoryEntry.title ?? "Repas DOMYLI"}
-                      </p>
-                    </div>
-
-                    <div className="rounded-2xl border border-white/8 bg-white/[0.03] p-4">
-                      <p className="text-[11px] uppercase tracking-[0.18em] text-white/45">
-                        Confirmé le
-                      </p>
-                      <p className="mt-2 text-sm font-semibold text-white">
-                        {formatDateTime(activeHistoryEntry.confirmed_at)}
-                      </p>
-                    </div>
-
-                    <div className="rounded-2xl border border-white/8 bg-white/[0.03] p-4">
-                      <p className="text-[11px] uppercase tracking-[0.18em] text-white/45">
-                        Lignes
-                      </p>
-                      <p className="mt-2 text-sm font-semibold text-white">
-                        {activeHistoryEntry.consumption_line_count}
-                      </p>
-                    </div>
-
-                    <div className="rounded-2xl border border-white/8 bg-white/[0.03] p-4">
-                      <p className="text-[11px] uppercase tracking-[0.18em] text-white/45">
-                        Shopping
-                      </p>
-                      <div className="mt-2">
-                        <ToneBadge
-                          label={
-                            activeHistoryEntry.shopping_rebuild_status ??
-                            "NON_RENSEIGNÉ"
-                          }
-                          tone={getShoppingStatusTone(
-                            activeHistoryEntry.shopping_rebuild_status,
-                          )}
-                        />
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="mt-5 flex flex-wrap gap-2">
-                    <ToneBadge
-                      label={`${activeHistoryEntry.consumed_count} consommés`}
-                      tone="success"
-                    />
-                    {activeHistoryEntry.partial_count > 0 ? (
-                      <ToneBadge
-                        label={`${activeHistoryEntry.partial_count} partiels`}
-                        tone="warning"
-                      />
-                    ) : null}
-                    {activeHistoryEntry.unmapped_count > 0 ? (
-                      <ToneBadge
-                        label={`${activeHistoryEntry.unmapped_count} non mappés`}
-                        tone="danger"
-                      />
-                    ) : null}
-                    {activeHistoryEntry.alert_count > 0 ? (
-                      <ToneBadge
-                        label={`${activeHistoryEntry.alert_count} alertes`}
-                        tone="warning"
-                      />
-                    ) : null}
-                  </div>
-                </div>
-              </div>
-            ) : null}
-
-            {items.length > 0 ? (
-              <div className="rounded-[32px] border border-white/10 bg-white/5 p-8">
-                <p className="text-sm uppercase tracking-[0.25em] text-gold/80">
-                  Session
+        <div className="mt-8 grid gap-8 xl:grid-cols-2">
+          <section className="rounded-[36px] border border-white/10 bg-white/5 p-6">
+            <div className="flex items-center gap-3">
+              <History className="h-5 w-5 text-gold" />
+              <div>
+                <p className="text-[11px] uppercase tracking-[0.18em] text-white/45">
+                  Étape 7
                 </p>
-                <h2 className="mt-2 text-2xl font-semibold">
-                  Repas manipulés dans cette session
+                <h2 className="mt-1 text-2xl font-semibold">
+                  Historique local des confirmations
                 </h2>
-
-                <div className="mt-6 space-y-3">
-                  {items.map((item) => (
-                    <button
-                      key={item.meal_slot_id}
-                      type="button"
-                      onClick={() => {
-                        setSelectedMealSlotId(item.meal_slot_id);
-                        setSelectedProfileId(item.profile_id ?? "");
-                        setSelectedRecipeId(item.recipe_id ?? "");
-                        setMealType(item.meal_type);
-                        setPlannedFor(item.planned_for);
-                        setOperatorNotes(item.notes ?? "");
-                      }}
-                      className={`w-full rounded-3xl border p-4 text-left transition ${
-                        effectiveMealSlotId === item.meal_slot_id
-                          ? "border-gold bg-gold/10"
-                          : "border-white/10 bg-black/20 hover:border-white/20"
-                      }`}
-                    >
-                      <div className="flex items-start justify-between gap-4">
-                        <div>
-                          <p className="text-xs uppercase tracking-[0.18em] text-white/45">
-                            {item.meal_slot_id}
-                          </p>
-                          <h3 className="mt-2 text-sm font-semibold text-white">
-                            {item.title ?? "Repas DOMYLI"}
-                          </h3>
-                          <p className="mt-2 text-xs text-white/60">
-                            {item.planned_for} · {item.meal_type}
-                          </p>
-                        </div>
-                        <ToneBadge label={item.status ?? "PLANNED"} />
-                      </div>
-                    </button>
-                  ))}
-                </div>
               </div>
-            ) : null}
-          </aside>
+            </div>
+
+            <p className="mt-4 text-sm text-white/60">
+              Ce bloc reste volontairement conservé en V3.5 comme mémoire locale
+              de secours, même si la lecture détaillée du meal slot existe
+              désormais côté back.
+            </p>
+
+            <div className="mt-6 space-y-4">
+              {confirmationHistory.length > 0 ? (
+                confirmationHistory.map((entry) => (
+                  <HistoryEntryCard
+                    key={`${entry.meal_slot_id}-${entry.confirmed_at}`}
+                    entry={entry}
+                    onSelect={() => {
+                      hydrateMealSelection({
+                        meal_slot_id: entry.meal_slot_id,
+                        profile_id: entry.profile_id,
+                        recipe_id: entry.recipe_id,
+                        planned_for: entry.planned_for,
+                        meal_type: entry.meal_type,
+                        operator_notes: null,
+                      });
+                      void refreshMealDetail(entry.meal_slot_id);
+                      setLocalMessage("Entrée d’historique rechargée avec détail back.");
+                    }}
+                  />
+                ))
+              ) : (
+                <div className="rounded-[28px] border border-dashed border-white/15 bg-black/20 p-6 text-sm text-white/60">
+                  Aucune confirmation locale persistée pour le moment.
+                </div>
+              )}
+            </div>
+          </section>
+
+          <section className="rounded-[36px] border border-white/10 bg-white/5 p-6">
+            <div className="flex items-center gap-3">
+              <Utensils className="h-5 w-5 text-gold" />
+              <div>
+                <p className="text-[11px] uppercase tracking-[0.18em] text-white/45">
+                  Étape 8
+                </p>
+                <h2 className="mt-1 text-2xl font-semibold">
+                  Synthèse opératoire
+                </h2>
+              </div>
+            </div>
+
+            <div className="mt-6 grid gap-4 md:grid-cols-2">
+              <div className="rounded-[24px] border border-white/10 bg-black/20 p-5">
+                <p className="text-[11px] uppercase tracking-[0.16em] text-white/45">
+                  Profil
+                </p>
+                <p className="mt-3 text-lg font-semibold text-white">
+                  {selectedProfile?.display_name ?? "—"}
+                </p>
+                <p className="mt-2 text-sm text-white/60">
+                  {selectedProfile?.summary ?? "Aucun profil actif"}
+                </p>
+              </div>
+
+              <div className="rounded-[24px] border border-white/10 bg-black/20 p-5">
+                <p className="text-[11px] uppercase tracking-[0.16em] text-white/45">
+                  Recette
+                </p>
+                <p className="mt-3 text-lg font-semibold text-white">
+                  {selectedRecipe?.title ?? "—"}
+                </p>
+                <p className="mt-2 text-sm text-white/60">
+                  {selectedRecipe?.recipe_code ?? "Aucune recette sélectionnée"}
+                </p>
+              </div>
+
+              <div className="rounded-[24px] border border-white/10 bg-black/20 p-5">
+                <p className="text-[11px] uppercase tracking-[0.16em] text-white/45">
+                  Meal slot
+                </p>
+                <p className="mt-3 text-lg font-semibold text-white">
+                  {effectiveMealSlotId ? effectiveMealSlotId.slice(0, 12) : "Non créé"}
+                </p>
+                <p className="mt-2 text-sm text-white/60">
+                  {effectiveMealSlotId
+                    ? "Mode édition d’un repas réel"
+                    : "Mode création"}
+                </p>
+              </div>
+
+              <div className="rounded-[24px] border border-white/10 bg-black/20 p-5">
+                <p className="text-[11px] uppercase tracking-[0.16em] text-white/45">
+                  Focus V3.4
+                </p>
+                <p className="mt-3 text-lg font-semibold text-white">
+                  Lecture canonique
+                </p>
+                <p className="mt-2 text-sm text-white/60">
+                  Recharger un repas existant depuis le back puis le rééditer sans
+                  dépendre uniquement du state local.
+                </p>
+              </div>
+            </div>
+          </section>
         </div>
       </div>
     </div>
