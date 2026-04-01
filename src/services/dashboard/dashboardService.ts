@@ -1,26 +1,34 @@
 import { callRpc } from "@/src/services/rpc";
 import { toDomyliError } from "@/src/lib/errors";
 
-export type TodayHealth = {
-  day: string | null;
+type RpcObject = Record<string, unknown>;
+
+async function callRpcFallback<T>(names: string[], payload: RpcObject, options: RpcObject = {}): Promise<T> {
+  let lastError: unknown = null;
+  for (const name of names) {
+    try {
+      return (await callRpc(name, payload, options as never)) as T;
+    } catch (error) {
+      lastError = error;
+    }
+  }
+  throw lastError;
+}
+
+export type DashboardHealth = {
   missing_stock_count: number;
+  low_stock_count: number;
+  open_alert_count: number;
+  open_shopping_count: number;
   overdue_tasks_count: number;
   planned_meals_count: number;
-  confirmed_meals_count: number;
   blocked_tools_count: number;
-  open_alert_count: number;
-  proofs_count: number;
+  pending_invites_count: number;
+  profiles_incomplete_count: number;
+  day: string | null;
 };
 
-export type DashboardFeedItem = {
-  item_type: string;
-  item_id: string;
-  title: string;
-  status: string;
-  scheduled_at: string | null;
-};
-
-export type ActivationStatus = {
+export type DashboardActivation = {
   activation_score: number;
   is_operational: boolean;
   has_members: boolean;
@@ -30,195 +38,150 @@ export type ActivationStatus = {
   has_meals: boolean;
 };
 
-export type ValueChainStatus = {
+export type DashboardValueChain = {
   members_count: number;
   profiles_count: number;
   inventory_items_count: number;
   meal_slots_count: number;
   tasks_count: number;
-  task_instances_count: number;
   shopping_open_count: number;
-  proofs_count: number;
-  events_count: number;
   alerts_open_count: number;
+  proofs_count: number;
 };
 
-type RawTodayHealth = {
-  day?: string | null;
-  missing_stock_count?: number | null;
-  inventory_low_stock_count?: number | null;
-  overdue_tasks_count?: number | null;
-  today_task_count?: number | null;
-  planned_meals_count?: number | null;
-  today_meal_count?: number | null;
-  confirmed_meals_count?: number | null;
-  blocked_tools_count?: number | null;
-  open_alert_count?: number | null;
-  alerts_open_count?: number | null;
-  proofs_count?: number | null;
+export type DashboardFeedItem = {
+  item_type: string;
+  title: string;
+  status: string;
+  scheduled_at: string | null;
+  flow_code: string;
+  entity_type: string | null;
+  entity_id: string | null;
+  route_hint: string | null;
+  meta: RpcObject;
 };
 
-type RawDashboardFeedItem = {
-  item_type?: string | null;
-  item_id?: string | null;
-  title?: string | null;
-  status?: string | null;
-  scheduled_at?: string | null;
+export type DashboardNextAction = {
+  route: string;
+  label: string;
 };
 
-type RawActivationStatus = {
-  activation_score?: number | null;
-  is_operational?: boolean | null;
-  has_members?: boolean | null;
-  has_profiles?: boolean | null;
-  has_inventory?: boolean | null;
-  has_tasks?: boolean | null;
-  has_meals?: boolean | null;
+export type DashboardSnapshot = {
+  activation: DashboardActivation;
+  valueChain: DashboardValueChain;
+  health: DashboardHealth;
+  feed: DashboardFeedItem[];
+  nextAction: DashboardNextAction;
 };
 
-type RawValueChainStatus = {
-  members_count?: number | null;
-  profiles_count?: number | null;
-  inventory_items_count?: number | null;
-  meal_slots_count?: number | null;
-  tasks_count?: number | null;
-  task_instances_count?: number | null;
-  shopping_open_count?: number | null;
-  proofs_count?: number | null;
-  events_count?: number | null;
-  alerts_open_count?: number | null;
-};
-
-function toNumber(value: unknown, fallback = 0): number {
-  return typeof value === "number" && Number.isFinite(value) ? value : fallback;
+function asObject(value: unknown): RpcObject {
+  return (value ?? {}) as RpcObject;
 }
 
-function toBoolean(value: unknown, fallback = false): boolean {
+function normalizeNumber(value: unknown, fallback = 0): number {
+  return typeof value === "number" ? value : value == null ? fallback : Number(value);
+}
+
+function normalizeBoolean(value: unknown, fallback = false): boolean {
   return typeof value === "boolean" ? value : fallback;
 }
 
-function firstRow<T>(value: T | T[] | null | undefined): T | null {
-  if (Array.isArray(value)) return value[0] ?? null;
-  return value ?? null;
+function normalizeActivation(value: unknown): DashboardActivation {
+  const raw = asObject(value);
+  return {
+    activation_score: normalizeNumber(raw.activation_score, 0),
+    is_operational: normalizeBoolean(raw.is_operational, false),
+    has_members: normalizeBoolean(raw.has_members, false),
+    has_profiles: normalizeBoolean(raw.has_profiles, false),
+    has_inventory: normalizeBoolean(raw.has_inventory, false),
+    has_tasks: normalizeBoolean(raw.has_tasks, false),
+    has_meals: normalizeBoolean(raw.has_meals, false),
+  };
 }
 
-function manyRows<T>(value: T | T[] | null | undefined): T[] {
-  if (Array.isArray(value)) return value;
-  if (!value) return [];
-  return [value];
+function normalizeValueChain(value: unknown): DashboardValueChain {
+  const raw = asObject(value);
+  return {
+    members_count: normalizeNumber(raw.members_count, 0),
+    profiles_count: normalizeNumber(raw.profiles_count, 0),
+    inventory_items_count: normalizeNumber(raw.inventory_items_count, 0),
+    meal_slots_count: normalizeNumber(raw.meal_slots_count, 0),
+    tasks_count: normalizeNumber(raw.tasks_count, 0),
+    shopping_open_count: normalizeNumber(raw.shopping_open_count, 0),
+    alerts_open_count: normalizeNumber(raw.alerts_open_count, 0),
+    proofs_count: normalizeNumber(raw.proofs_count, 0),
+  };
 }
 
-export async function getTodayHealth(): Promise<TodayHealth> {
-  try {
-    const raw = (await callRpc("rpc_today_health", {}, { unwrap: true })) as
-      | RawTodayHealth
-      | RawTodayHealth[]
-      | null;
+function normalizeHealth(value: unknown): DashboardHealth {
+  const raw = asObject(value);
+  return {
+    missing_stock_count: normalizeNumber(raw.missing_stock_count, 0),
+    low_stock_count: normalizeNumber(raw.low_stock_count, 0),
+    open_alert_count: normalizeNumber(raw.open_alert_count, 0),
+    open_shopping_count: normalizeNumber(raw.open_shopping_count, 0),
+    overdue_tasks_count: normalizeNumber(raw.overdue_tasks_count, 0),
+    planned_meals_count: normalizeNumber(raw.planned_meals_count, 0),
+    blocked_tools_count: normalizeNumber(raw.blocked_tools_count, 0),
+    pending_invites_count: normalizeNumber(raw.pending_invites_count, 0),
+    profiles_incomplete_count: normalizeNumber(raw.profiles_incomplete_count, 0),
+    day: typeof raw.day === "string" ? raw.day : null,
+  };
+}
 
-    const row = firstRow(raw);
-
+function normalizeFeed(value: unknown): DashboardFeedItem[] {
+  if (!Array.isArray(value)) return [];
+  return value.map((entry) => {
+    const raw = asObject(entry);
     return {
-      day: row?.day ?? null,
-      missing_stock_count: toNumber(
-        row?.missing_stock_count ?? row?.inventory_low_stock_count,
-        0,
-      ),
-      overdue_tasks_count: toNumber(
-        row?.overdue_tasks_count ?? row?.today_task_count,
-        0,
-      ),
-      planned_meals_count: toNumber(
-        row?.planned_meals_count ?? row?.today_meal_count,
-        0,
-      ),
-      confirmed_meals_count: toNumber(row?.confirmed_meals_count, 0),
-      blocked_tools_count: toNumber(row?.blocked_tools_count, 0),
-      open_alert_count: toNumber(
-        row?.open_alert_count ?? row?.alerts_open_count,
-        0,
-      ),
-      proofs_count: toNumber(row?.proofs_count, 0),
+      item_type: typeof raw.item_type === "string" ? raw.item_type : "SIGNAL",
+      title: typeof raw.title === "string" ? raw.title : "Signal DOMYLI",
+      status: typeof raw.status === "string" ? raw.status : "WATCH",
+      scheduled_at: typeof raw.scheduled_at === "string" ? raw.scheduled_at : null,
+      flow_code: typeof raw.flow_code === "string" ? raw.flow_code : "HOUSEHOLD",
+      entity_type: typeof raw.entity_type === "string" ? raw.entity_type : null,
+      entity_id: typeof raw.entity_id === "string" ? raw.entity_id : null,
+      route_hint: typeof raw.route_hint === "string" ? raw.route_hint : null,
+      meta: asObject(raw.meta),
     };
-  } catch (error) {
-    throw toDomyliError(error);
-  }
+  });
 }
 
-export async function getTodayLoadFeed(): Promise<DashboardFeedItem[]> {
-  try {
-    const raw = (await callRpc("rpc_today_load_feed", {}, { unwrap: true })) as
-      | RawDashboardFeedItem[]
-      | RawDashboardFeedItem
-      | { items?: RawDashboardFeedItem[] | null }
-      | null;
-
-    if (raw && typeof raw === "object" && !Array.isArray(raw) && "items" in raw) {
-      return manyRows(raw.items).map((item) => ({
-        item_type: item.item_type ?? "UNKNOWN",
-        item_id: item.item_id ?? "",
-        title: item.title ?? "Signal DOMYLI",
-        status: item.status ?? "UNKNOWN",
-        scheduled_at: item.scheduled_at ?? null,
-      }));
-    }
-
-    return manyRows(raw as RawDashboardFeedItem[] | RawDashboardFeedItem | null).map(
-      (item) => ({
-        item_type: item.item_type ?? "UNKNOWN",
-        item_id: item.item_id ?? "",
-        title: item.title ?? "Signal DOMYLI",
-        status: item.status ?? "UNKNOWN",
-        scheduled_at: item.scheduled_at ?? null,
-      }),
-    );
-  } catch (error) {
-    throw toDomyliError(error);
-  }
+function normalizeNextAction(value: unknown): DashboardNextAction {
+  const raw = asObject(value);
+  return {
+    route: typeof raw.route === "string" ? raw.route : "/status",
+    label: typeof raw.label === "string" ? raw.label : "Continuer",
+  };
 }
 
-export async function getActivationStatus(): Promise<ActivationStatus> {
+function normalizeSnapshot(value: unknown): DashboardSnapshot {
+  const raw = asObject(value);
+  return {
+    activation: normalizeActivation(raw.activation),
+    valueChain: normalizeValueChain(raw.value_chain ?? raw.valueChain),
+    health: normalizeHealth(raw.health),
+    feed: normalizeFeed(raw.feed),
+    nextAction: normalizeNextAction(raw.next_action ?? raw.nextAction),
+  };
+}
+
+function fallbackNextAction(activation: DashboardActivation, valueChain: DashboardValueChain, health: DashboardHealth): DashboardNextAction {
+  if (!activation.has_profiles) return { route: "/profiles", label: "Continuer vers Profiles" };
+  if (!activation.has_inventory) return { route: "/inventory", label: "Continuer vers Inventory" };
+  if (health.open_shopping_count > 0 || valueChain.shopping_open_count > 0) return { route: "/shopping", label: "Continuer vers Shopping" };
+  if (!activation.has_meals) return { route: "/meals", label: "Continuer vers Meals" };
+  if (!activation.has_tasks) return { route: "/tasks", label: "Continuer vers Tasks" };
+  return { route: "/status", label: "Continuer vers Status" };
+}
+
+export async function readDashboardSnapshot(): Promise<DashboardSnapshot> {
   try {
-    const raw = (await callRpc("rpc_activation_status", {}, { unwrap: true })) as
-      | RawActivationStatus
-      | RawActivationStatus[]
-      | null;
-
-    const row = firstRow(raw);
-
+    const raw = await callRpcFallback<unknown>(["rpc_dashboard_read_v1"], {}, { unwrap: true, timeoutMs: 12000, retries: 1, retryDelayMs: 800 });
+    const snapshot = normalizeSnapshot(raw);
     return {
-      activation_score: toNumber(row?.activation_score, 0),
-      is_operational: toBoolean(row?.is_operational, false),
-      has_members: toBoolean(row?.has_members, false),
-      has_profiles: toBoolean(row?.has_profiles, false),
-      has_inventory: toBoolean(row?.has_inventory, false),
-      has_tasks: toBoolean(row?.has_tasks, false),
-      has_meals: toBoolean(row?.has_meals, false),
-    };
-  } catch (error) {
-    throw toDomyliError(error);
-  }
-}
-
-export async function getValueChainStatus(): Promise<ValueChainStatus> {
-  try {
-    const raw = (await callRpc("rpc_value_chain_status", {}, { unwrap: true })) as
-      | RawValueChainStatus
-      | RawValueChainStatus[]
-      | null;
-
-    const row = firstRow(raw);
-
-    return {
-      members_count: toNumber(row?.members_count, 0),
-      profiles_count: toNumber(row?.profiles_count, 0),
-      inventory_items_count: toNumber(row?.inventory_items_count, 0),
-      meal_slots_count: toNumber(row?.meal_slots_count, 0),
-      tasks_count: toNumber(row?.tasks_count, 0),
-      task_instances_count: toNumber(row?.task_instances_count, 0),
-      shopping_open_count: toNumber(row?.shopping_open_count, 0),
-      proofs_count: toNumber(row?.proofs_count, 0),
-      events_count: toNumber(row?.events_count, 0),
-      alerts_open_count: toNumber(row?.alerts_open_count, 0),
+      ...snapshot,
+      nextAction: snapshot.nextAction.route ? snapshot.nextAction : fallbackNextAction(snapshot.activation, snapshot.valueChain, snapshot.health),
     };
   } catch (error) {
     throw toDomyliError(error);

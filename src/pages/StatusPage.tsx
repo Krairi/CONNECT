@@ -1,490 +1,238 @@
 import { useMemo, useState } from "react";
 import {
   AlertTriangle,
-  ArrowLeft,
   ArrowRight,
   Boxes,
-  CheckCircle2,
+  CalendarClock,
   ClipboardList,
-  LayoutDashboard,
   RefreshCw,
-  ShieldCheck,
   ShoppingCart,
-  Sparkles,
+  Users,
   Utensils,
   Wrench,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
+
 import { useAuth } from "@/src/providers/AuthProvider";
-import { useDashboard } from "@/src/hooks/useDashboard";
+import { useStatus } from "@/src/hooks/useStatus";
 import { ROUTES } from "@/src/constants/routes";
+
+type Tone = "neutral" | "warning" | "danger" | "success";
+
+function getToneClasses(tone: Tone): string {
+  switch (tone) {
+    case "danger":
+      return "border-red-400/35 bg-red-400/12 text-red-100";
+    case "warning":
+      return "border-amber-400/35 bg-amber-400/12 text-amber-100";
+    case "success":
+      return "border-emerald-400/30 bg-emerald-400/12 text-emerald-100";
+    default:
+      return "border-white/15 bg-white/8 text-white/80";
+  }
+}
+
+function getSignalTone(status: string): Tone {
+  const upper = status.toUpperCase();
+  if (["CRITICAL", "BLOCKED", "OVERDUE"].includes(upper)) return "danger";
+  if (["WARNING", "LOW", "PENDING", "PROFILE_REQUIRED"].includes(upper)) return "warning";
+  if (["DONE", "COMPLETED", "READY"].includes(upper)) return "success";
+  return "neutral";
+}
 
 function formatDate(value: string | null) {
   if (!value) return "—";
-
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return value;
-
   return date.toLocaleString("fr-FR");
 }
 
-function getFeedSeverity(status: string) {
-  const upper = status.toUpperCase();
-
-  if (["BLOCKED", "CRITICAL", "OVERDUE", "FAILED"].includes(upper)) {
-    return {
-      code: "CRITICAL",
-      label: "Critique",
-      description: "À traiter en premier.",
-    };
-  }
-
-  if (["WARNING", "WATCH", "LOW", "OPEN", "PLANNED"].includes(upper)) {
-    return {
-      code: "WATCH",
-      label: "Sous surveillance",
-      description: "À suivre de près.",
-    };
-  }
-
-  if (["CONFIRMED", "DONE", "COMPLETED", "RESERVED"].includes(upper)) {
-    return {
-      code: "STABLE",
-      label: "Stable",
-      description: "Signal maîtrisé.",
-    };
-  }
-
-  return {
-    code: "ATTENTION",
-    label: "Attention",
-    description: "Signal à lire.",
-  };
-}
-
-function FlowBadge({ label }: { label: string }) {
+function SummaryPill({ label, value, tone = "neutral" }: { label: string; value: string; tone?: Tone }) {
   return (
-    <span className="inline-flex items-center rounded-full border border-gold/20 bg-gold/10 px-3 py-1 text-[11px] uppercase tracking-[0.2em] text-gold">
-      {label}
-    </span>
+    <div className={`rounded-2xl border px-4 py-3 ${getToneClasses(tone)}`}>
+      <div className="text-[11px] uppercase tracking-[0.16em] opacity-75">{label}</div>
+      <div className="mt-1 text-lg font-semibold">{value}</div>
+    </div>
   );
 }
 
-export default function DashboardPage() {
+function FlowCard({
+  icon: Icon,
+  title,
+  value,
+  subtitle,
+  tone = "neutral",
+}: {
+  icon: typeof Boxes;
+  title: string;
+  value: string;
+  subtitle: string;
+  tone?: Tone;
+}) {
+  return (
+    <div className="rounded-[28px] border border-white/10 bg-white/[0.04] p-5 shadow-[0_20px_60px_rgba(0,0,0,0.2)]">
+      <div className="flex items-center justify-between gap-4">
+        <div>
+          <div className="text-[11px] uppercase tracking-[0.16em] text-white/35">{title}</div>
+          <div className="mt-2 text-3xl font-semibold text-white">{value}</div>
+          <div className="mt-1 text-sm text-white/55">{subtitle}</div>
+        </div>
+        <div className={`rounded-2xl border p-3 ${getToneClasses(tone)}`}>
+          <Icon className="h-5 w-5" />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export default function StatusPage() {
   const navigate = useNavigate();
-  const {
-    sessionEmail,
-    bootstrap,
-    activeMembership,
-    isAuthenticated,
-    hasHousehold,
-    authLoading,
-    bootstrapLoading,
-  } = useAuth();
-
-  const { loading, error, health, feed, activation, valueChain, refresh } =
-    useDashboard();
-
+  const { isAuthenticated, hasHousehold, authLoading, bootstrapLoading } = useAuth();
+  const { loading, error, health, flowSummary, globalStatus, priorityFeed, refresh } = useStatus();
   const [localMessage, setLocalMessage] = useState<string | null>(null);
 
-  const priorityFeed = useMemo(() => {
-    return [...feed].sort((a, b) => {
-      const rank = (status: string) => {
-        const code = getFeedSeverity(status).code;
-        if (code === "CRITICAL") return 0;
-        if (code === "ATTENTION") return 1;
-        if (code === "WATCH") return 2;
-        return 3;
-      };
-
-      return rank(a.status) - rank(b.status);
-    });
-  }, [feed]);
-
-  const nextRecommendedRoute = useMemo(() => {
-    if (!activation?.has_profiles) return ROUTES.PROFILES;
-    if (!activation?.has_inventory) return ROUTES.INVENTORY;
-    if ((valueChain?.shopping_open_count ?? 0) > 0) return ROUTES.SHOPPING;
-    if (!activation?.has_meals) return ROUTES.MEALS;
-    if (!activation?.has_tasks) return ROUTES.TASKS;
-    return ROUTES.STATUS;
-  }, [activation, valueChain]);
-
-  const nextRecommendedLabel = useMemo(() => {
-    switch (nextRecommendedRoute) {
-      case ROUTES.PROFILES:
-        return "Continuer vers Profiles";
-      case ROUTES.INVENTORY:
-        return "Continuer vers Inventory";
-      case ROUTES.SHOPPING:
-        return "Continuer vers Shopping";
-      case ROUTES.MEALS:
-        return "Continuer vers Meals";
-      case ROUTES.TASKS:
-        return "Continuer vers Tasks";
-      default:
-        return "Continuer vers Status";
-    }
-  }, [nextRecommendedRoute]);
+  const globalTone = useMemo<Tone>(() => {
+    if (globalStatus === "CRITICAL") return "danger";
+    if (globalStatus === "WATCH") return "warning";
+    return "success";
+  }, [globalStatus]);
 
   if (authLoading || bootstrapLoading || loading) {
     return (
-      <main className="min-h-screen bg-black px-6 py-10 text-white">
-        <div className="mx-auto max-w-6xl rounded-[28px] border border-white/10 bg-white/5 p-8 backdrop-blur">
-          <p className="text-xs uppercase tracking-[0.24em] text-gold">DOMYLI</p>
-          <h1 className="mt-4 text-3xl font-semibold">
-            Chargement du dashboard...
-          </h1>
-          <p className="mt-3 text-white/70">
-            Synchronisation des signaux métier, activation et chaîne de valeur.
-          </p>
-        </div>
-      </main>
+      <section className="space-y-3 rounded-[32px] border border-white/10 bg-black/25 p-8 text-white shadow-[0_30px_80px_rgba(0,0,0,0.25)]">
+        <div className="text-xs uppercase tracking-[0.24em] text-gold/70">DOMYLI</div>
+        <h1 className="text-3xl font-semibold">Chargement du statut...</h1>
+      </section>
     );
   }
 
   if (!isAuthenticated || !hasHousehold) {
     return (
-      <main className="min-h-screen bg-black px-6 py-10 text-white">
-        <div className="mx-auto max-w-6xl rounded-[28px] border border-white/10 bg-white/5 p-8 backdrop-blur">
-          <p className="text-xs uppercase tracking-[0.24em] text-gold">DOMYLI</p>
-          <h1 className="mt-4 text-3xl font-semibold">Contexte insuffisant</h1>
-          <p className="mt-3 text-white/70">
-            Le dashboard métier nécessite une session authentifiée et un foyer actif.
-          </p>
-          <button
-            type="button"
-            onClick={() => navigate(ROUTES.HOME)}
-            className="mt-8 border border-gold/40 px-6 py-3 text-sm uppercase tracking-[0.25em] text-gold transition-colors hover:bg-gold hover:text-black"
-          >
-            Retour à l’accueil
-          </button>
-        </div>
-      </main>
+      <section className="space-y-6 rounded-[32px] border border-white/10 bg-black/25 p-8 text-white shadow-[0_30px_80px_rgba(0,0,0,0.25)]">
+        <div className="text-xs uppercase tracking-[0.24em] text-gold/70">DOMYLI</div>
+        <h1 className="text-3xl font-semibold">Foyer requis</h1>
+        <p className="max-w-2xl text-sm text-white/65">
+          Il faut une session authentifiée et un foyer actif pour accéder au status.
+        </p>
+        <button
+          type="button"
+          onClick={() => navigate(ROUTES.HOME)}
+          className="inline-flex items-center justify-center border border-gold/40 px-6 py-3 text-sm uppercase tracking-[0.25em] text-gold transition-colors hover:bg-gold hover:text-black"
+        >
+          Retour à l’accueil
+        </button>
+      </section>
     );
   }
 
   const handleRefresh = async () => {
     setLocalMessage(null);
-
     try {
       await refresh();
-      setLocalMessage("Dashboard DOMYLI rafraîchi.");
+      setLocalMessage("Statut DOMYLI rafraîchi.");
     } catch {
-      // erreur gérée par le hook
+      // erreur déjà gérée par le hook
     }
   };
 
   return (
-    <main className="min-h-screen bg-black px-6 py-10 text-white">
-      <div className="mx-auto max-w-7xl">
-        <div className="grid gap-6 lg:grid-cols-[1.08fr_0.92fr]">
-          <section className="rounded-[28px] border border-white/10 bg-white/5 p-8 backdrop-blur">
-            <div className="flex items-start justify-between gap-4">
-              <button
-                type="button"
-                onClick={() => navigate(ROUTES.HOME)}
-                className="mt-1 inline-flex h-10 w-10 items-center justify-center border border-white/10 transition-colors hover:border-gold/40"
-                aria-label="Retour"
-              >
-                <ArrowLeft className="h-4 w-4" />
-              </button>
-
-              <div className="flex-1">
-                <p className="text-xs uppercase tracking-[0.24em] text-gold">
-                  DOMYLI
-                </p>
-                <h1 className="mt-4 text-3xl font-semibold">Dashboard</h1>
-                <p className="mt-3 max-w-3xl text-sm leading-7 text-white/70">
-                  Ici, le dashboard n’est plus un simple point d’entrée. Il lit
-                  l’activation du foyer, la santé du jour, la chaîne de valeur
-                  et le flux prioritaire remonté par le système.
-                </p>
-              </div>
-            </div>
-
-            <div className="mt-8 inline-flex items-center gap-2 rounded-full border border-gold/20 bg-gold/10 px-4 py-2 text-xs uppercase tracking-[0.24em] text-gold">
-              <LayoutDashboard className="h-4 w-4" />
-              Cockpit métier
-            </div>
-
-            <div className="mt-8 flex flex-wrap gap-3">
-              <button
-                type="button"
-                onClick={handleRefresh}
-                className="inline-flex items-center justify-center gap-3 border border-gold/30 px-6 py-4 text-sm uppercase tracking-[0.24em] text-gold transition-colors hover:bg-gold/10"
-              >
-                <RefreshCw className="h-4 w-4" />
-                Rafraîchir
-              </button>
-
-              <button
-                type="button"
-                onClick={() => navigate(nextRecommendedRoute)}
-                className="inline-flex items-center justify-center gap-3 bg-gold px-6 py-4 text-sm uppercase tracking-[0.24em] text-black transition-opacity hover:opacity-90"
-              >
-                <ArrowRight className="h-4 w-4" />
-                {nextRecommendedLabel}
-              </button>
-
-              <button
-                type="button"
-                onClick={() => navigate(ROUTES.STATUS)}
-                className="inline-flex items-center justify-center gap-3 border border-white/10 px-6 py-4 text-sm uppercase tracking-[0.24em] text-white transition-colors hover:border-gold/40 hover:text-gold"
-              >
-                Ouvrir Status
-              </button>
-            </div>
-
-            {(localMessage || error) && (
-              <div className="mt-6 rounded-3xl border border-white/10 bg-white/5 p-5 text-sm text-white/85">
-                {localMessage ?? error?.message}
-              </div>
-            )}
-
-            <div className="mt-8 grid gap-4 md:grid-cols-3">
-              <div className="rounded-3xl border border-white/10 bg-black/20 p-5">
-                <p className="text-xs uppercase tracking-[0.24em] text-white/45">
-                  Score d’activation
-                </p>
-                <p className="mt-3 text-3xl font-semibold">
-                  {activation?.activation_score ?? 0}
-                </p>
-                <p className="mt-2 text-sm text-white/60">
-                  {activation?.is_operational ? "Foyer opérationnel" : "Foyer en montée"}
-                </p>
-              </div>
-
-              <div className="rounded-3xl border border-white/10 bg-black/20 p-5">
-                <p className="text-xs uppercase tracking-[0.24em] text-white/45">
-                  Alertes ouvertes
-                </p>
-                <p className="mt-3 text-3xl font-semibold">
-                  {health?.open_alert_count ?? 0}
-                </p>
-                <p className="mt-2 text-sm text-white/60">
-                  Vigilance quotidienne
-                </p>
-              </div>
-
-              <div className="rounded-3xl border border-white/10 bg-black/20 p-5">
-                <p className="text-xs uppercase tracking-[0.24em] text-white/45">
-                  Charges ouvertes
-                </p>
-                <p className="mt-3 text-3xl font-semibold">
-                  {(valueChain?.shopping_open_count ?? 0) +
-                    (health?.overdue_tasks_count ?? 0)}
-                </p>
-                <p className="mt-2 text-sm text-white/60">
-                  Courses + tâches en retard
-                </p>
-              </div>
-            </div>
-
-            <div className="mt-8 grid gap-4 md:grid-cols-5">
-              <div className="rounded-3xl border border-white/10 bg-black/20 p-5">
-                <Boxes className="h-5 w-5 text-gold" />
-                <p className="mt-3 text-2xl font-semibold">
-                  {health?.missing_stock_count ?? 0}
-                </p>
-                <p className="mt-2 text-xs uppercase tracking-[0.22em] text-white/50">
-                  Stock manquant
-                </p>
-              </div>
-
-              <div className="rounded-3xl border border-white/10 bg-black/20 p-5">
-                <ShoppingCart className="h-5 w-5 text-gold" />
-                <p className="mt-3 text-2xl font-semibold">
-                  {valueChain?.shopping_open_count ?? 0}
-                </p>
-                <p className="mt-2 text-xs uppercase tracking-[0.22em] text-white/50">
-                  Shopping open
-                </p>
-              </div>
-
-              <div className="rounded-3xl border border-white/10 bg-black/20 p-5">
-                <Utensils className="h-5 w-5 text-gold" />
-                <p className="mt-3 text-2xl font-semibold">
-                  {health?.planned_meals_count ?? 0}
-                </p>
-                <p className="mt-2 text-xs uppercase tracking-[0.22em] text-white/50">
-                  Repas planifiés
-                </p>
-              </div>
-
-              <div className="rounded-3xl border border-white/10 bg-black/20 p-5">
-                <ClipboardList className="h-5 w-5 text-gold" />
-                <p className="mt-3 text-2xl font-semibold">
-                  {health?.overdue_tasks_count ?? 0}
-                </p>
-                <p className="mt-2 text-xs uppercase tracking-[0.22em] text-white/50">
-                  Tâches en retard
-                </p>
-              </div>
-
-              <div className="rounded-3xl border border-white/10 bg-black/20 p-5">
-                <Wrench className="h-5 w-5 text-gold" />
-                <p className="mt-3 text-2xl font-semibold">
-                  {health?.blocked_tools_count ?? 0}
-                </p>
-                <p className="mt-2 text-xs uppercase tracking-[0.22em] text-white/50">
-                  Outils bloqués
-                </p>
-              </div>
-            </div>
-
-            <div className="mt-8 rounded-3xl border border-white/10 bg-black/20 p-6">
-              <div className="flex items-center gap-3">
-                <AlertTriangle className="h-5 w-5 text-gold" />
-                <h2 className="text-xl font-medium">Flux prioritaire du jour</h2>
-              </div>
-
-              <div className="mt-6 space-y-4">
-                {priorityFeed.length === 0 ? (
-                  <div className="rounded-2xl border border-dashed border-white/10 p-5 text-sm text-white/60">
-                    Aucun signal remonté pour le moment.
-                  </div>
-                ) : (
-                  priorityFeed.slice(0, 8).map((item) => {
-                    const severity = getFeedSeverity(item.status);
-
-                    return (
-                      <article
-                        key={`${item.item_type}-${item.item_id}`}
-                        className="rounded-2xl border border-white/10 bg-white/[0.03] p-5"
-                      >
-                        <div className="flex items-start justify-between gap-4">
-                          <div>
-                            <p className="text-xs uppercase tracking-[0.22em] text-white/45">
-                              {item.item_type}
-                            </p>
-                            <h3 className="mt-2 text-lg font-medium">
-                              {item.title}
-                            </h3>
-                            <p className="mt-2 text-sm text-white/60">
-                              {item.status} · {formatDate(item.scheduled_at)}
-                            </p>
-                          </div>
-
-                          <div className="rounded-full border border-gold/20 bg-gold/10 px-3 py-1 text-[11px] uppercase tracking-[0.2em] text-gold">
-                            {severity.label}
-                          </div>
-                        </div>
-
-                        <p className="mt-4 text-sm text-white/65">
-                          {severity.description}
-                        </p>
-                      </article>
-                    );
-                  })
-                )}
-              </div>
-            </div>
-          </section>
-
-          <aside className="space-y-6">
-            <section className="rounded-[2rem] border border-gold/20 bg-black/40 p-8">
-              <div className="mb-6 flex items-center gap-3 text-gold/85">
-                <ShieldCheck className="h-5 w-5" />
-                <span className="text-xs uppercase tracking-[0.35em]">
-                  Lecture métier DOMYLI
-                </span>
-              </div>
-
-              <div className="space-y-5">
-                <div className="rounded-[1.5rem] border border-white/10 bg-black/20 px-5 py-5">
-                  <div className="text-xs uppercase tracking-[0.28em] text-gold/75">
-                    Session
-                  </div>
-                  <div className="mt-3 text-2xl">{sessionEmail ?? "—"}</div>
-                </div>
-
-                <div className="rounded-[1.5rem] border border-white/10 bg-black/20 px-5 py-5">
-                  <div className="text-xs uppercase tracking-[0.28em] text-gold/75">
-                    Foyer actif
-                  </div>
-                  <div className="mt-3 text-2xl">
-                    {activeMembership?.household_name ?? "—"}
-                  </div>
-                  <div className="mt-2 text-sm text-white/60">
-                    Household ID : {bootstrap?.active_household_id ?? "—"}
-                  </div>
-                </div>
-
-                <div className="rounded-[1.5rem] border border-white/10 bg-black/20 px-5 py-5">
-                  <div className="text-xs uppercase tracking-[0.28em] text-gold/75">
-                    Gouvernance
-                  </div>
-                  <div className="mt-3 text-2xl">
-                    {activeMembership?.role ?? "—"}
-                  </div>
-                  <div className="mt-2 text-sm text-white/60">
-                    Super Admin : {bootstrap?.is_super_admin ? "Oui" : "Non"}
-                  </div>
-                </div>
-
-                <div className="rounded-[1.5rem] border border-white/10 bg-black/20 px-5 py-5">
-                  <div className="text-xs uppercase tracking-[0.28em] text-gold/75">
-                    Jour observé
-                  </div>
-                  <div className="mt-3 text-2xl">{health?.day ?? "—"}</div>
-                </div>
-
-                <div className="rounded-[1.5rem] border border-white/10 bg-black/20 px-5 py-5">
-                  <div className="text-xs uppercase tracking-[0.28em] text-gold/75">
-                    Chaîne de valeur
-                  </div>
-                  <div className="mt-4 flex flex-wrap gap-2">
-                    <FlowBadge label={`Members ${valueChain?.members_count ?? 0}`} />
-                    <FlowBadge label={`Profiles ${valueChain?.profiles_count ?? 0}`} />
-                    <FlowBadge label={`Inventory ${valueChain?.inventory_items_count ?? 0}`} />
-                    <FlowBadge label={`Meals ${valueChain?.meal_slots_count ?? 0}`} />
-                    <FlowBadge label={`Tasks ${valueChain?.tasks_count ?? 0}`} />
-                  </div>
-                </div>
-              </div>
-            </section>
-
-            <section className="rounded-[2rem] border border-gold/20 bg-black/40 p-8">
-              <div className="mb-6 flex items-center gap-3 text-gold/85">
-                <CheckCircle2 className="h-5 w-5" />
-                <span className="text-xs uppercase tracking-[0.35em]">
-                  Activation pilotée
-                </span>
-              </div>
-
-              <div className="space-y-4">
-                {[
-                  ["Membres", activation?.has_members],
-                  ["Profils", activation?.has_profiles],
-                  ["Inventaire", activation?.has_inventory],
-                  ["Tâches", activation?.has_tasks],
-                  ["Repas", activation?.has_meals],
-                ].map(([label, ok]: [string, boolean | undefined]) => (
-                  <div
-                    key={label}
-                    className="flex items-center justify-between rounded-[1.5rem] border border-white/10 bg-black/20 px-5 py-4"
-                  >
-                    <span className="text-sm text-white/80">{label}</span>
-                    <span className="text-sm text-gold">
-                      {ok ? "OK" : "À construire"}
-                    </span>
-                  </div>
-                ))}
-              </div>
-
-              <button
-                type="button"
-                onClick={() => navigate(nextRecommendedRoute)}
-                className="mt-8 inline-flex w-full items-center justify-center gap-3 border border-white/10 px-5 py-4 text-sm uppercase tracking-[0.24em] text-white transition-colors hover:border-gold/40 hover:text-gold"
-              >
-                {nextRecommendedLabel}
-                <ArrowRight className="h-4 w-4" />
-              </button>
-            </section>
-          </aside>
+    <section className="space-y-8 text-white">
+      <div className="rounded-[32px] border border-white/10 bg-black/25 p-8 shadow-[0_30px_80px_rgba(0,0,0,0.25)]">
+        <div className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
+          <div className="max-w-3xl space-y-4">
+            <div className="text-xs uppercase tracking-[0.24em] text-gold/70">DOMYLI · Status</div>
+            <h1 className="text-4xl font-semibold">Lecture transverse du foyer</h1>
+            <p className="text-sm leading-7 text-white/70">
+              Le status consolide les signaux structurants : stock, repas, tâches, shopping, outils, invitations et profils à compléter.
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-3">
+            <button
+              type="button"
+              onClick={handleRefresh}
+              className="inline-flex items-center justify-center gap-3 rounded-full border border-white/10 px-5 py-3 text-sm uppercase tracking-[0.18em] text-white transition-colors hover:border-gold/40 hover:text-gold"
+            >
+              <RefreshCw className="h-4 w-4" /> Rafraîchir
+            </button>
+            <button
+              type="button"
+              onClick={() => navigate(ROUTES.DASHBOARD)}
+              className="inline-flex items-center justify-center gap-3 rounded-full bg-gold px-5 py-3 text-sm uppercase tracking-[0.18em] text-black transition-opacity hover:opacity-90"
+            >
+              Dashboard
+              <ArrowRight className="h-4 w-4" />
+            </button>
+          </div>
         </div>
+
+        <div className="mt-6 flex flex-wrap gap-3">
+          <SummaryPill label="Statut global" value={globalStatus} tone={globalTone} />
+          <SummaryPill label="Alertes ouvertes" value={String(health?.open_alert_count ?? 0)} tone={(health?.open_alert_count ?? 0) > 0 ? "danger" : "success"} />
+          <SummaryPill label="Jour observé" value={health?.day ?? "—"} />
+        </div>
+
+        {(localMessage || error) && (
+          <div className="mt-6 rounded-2xl border border-amber-400/30 bg-amber-400/10 px-4 py-3 text-sm text-amber-100">
+            {localMessage ?? error?.message}
+          </div>
+        )}
       </div>
-    </main>
+
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+        <FlowCard icon={Boxes} title="Inventaire" value={String(flowSummary?.inventory.missing_stock_count ?? 0)} subtitle="Articles manquants" tone={(flowSummary?.inventory.missing_stock_count ?? 0) > 0 ? "danger" : "neutral"} />
+        <FlowCard icon={ShoppingCart} title="Shopping" value={String(flowSummary?.shopping.open_shopping_count ?? 0)} subtitle="Besoins ouverts" tone={(flowSummary?.shopping.open_shopping_count ?? 0) > 0 ? "warning" : "neutral"} />
+        <FlowCard icon={Utensils} title="Meals" value={String(flowSummary?.meals.planned_meals_count ?? 0)} subtitle="Repas planifiés" />
+        <FlowCard icon={ClipboardList} title="Tasks" value={String(flowSummary?.tasks.overdue_tasks_count ?? 0)} subtitle="Tâches en retard" tone={(flowSummary?.tasks.overdue_tasks_count ?? 0) > 0 ? "danger" : "neutral"} />
+        <FlowCard icon={Wrench} title="Tools" value={String(flowSummary?.tools.blocked_tools_count ?? 0)} subtitle="Outils bloqués" tone={(flowSummary?.tools.blocked_tools_count ?? 0) > 0 ? "warning" : "neutral"} />
+        <FlowCard icon={Users} title="Household" value={String((flowSummary?.household.pending_invites_count ?? 0) + (flowSummary?.household.profiles_incomplete_count ?? 0))} subtitle="Invitations + profils à finaliser" tone={((flowSummary?.household.pending_invites_count ?? 0) + (flowSummary?.household.profiles_incomplete_count ?? 0)) > 0 ? "warning" : "neutral"} />
+      </div>
+
+      <div className="rounded-[32px] border border-white/10 bg-white/[0.04] p-6 shadow-[0_30px_80px_rgba(0,0,0,0.2)]">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <div className="text-[11px] uppercase tracking-[0.22em] text-gold/70">Flux prioritaire</div>
+            <h2 className="mt-2 text-2xl font-semibold text-white">Signaux à lire et traiter</h2>
+          </div>
+          <div className="text-sm text-white/55">
+            {priorityFeed.length} signal{priorityFeed.length > 1 ? "s" : ""} consolidé{priorityFeed.length > 1 ? "s" : ""}
+          </div>
+        </div>
+
+        {priorityFeed.length === 0 ? (
+          <div className="mt-5 rounded-[24px] border border-white/10 bg-black/20 p-6 text-sm text-white/65">
+            Aucun signal prioritaire remonté pour le moment.
+          </div>
+        ) : (
+          <div className="mt-5 space-y-4">
+            {priorityFeed.slice(0, 10).map((item) => (
+              <button
+                key={`${item.entity_type ?? item.item_type}-${item.entity_id ?? item.title}`}
+                type="button"
+                onClick={() => navigate(item.route_hint || ROUTES.DASHBOARD)}
+                className="w-full rounded-[24px] border border-white/10 bg-black/20 p-5 text-left transition hover:border-gold/30 hover:bg-black/25"
+              >
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <div className="text-[11px] uppercase tracking-[0.18em] text-white/45">{item.item_type} · {item.flow_code}</div>
+                    <div className="mt-2 text-lg font-semibold text-white">{item.title}</div>
+                    <div className="mt-2 text-sm text-white/55">{formatDate(item.scheduled_at)}</div>
+                  </div>
+                  <span className={`inline-flex items-center rounded-full border px-3 py-1 text-[11px] font-medium uppercase tracking-[0.18em] ${getToneClasses(getSignalTone(item.status))}`}>
+                    {item.status}
+                  </span>
+                </div>
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <SummaryPill label="Stock bas" value={String(health?.low_stock_count ?? 0)} tone={(health?.low_stock_count ?? 0) > 0 ? "warning" : "neutral"} />
+        <SummaryPill label="Invitations" value={String(health?.pending_invites_count ?? 0)} tone={(health?.pending_invites_count ?? 0) > 0 ? "warning" : "neutral"} />
+        <SummaryPill label="Profils incomplets" value={String(health?.profiles_incomplete_count ?? 0)} tone={(health?.profiles_incomplete_count ?? 0) > 0 ? "warning" : "neutral"} />
+        <SummaryPill label="Tâches en retard" value={String(health?.overdue_tasks_count ?? 0)} tone={(health?.overdue_tasks_count ?? 0) > 0 ? "danger" : "neutral"} />
+      </div>
+    </section>
   );
 }
