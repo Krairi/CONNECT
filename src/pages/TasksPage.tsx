@@ -1,22 +1,29 @@
-
-import { useMemo } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import {
   AlertTriangle,
   BookOpenCheck,
+  CalendarDays,
   CheckCircle2,
   Clock3,
   Filter,
   ImageIcon,
+  PlayCircle,
   ShieldAlert,
   Sparkles,
   Wrench,
 } from "lucide-react";
 
 import { useTaskLibrary } from "@/src/hooks/useTaskLibrary";
+import { useTaskRuntime } from "@/src/hooks/useTaskRuntime";
 import { useHouseholdProfileOptions } from "@/src/hooks/useHouseholdProfileOptions";
+import type { PlannedTaskInstance } from "@/src/services/tasks/taskRuntimeService";
 import type { TaskLibraryItem } from "@/src/services/tasks/taskLibraryService";
 
 type Tone = "neutral" | "warning" | "danger" | "success";
+
+function todayIsoDate() {
+  return new Date().toISOString().slice(0, 10);
+}
 
 function getToneClasses(tone: Tone): string {
   switch (tone) {
@@ -91,6 +98,31 @@ function getFitTone(value: string): Tone {
   }
 }
 
+function getToolTone(value: string): Tone {
+  switch (value) {
+    case "READY":
+      return "success";
+    case "MISSING":
+      return "danger";
+    default:
+      return "neutral";
+  }
+}
+
+function getExecutionTone(value: string | null | undefined): Tone {
+  switch (String(value ?? "").toUpperCase()) {
+    case "DONE":
+    case "COMPLETED":
+      return "success";
+    case "STARTED":
+    case "IN_PROGRESS":
+    case "RUNNING":
+      return "warning";
+    default:
+      return "neutral";
+  }
+}
+
 function TaskCard({
   item,
   isSelected,
@@ -132,18 +164,96 @@ function TaskCard({
   );
 }
 
-function DetailSection({
-  title,
-  children,
-}: {
-  title: string;
-  children: React.ReactNode;
-}) {
+function DetailSection({ title, children }: { title: string; children: ReactNode }) {
   return (
     <section className="rounded-[28px] border border-white/10 bg-black/20 p-5">
       <div className="mb-4 text-[11px] uppercase tracking-[0.24em] text-gold/80">{title}</div>
       {children}
     </section>
+  );
+}
+
+function DetailStat({
+  icon: Icon,
+  label,
+  value,
+}: {
+  icon: typeof Clock3;
+  label: string;
+  value: string;
+}) {
+  return (
+    <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
+      <div className="flex items-center gap-3">
+        <div className="rounded-2xl border border-gold/20 bg-gold/10 p-3 text-gold">
+          <Icon className="h-4 w-4" />
+        </div>
+        <div>
+          <div className="text-[11px] uppercase tracking-[0.16em] text-white/35">{label}</div>
+          <div className="mt-1 text-sm font-medium text-white">{value}</div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function InstanceCard({
+  item,
+  busy,
+  onStart,
+  onComplete,
+}: {
+  item: PlannedTaskInstance;
+  busy: boolean;
+  onStart: () => void;
+  onComplete: () => void;
+}) {
+  const executionLabel = item.execution_status || item.status;
+  const canStart = !item.task_execution_id && !["DONE", "COMPLETED"].includes(String(item.status).toUpperCase());
+  const canComplete = Boolean(item.task_execution_id) && !["DONE", "COMPLETED"].includes(String(executionLabel).toUpperCase());
+
+  return (
+    <div className="rounded-[24px] border border-white/10 bg-white/[0.04] p-5">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <div className="text-sm font-semibold text-white">{item.task_title}</div>
+          <div className="mt-1 text-[11px] uppercase tracking-[0.16em] text-white/40">
+            {item.task_template_code || "CATALOGUE"} · {item.profile_label}
+          </div>
+        </div>
+        <ToneBadge label={executionLabel || "Planifiée"} tone={getExecutionTone(executionLabel)} />
+      </div>
+
+      <div className="mt-4 grid gap-3 md:grid-cols-2">
+        <div className="rounded-2xl border border-white/8 bg-black/20 p-4">
+          <div className="text-[11px] uppercase tracking-[0.16em] text-white/35">Date prévue</div>
+          <div className="mt-2 text-sm text-white">{item.planned_for}</div>
+        </div>
+        <div className="rounded-2xl border border-white/8 bg-black/20 p-4">
+          <div className="text-[11px] uppercase tracking-[0.16em] text-white/35">Instance</div>
+          <div className="mt-2 break-all text-sm text-white/80">{item.task_instance_id}</div>
+        </div>
+      </div>
+
+      <div className="mt-4 flex flex-wrap gap-3">
+        <button
+          type="button"
+          onClick={onStart}
+          disabled={!canStart || busy}
+          className="inline-flex items-center justify-center rounded-full border border-gold/30 bg-gold/15 px-4 py-2 text-xs font-medium uppercase tracking-[0.18em] text-gold transition hover:border-gold/50 hover:bg-gold/20 disabled:cursor-not-allowed disabled:opacity-45"
+        >
+          Démarrer
+        </button>
+        <button
+          type="button"
+          onClick={onComplete}
+          disabled={!canComplete || busy}
+          className="inline-flex items-center justify-center rounded-full border border-emerald-400/30 bg-emerald-400/12 px-4 py-2 text-xs font-medium uppercase tracking-[0.18em] text-emerald-100 transition hover:border-emerald-400/45 hover:bg-emerald-400/18 disabled:cursor-not-allowed disabled:opacity-45"
+        >
+          Clôturer
+        </button>
+      </div>
+    </div>
   );
 }
 
@@ -169,11 +279,40 @@ export default function TasksPage() {
     refresh,
   } = useTaskLibrary();
 
+  const {
+    contextLoading,
+    feedLoading,
+    planning,
+    starting,
+    completing,
+    contextError,
+    feedError,
+    actionError,
+    context,
+    feed,
+    instancesByTemplate,
+    lastPlanningReceipt,
+    lastStartReceipt,
+    lastCompleteReceipt,
+    planTaskFromLibrary,
+    startTaskInstance,
+    completeTaskExecution,
+  } = useTaskRuntime({
+    taskTemplateCode: selectedTaskTemplateCode,
+    profileId,
+  });
+
   const profileOptions = useHouseholdProfileOptions();
+  const [dateFrom, setDateFrom] = useState(todayIsoDate());
+  const [dateTo, setDateTo] = useState(todayIsoDate());
+
   const selectedProfileLabel = useMemo(() => {
     const matched = profileOptions.options.find((entry) => entry.id === profileId);
     return matched?.label ?? "Lecture foyer";
   }, [profileId, profileOptions.options]);
+
+  const runtimeSummary = useMemo(() => feed.summary, [feed.summary]);
+  const actionBusy = planning || starting || completing;
 
   return (
     <main className="min-h-screen bg-[#070b11] text-white">
@@ -181,18 +320,20 @@ export default function TasksPage() {
         <header className="overflow-hidden rounded-[36px] border border-white/10 bg-[radial-gradient(circle_at_top_left,rgba(212,175,55,0.16),transparent_35%),linear-gradient(135deg,rgba(255,255,255,0.08),rgba(255,255,255,0.03))] p-8 shadow-[0_30px_120px_rgba(0,0,0,0.35)]">
           <div className="flex flex-col gap-6 xl:flex-row xl:items-end xl:justify-between">
             <div className="max-w-4xl">
-              <p className="text-[11px] uppercase tracking-[0.28em] text-gold/80">Bibliothèque tâches · DOMYLI</p>
+              <p className="text-[11px] uppercase tracking-[0.28em] text-gold/80">Tasks runtime · DOMYLI</p>
               <h1 className="mt-4 text-4xl font-semibold leading-tight text-white xl:text-[3.2rem]">
-                Lis des tâches détaillées, gouvernées et visuelles avant toute exécution réelle.
+                Planifie, démarre et clôture une tâche publiée sans champ libre, avec outils requis et capacité visible.
               </h1>
               <p className="mt-4 max-w-3xl text-base leading-7 text-white/70">
-                Cette bibliothèque tâche ne sert pas à saisir librement des actions. Elle expose des modèles publiés,
-                structurés, compatibles avec le contexte du foyer et prêts à alimenter l’exécution domestique.
+                Ici, une tâche n’est plus une simple fiche. Elle devient une exécution gouvernée reliée à un profil,
+                à une bibliothèque publiée, à une capacité lisible et à des outils requis contrôlés.
               </p>
             </div>
             <button
               type="button"
-              onClick={() => void refresh()}
+              onClick={() => {
+                void refresh();
+              }}
               className="inline-flex items-center justify-center rounded-full border border-gold/30 bg-gold/15 px-5 py-3 text-sm font-medium text-gold transition hover:border-gold/50 hover:bg-gold/20"
             >
               Recharger la bibliothèque
@@ -202,14 +343,24 @@ export default function TasksPage() {
 
         <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
           <SummaryCard label="Tâches publiées" value={String(summary.total)} icon={BookOpenCheck} />
-          <SummaryCard label="Compatibles" value={String(summary.ok)} icon={CheckCircle2} tone="success" />
-          <SummaryCard label="À valider" value={String(summary.warning)} icon={AlertTriangle} tone="warning" />
-          <SummaryCard label="Quotidiennes" value={String(summary.daily)} icon={Clock3} />
+          <SummaryCard label="Instances planifiées" value={String(runtimeSummary.planned)} icon={CalendarDays} tone="warning" />
+          <SummaryCard label="Exécutions démarrées" value={String(runtimeSummary.started)} icon={PlayCircle} tone="warning" />
+          <SummaryCard label="Exécutions terminées" value={String(runtimeSummary.done)} icon={CheckCircle2} tone="success" />
         </section>
 
         {error ? (
           <section className="rounded-[28px] border border-rose-400/25 bg-rose-400/10 p-5 text-sm text-rose-100">
             {error.message || "Une erreur Tasks est survenue."}
+          </section>
+        ) : null}
+        {actionError ? (
+          <section className="rounded-[28px] border border-rose-400/25 bg-rose-400/10 p-5 text-sm text-rose-100">
+            {actionError.message || "Action Tasks indisponible."}
+          </section>
+        ) : null}
+        {feedError ? (
+          <section className="rounded-[28px] border border-amber-400/25 bg-amber-400/10 p-5 text-sm text-amber-100">
+            {feedError.message || "Lecture des instances indisponible."}
           </section>
         ) : null}
 
@@ -353,6 +504,11 @@ export default function TasksPage() {
                 {detailError.message || "Lecture détaillée indisponible."}
               </section>
             ) : null}
+            {contextError ? (
+              <section className="rounded-[28px] border border-amber-400/25 bg-amber-400/10 p-5 text-sm text-amber-100">
+                {contextError.message || "Contexte d'exécution indisponible."}
+              </section>
+            ) : null}
 
             {detail ? (
               <>
@@ -367,44 +523,147 @@ export default function TasksPage() {
                   </div>
                 </DetailSection>
 
-                <DetailSection title="Outils requis">
-                  <div className="grid gap-3 md:grid-cols-2">
-                    {detail.required_tools.map((tool) => (
-                      <div key={tool.tool_code} className="rounded-2xl border border-white/8 bg-black/20 p-4">
-                        <div className="flex items-center gap-3">
-                          <Wrench className="h-4 w-4 text-gold" />
+                <DetailSection title="Capacité et outils requis">
+                  {contextLoading ? (
+                    <div className="rounded-2xl border border-white/10 bg-black/20 p-4 text-sm text-white/65">
+                      Calcul de la capacité et des outils requis…
+                    </div>
+                  ) : context ? (
+                    <div className="space-y-5">
+                      <div className="rounded-2xl border border-white/8 bg-black/20 p-4">
+                        <div className="flex flex-wrap items-center justify-between gap-3">
                           <div>
-                            <div className="text-sm font-medium text-white">{tool.tool_label}</div>
-                            <div className="text-[11px] uppercase tracking-[0.16em] text-white/35">{tool.tool_code}</div>
+                            <div className="text-[11px] uppercase tracking-[0.16em] text-white/35">Capacité profil</div>
+                            <div className="mt-2 text-sm font-medium text-white">{context.capacity_summary.profile_label}</div>
                           </div>
+                          <ToneBadge label={context.capacity_summary.label} tone={getFitTone(context.capacity_summary.status)} />
+                        </div>
+                        {context.capacity_summary.score != null ? (
+                          <div className="mt-3 text-xs uppercase tracking-[0.16em] text-white/45">
+                            Score capacité : {context.capacity_summary.score}
+                          </div>
+                        ) : null}
+                        <div className="mt-4 space-y-3">
+                          {context.capacity_summary.reasons.map((reason, index) => (
+                            <div
+                              key={`capacity-${index}`}
+                              className={`rounded-2xl border p-4 text-sm ${getToneClasses(getFitTone(context.capacity_summary.status))}`}
+                            >
+                              {reason}
+                            </div>
+                          ))}
                         </div>
                       </div>
-                    ))}
-                  </div>
+
+                      <div className="grid gap-3 md:grid-cols-2">
+                        {context.tools_readiness.map((tool) => (
+                          <div key={tool.tool_code} className="rounded-2xl border border-white/8 bg-black/20 p-4">
+                            <div className="flex items-center justify-between gap-3">
+                              <div className="flex items-center gap-3">
+                                <Wrench className="h-4 w-4 text-gold" />
+                                <div>
+                                  <div className="text-sm font-medium text-white">{tool.tool_label}</div>
+                                  <div className="text-[11px] uppercase tracking-[0.16em] text-white/35">{tool.tool_code}</div>
+                                </div>
+                              </div>
+                              <ToneBadge label={tool.status_label} tone={getToolTone(tool.status)} />
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+
+                      <div className="rounded-2xl border border-gold/20 bg-gold/10 p-4 text-sm text-gold/90">
+                        {context.next_step_label}
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="rounded-2xl border border-white/10 bg-black/20 p-4 text-sm text-white/65">
+                      Sélectionne une tâche pour charger le contexte d’exécution.
+                    </div>
+                  )}
                 </DetailSection>
 
-                <DetailSection title="Compatibilités et signaux">
-                  <div className="flex flex-wrap gap-2">
-                    {detail.compatibility_tags.map((tag) => (
-                      <ToneBadge key={`${detail.task_template_code}-${tag.code}`} label={tag.label} />
-                    ))}
-                    {detail.execution_signals.map((signal) => (
-                      <ToneBadge key={`${detail.task_template_code}-${signal.code}`} label={signal.label} tone="success" />
-                    ))}
+                <DetailSection title="Planification gouvernée">
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <label className="rounded-2xl border border-white/10 bg-black/20 p-4">
+                      <div className="text-[11px] uppercase tracking-[0.16em] text-white/35">Date de début</div>
+                      <input
+                        type="date"
+                        value={dateFrom}
+                        onChange={(event) => setDateFrom(event.target.value)}
+                        className="mt-3 w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white outline-none transition focus:border-gold/40"
+                      />
+                    </label>
+                    <label className="rounded-2xl border border-white/10 bg-black/20 p-4">
+                      <div className="text-[11px] uppercase tracking-[0.16em] text-white/35">Date de fin</div>
+                      <input
+                        type="date"
+                        value={dateTo}
+                        onChange={(event) => setDateTo(event.target.value)}
+                        className="mt-3 w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white outline-none transition focus:border-gold/40"
+                      />
+                    </label>
                   </div>
 
-                  <div className="mt-5 space-y-3">
-                    {detail.fit_reasons.map((reason, index) => (
-                      <div key={`fit-${index}`} className="rounded-2xl border border-emerald-400/20 bg-emerald-400/10 p-4 text-sm text-emerald-100">
-                        {reason}
-                      </div>
-                    ))}
-                    {detail.blocked_reasons.map((reason, index) => (
-                      <div key={`blocked-${index}`} className="rounded-2xl border border-red-400/20 bg-red-400/10 p-4 text-sm text-red-100">
-                        {reason}
-                      </div>
-                    ))}
+                  <div className="mt-5 flex flex-wrap gap-3">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        void planTaskFromLibrary({ dateFrom, dateTo });
+                      }}
+                      disabled={!selectedTaskTemplateCode || actionBusy}
+                      className="inline-flex items-center justify-center rounded-full border border-gold/30 bg-gold/15 px-5 py-3 text-sm font-medium text-gold transition hover:border-gold/50 hover:bg-gold/20 disabled:cursor-not-allowed disabled:opacity-45"
+                    >
+                      Planifier depuis la bibliothèque
+                    </button>
+                    <ToneBadge label={selectedProfileLabel} />
                   </div>
+
+                  {lastPlanningReceipt ? (
+                    <div className="mt-5 rounded-2xl border border-emerald-400/20 bg-emerald-400/10 p-4 text-sm text-emerald-100">
+                      Planification enregistrée : {lastPlanningReceipt.task_title} · {lastPlanningReceipt.generated_count} instance(s) générée(s)
+                    </div>
+                  ) : null}
+                  {lastStartReceipt ? (
+                    <div className="mt-3 rounded-2xl border border-amber-400/20 bg-amber-400/10 p-4 text-sm text-amber-100">
+                      Exécution démarrée : {lastStartReceipt.task_execution_id ?? lastStartReceipt.task_instance_id}
+                    </div>
+                  ) : null}
+                  {lastCompleteReceipt ? (
+                    <div className="mt-3 rounded-2xl border border-emerald-400/20 bg-emerald-400/10 p-4 text-sm text-emerald-100">
+                      Exécution clôturée : {lastCompleteReceipt.task_execution_id} · {lastCompleteReceipt.proof_mode}
+                    </div>
+                  ) : null}
+                </DetailSection>
+
+                <DetailSection title="Instances et exécution réelle">
+                  {feedLoading ? (
+                    <div className="rounded-2xl border border-white/10 bg-black/20 p-4 text-sm text-white/65">
+                      Lecture des instances en cours…
+                    </div>
+                  ) : instancesByTemplate.length === 0 ? (
+                    <div className="rounded-2xl border border-white/10 bg-black/20 p-4 text-sm text-white/65">
+                      Aucune instance encore créée pour cette tâche publiée.
+                    </div>
+                  ) : (
+                    <div className="space-y-4">
+                      {instancesByTemplate.map((item) => (
+                        <InstanceCard
+                          key={item.task_instance_id}
+                          item={item}
+                          busy={actionBusy}
+                          onStart={() => {
+                            void startTaskInstance(item.task_instance_id);
+                          }}
+                          onComplete={() => {
+                            if (item.task_execution_id) {
+                              void completeTaskExecution(item.task_execution_id);
+                            }
+                          }}
+                        />
+                      ))}
+                    </div>
+                  )}
                 </DetailSection>
               </>
             ) : null}
@@ -412,29 +671,5 @@ export default function TasksPage() {
         </section>
       </div>
     </main>
-  );
-}
-
-function DetailStat({
-  icon: Icon,
-  label,
-  value,
-}: {
-  icon: typeof Clock3;
-  label: string;
-  value: string;
-}) {
-  return (
-    <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
-      <div className="flex items-center gap-3">
-        <div className="rounded-2xl border border-gold/20 bg-gold/10 p-3 text-gold">
-          <Icon className="h-4 w-4" />
-        </div>
-        <div>
-          <div className="text-[11px] uppercase tracking-[0.16em] text-white/35">{label}</div>
-          <div className="mt-1 text-sm font-medium text-white">{value}</div>
-        </div>
-      </div>
-    </div>
   );
 }
