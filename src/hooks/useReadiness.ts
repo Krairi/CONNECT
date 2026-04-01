@@ -21,31 +21,15 @@ export function useReadiness() {
   const [state, setState] = useState<ReadinessState>(initialState);
 
   const refresh = useCallback(async () => {
-    setState((prev) => ({
-      ...prev,
-      loading: true,
-      error: null,
-    }));
+    setState((prev) => ({ ...prev, loading: true, error: null }));
 
     try {
       const readiness = await readReadinessStatus();
-
-      setState({
-        loading: false,
-        error: null,
-        readiness,
-      });
-
+      setState({ loading: false, error: null, readiness });
       return readiness;
     } catch (error) {
       const normalized = toDomyliError(error);
-
-      setState({
-        loading: false,
-        error: normalized,
-        readiness: null,
-      });
-
+      setState({ loading: false, error: normalized, readiness: null });
       throw normalized;
     }
   }, []);
