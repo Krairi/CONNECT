@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
-import { Navigate, Link } from "react-router-dom";
+import { Link, Navigate } from "react-router-dom";
 
-import { useAuth } from "@/src/providers/AuthProvider";
 import { ROUTES } from "@/src/constants/routes";
-import { readMyProfileStatus } from "@/src/services/profiles/myProfileService";
 import { toDomyliError, type DomyliAppError } from "@/src/lib/errors";
+import { useAuth } from "@/src/providers/AuthProvider";
+import { readMyProfileStatus } from "@/src/services/profiles/myProfileService";
 
 type Props = {
   children: ReactNode;
@@ -18,6 +18,8 @@ type ProfileGateState = {
   loading: boolean;
   checked: boolean;
   hasProfile: boolean;
+  profileCompleted: boolean;
+  requiredFields: string[];
   error: DomyliAppError | null;
 };
 
@@ -25,11 +27,27 @@ const initialProfileGate: ProfileGateState = {
   loading: false,
   checked: false,
   hasProfile: false,
+  profileCompleted: false,
+  requiredFields: [],
   error: null,
 };
 
 function getAuthenticatedFallbackRoute(hasHousehold: boolean): string {
   return hasHousehold ? ROUTES.DASHBOARD : ROUTES.ACTIVATE_HOUSEHOLD;
+}
+
+function prettifyRequiredField(code: string): string {
+  const labels: Record<string, string> = {
+    DISPLAY_NAME: "Nom affiché",
+    BIRTH_DATE: "Date de naissance",
+    SEX: "Sexe",
+    HEIGHT_CM: "Taille",
+    WEIGHT_KG: "Poids",
+    GOAL: "Objectif",
+    ACTIVITY_LEVEL: "Niveau d’activité",
+  };
+
+  return labels[code] ?? code;
 }
 
 function GateScreen({
@@ -134,6 +152,8 @@ export default function ProtectedRoute({
       loading: true,
       checked: false,
       hasProfile: false,
+      profileCompleted: false,
+      requiredFields: [],
       error: null,
     });
 
@@ -145,6 +165,8 @@ export default function ProtectedRoute({
           loading: false,
           checked: true,
           hasProfile: Boolean(status.has_profile),
+          profileCompleted: Boolean(status.profile_completed),
+          requiredFields: status.required_fields,
           error: null,
         });
       })
@@ -155,6 +177,8 @@ export default function ProtectedRoute({
           loading: false,
           checked: true,
           hasProfile: false,
+          profileCompleted: false,
+          requiredFields: [],
           error: toDomyliError(error),
         });
       });
@@ -194,7 +218,7 @@ export default function ProtectedRoute({
       return (
         <GateScreen
           title="Vérification du profil humain"
-          description="DOMYLI contrôle que le compte connecté possède bien un profil humain exploitable dans le foyer actif."
+          description="DOMYLI contrôle que le compte connecté possède bien un profil humain complet et exploitable dans le foyer actif."
         />
       );
     }
@@ -217,6 +241,24 @@ export default function ProtectedRoute({
 
     if (!profileGate.hasProfile) {
       return <Navigate to={ROUTES.MY_PROFILE} replace />;
+    }
+
+    if (!profileGate.profileCompleted) {
+      const missingFields =
+        profileGate.requiredFields.length > 0
+          ? `Champs requis : ${profileGate.requiredFields
+              .map(prettifyRequiredField)
+              .join(", ")}.`
+          : "DOMYLI exige un profil complet avant l’accès aux parcours métier.";
+
+      return (
+        <GateScreen
+          title="Profil humain à compléter"
+          description={missingFields}
+          primaryLabel="Compléter mon profil"
+          primaryHref={ROUTES.MY_PROFILE}
+        />
+      );
     }
   }
 

@@ -1,9 +1,12 @@
 import { useCallback, useEffect, useState } from "react";
+
 import { toDomyliError, type DomyliAppError } from "@/src/lib/errors";
 import {
   acceptHouseholdInvite,
   inviteHouseholdMember,
   listHouseholdMembers,
+  type HouseholdInviteAcceptResult,
+  type HouseholdInviteCreateResult,
   type HouseholdMemberItem,
 } from "@/src/services/households/householdMembersService";
 
@@ -13,8 +16,8 @@ type HouseholdMembersState = {
   accepting: boolean;
   error: DomyliAppError | null;
   members: HouseholdMemberItem[];
-  lastInviteId: string | null;
-  lastAcceptedHouseholdId: string | null;
+  lastInvite: HouseholdInviteCreateResult | null;
+  lastAccepted: HouseholdInviteAcceptResult | null;
 };
 
 const initialState: HouseholdMembersState = {
@@ -23,12 +26,12 @@ const initialState: HouseholdMembersState = {
   accepting: false,
   error: null,
   members: [],
-  lastInviteId: null,
-  lastAcceptedHouseholdId: null,
+  lastInvite: null,
+  lastAccepted: null,
 };
 
 export function useHouseholdMembers() {
-  const [state, setState] = useState<HouseholdMembersState>(initialState);
+  const [state, setState] = useState(initialState);
 
   const refresh = useCallback(async () => {
     setState((prev) => ({
@@ -39,23 +42,19 @@ export function useHouseholdMembers() {
 
     try {
       const members = await listHouseholdMembers();
-
       setState((prev) => ({
         ...prev,
         loading: false,
         members,
       }));
-
       return members;
     } catch (error) {
       const normalized = toDomyliError(error);
-
       setState((prev) => ({
         ...prev,
         loading: false,
         error: normalized,
       }));
-
       throw normalized;
     }
   }, []);
@@ -69,30 +68,28 @@ export function useHouseholdMembers() {
       ...prev,
       inviting: true,
       error: null,
-      lastInviteId: null,
+      lastInvite: null,
     }));
 
     try {
-      const inviteId = await inviteHouseholdMember(email, role);
+      const invite = await inviteHouseholdMember(email, role);
       const members = await listHouseholdMembers();
 
       setState((prev) => ({
         ...prev,
         inviting: false,
         members,
-        lastInviteId: inviteId,
+        lastInvite: invite,
       }));
 
-      return inviteId;
+      return invite;
     } catch (error) {
       const normalized = toDomyliError(error);
-
       setState((prev) => ({
         ...prev,
         inviting: false,
         error: normalized,
       }));
-
       throw normalized;
     }
   }, []);
@@ -102,28 +99,24 @@ export function useHouseholdMembers() {
       ...prev,
       accepting: true,
       error: null,
-      lastAcceptedHouseholdId: null,
+      lastAccepted: null,
     }));
 
     try {
-      const householdId = await acceptHouseholdInvite(token);
-
+      const accepted = await acceptHouseholdInvite(token);
       setState((prev) => ({
         ...prev,
         accepting: false,
-        lastAcceptedHouseholdId: householdId,
+        lastAccepted: accepted,
       }));
-
-      return householdId;
+      return accepted;
     } catch (error) {
       const normalized = toDomyliError(error);
-
       setState((prev) => ({
         ...prev,
         accepting: false,
         error: normalized,
       }));
-
       throw normalized;
     }
   }, []);

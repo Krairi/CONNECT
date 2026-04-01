@@ -2,19 +2,42 @@ import { useMemo, useState } from "react";
 import {
   ArrowLeft,
   CheckCircle2,
+  Mail,
   ShieldCheck,
+  Sparkles,
   UserPlus,
   Users,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
-import { useAuth } from "@/src/providers/AuthProvider";
-import { useHouseholdMembers } from "@/src/hooks/useHouseholdMembers";
+
 import { ROUTES } from "@/src/constants/routes";
+import { useHouseholdMembers } from "@/src/hooks/useHouseholdMembers";
+import { useAuth } from "@/src/providers/AuthProvider";
 
 const ROLE_OPTIONS = [
-  { value: "MEMBER", label: "Member" },
-  { value: "PROTECTOR", label: "Protector" },
+  { value: "MEMBER", label: "Membre" },
+  { value: "PROTECTOR", label: "Protecteur" },
 ];
+
+function getOnboardingBadge(state: string) {
+  switch ((state ?? "").toUpperCase()) {
+    case "READY":
+      return {
+        label: "Profil prêt",
+        className: "border-emerald-500/30 text-emerald-300",
+      };
+    case "PROFILE_INCOMPLETE":
+      return {
+        label: "Profil incomplet",
+        className: "border-amber-500/30 text-amber-300",
+      };
+    default:
+      return {
+        label: "Profil requis",
+        className: "border-gold/30 text-gold",
+      };
+  }
+}
 
 export default function HouseholdMembersPage() {
   const navigate = useNavigate();
@@ -27,7 +50,7 @@ export default function HouseholdMembersPage() {
     bootstrapLoading,
   } = useAuth();
 
-  const { loading, inviting, error, members, lastInviteId, inviteMember } =
+  const { loading, inviting, error, members, lastInvite, inviteMember } =
     useHouseholdMembers();
 
   const [email, setEmail] = useState("");
@@ -47,7 +70,7 @@ export default function HouseholdMembersPage() {
     return (
       <main className="min-h-screen bg-black px-6 py-10 text-white">
         <div className="mx-auto max-w-6xl rounded-[28px] border border-white/10 bg-white/5 p-8 backdrop-blur">
-          Chargement des membres...
+          Chargement du parcours membre...
         </div>
       </main>
     );
@@ -72,8 +95,10 @@ export default function HouseholdMembersPage() {
     }
 
     try {
-      const inviteId = await inviteMember(email.trim().toLowerCase(), role);
-      setLocalMessage(`Invitation créée : ${inviteId}`);
+      const invite = await inviteMember(email.trim().toLowerCase(), role);
+      setLocalMessage(
+        `Invitation créée pour ${invite.invited_email} · étape suivante : attente d’acceptation.`,
+      );
       setEmail("");
       setRole("MEMBER");
     } catch {
@@ -101,8 +126,9 @@ export default function HouseholdMembersPage() {
               </p>
               <h1 className="mt-4 text-3xl font-semibold">Membres du foyer</h1>
               <p className="mt-3 max-w-3xl text-sm leading-7 text-white/70">
-                Le garant invite un membre dans le foyer. Le membre rejoint
-                ensuite le foyer avant l’étape de profil requis.
+                Le flux officiel DOMYLI devient : invitation, acceptation,
+                rattachement au foyer, puis profil humain requis avant accès
+                complet aux parcours métier.
               </p>
             </div>
           </div>
@@ -116,18 +142,25 @@ export default function HouseholdMembersPage() {
                 </p>
               </div>
 
+              <p className="mt-3 text-sm leading-7 text-white/65">
+                L’email sert ici d’identité d’accès. Tout le reste du parcours
+                est ensuite normalisé dans DOMYLI.
+              </p>
+
               <div className="mt-6 grid gap-4 md:grid-cols-2">
                 <label className="block text-sm text-white/80 md:col-span-2">
-                  <span className="mb-2 block">Email</span>
+                  <span className="mb-2 block">Email d’accès</span>
                   <input
+                    type="email"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     className="w-full border border-white/10 bg-black/20 px-4 py-4"
+                    placeholder="membre@domyli.fr"
                   />
                 </label>
 
                 <label className="block text-sm text-white/80">
-                  <span className="mb-2 block">Rôle</span>
+                  <span className="mb-2 block">Rôle foyer</span>
                   <select
                     value={role}
                     onChange={(e) => setRole(e.target.value)}
@@ -158,11 +191,13 @@ export default function HouseholdMembersPage() {
             </div>
           )}
 
-          {(localMessage || error || lastInviteId) && (
+          {(localMessage || error || lastInvite) && (
             <div className="mt-6 rounded-3xl border border-white/10 bg-white/5 p-5 text-sm text-white/85">
               {localMessage ??
                 error?.message ??
-                (lastInviteId ? `Invitation créée : ${lastInviteId}` : null)}
+                (lastInvite
+                  ? `Invitation ${lastInvite.invite_id} créée pour ${lastInvite.invited_email}.`
+                  : null)}
             </div>
           )}
         </section>
@@ -183,7 +218,7 @@ export default function HouseholdMembersPage() {
 
             <div className="rounded-3xl border border-white/10 bg-black/20 p-5">
               <p className="text-xs uppercase tracking-[0.24em] text-white/45">
-                Foyer
+                Foyer actif
               </p>
               <p className="mt-2 text-sm text-white/85">
                 {activeMembership?.household_name ?? "—"}
@@ -193,34 +228,64 @@ export default function HouseholdMembersPage() {
             <div className="rounded-3xl border border-white/10 bg-black/20 p-5">
               <div className="inline-flex items-center gap-2 text-white">
                 <Users className="h-4 w-4" />
-                <p className="text-xs uppercase tracking-[0.24em]">Membres</p>
+                <p className="text-xs uppercase tracking-[0.24em]">
+                  Membres et état d’onboarding
+                </p>
               </div>
 
               <div className="mt-5 space-y-4">
                 {members.length === 0 ? (
                   <p className="text-sm text-white/60">Aucun membre trouvé.</p>
                 ) : (
-                  members.map((member) => (
-                    <div
-                      key={member.member_user_id}
-                      className="rounded-2xl border border-white/10 bg-white/[0.03] p-4"
-                    >
-                      <p className="text-sm font-medium text-white">
-                        {member.member_email ?? member.member_user_id}
-                      </p>
-                      <p className="mt-2 text-xs text-white/60">
-                        {member.role}
-                      </p>
-                      <div className="mt-3 inline-flex items-center gap-2 text-xs text-gold">
-                        <CheckCircle2 className="h-3.5 w-3.5" />
-                        {member.profile_completed
-                          ? `Profil complété : ${member.profile_display_name ?? "Oui"}`
-                          : "Profil non complété"}
+                  members.map((member) => {
+                    const badge = getOnboardingBadge(member.onboarding_state);
+                    return (
+                      <div
+                        key={member.member_user_id}
+                        className="rounded-2xl border border-white/10 bg-white/5 p-4"
+                      >
+                        <div className="flex flex-wrap items-center justify-between gap-3">
+                          <div>
+                            <p className="text-sm font-medium text-white">
+                              {member.profile_display_name ??
+                                member.member_email ??
+                                member.member_user_id}
+                            </p>
+                            <p className="mt-1 text-xs uppercase tracking-[0.24em] text-white/50">
+                              {member.role}
+                            </p>
+                          </div>
+
+                          <span
+                            className={`inline-flex items-center rounded-full border px-3 py-1 text-[11px] uppercase tracking-[0.24em] ${badge.className}`}
+                          >
+                            {badge.label}
+                          </span>
+                        </div>
+
+                        <div className="mt-3 flex items-center gap-2 text-xs text-white/55">
+                          <Mail className="h-3.5 w-3.5" />
+                          {member.member_email ?? "Email non résolu"}
+                        </div>
                       </div>
-                    </div>
-                  ))
+                    );
+                  })
                 )}
               </div>
+            </div>
+
+            <div className="rounded-3xl border border-gold/20 bg-gold/5 p-5">
+              <div className="inline-flex items-center gap-2 text-gold">
+                <Sparkles className="h-4 w-4" />
+                <p className="text-xs uppercase tracking-[0.24em]">
+                  Règle cible
+                </p>
+              </div>
+              <p className="mt-3 text-sm leading-7 text-white/75">
+                Aucun membre ne doit rester ambigu dans le système. Après
+                acceptation, DOMYLI exige un profil humain complet avant l’accès
+                aux parcours pilotés.
+              </p>
             </div>
           </div>
         </aside>

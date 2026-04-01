@@ -1,18 +1,32 @@
+import { isMissingRpcError, toDomyliError } from "@/src/lib/errors";
 import { callRpc } from "@/src/services/rpc";
-import { toDomyliError } from "@/src/lib/errors";
 
 export type MyProfileStatus = {
   household_id: string;
+  active_role: string;
+  has_household: boolean;
   has_profile: boolean;
+  profile_completed: boolean;
   profile_id: string | null;
   profile_display_name: string | null;
+  required_fields: string[];
+  workflow_state: string;
+  next_route: string;
+  can_access_profiled_routes: boolean;
 };
 
 type RawMyProfileStatus = {
   household_id?: string | null;
+  active_role?: string | null;
+  has_household?: boolean | null;
   has_profile?: boolean | null;
+  profile_completed?: boolean | null;
   profile_id?: string | null;
   profile_display_name?: string | null;
+  required_fields?: string[] | null;
+  workflow_state?: string | null;
+  next_route?: string | null;
+  can_access_profiled_routes?: boolean | null;
 };
 
 export type MyProfileReadModel = {
@@ -88,6 +102,31 @@ function firstRow<T>(value: T | T[] | null | undefined): T | null {
   return value ?? null;
 }
 
+function normalizeStatus(row: RawMyProfileStatus | null): MyProfileStatus {
+  const requiredFields = Array.isArray(row?.required_fields)
+    ? row.required_fields.filter((item): item is string => typeof item === "string")
+    : [];
+
+  return {
+    household_id: row?.household_id ?? "",
+    active_role: row?.active_role ?? "MEMBER",
+    has_household: row?.has_household ?? Boolean(row?.household_id),
+    has_profile: Boolean(row?.has_profile),
+    profile_completed: Boolean(row?.profile_completed),
+    profile_id: row?.profile_id ?? null,
+    profile_display_name: row?.profile_display_name ?? null,
+    required_fields: requiredFields,
+    workflow_state:
+      row?.workflow_state ??
+      (row?.has_profile ? "PROFILE_INCOMPLETE" : "PROFILE_REQUIRED"),
+    next_route:
+      row?.next_route ??
+      (row?.profile_completed ? "/dashboard" : "/my-profile"),
+    can_access_profiled_routes:
+      row?.can_access_profiled_routes ?? Boolean(row?.profile_completed),
+  };
+}
+
 function mapReadRow(row: RawMyProfileReadModel): MyProfileReadModel {
   return {
     profile_id: row.profile_id ?? null,
@@ -109,12 +148,7 @@ function mapReadRow(row: RawMyProfileReadModel): MyProfileReadModel {
 }
 
 function isReadCompatibilityIssue(error: ReturnType<typeof toDomyliError>) {
-  const haystack = [
-    error.message,
-    error.details,
-    error.hint,
-    error.code,
-  ]
+  const haystack = [error.message, error.details, error.hint, error.code]
     .filter(Boolean)
     .join(" ")
     .toLowerCase();
@@ -124,23 +158,31 @@ function isReadCompatibilityIssue(error: ReturnType<typeof toDomyliError>) {
 
 export async function readMyProfileStatus(): Promise<MyProfileStatus> {
   try {
-    const raw = (await callRpc("rpc_my_profile_status", {}, {
+    const raw = (await callRpc("rpc_member_onboarding_status_v1", {}, {
       unwrap: true,
       timeoutMs: 12_000,
       retries: 1,
       retryDelayMs: 900,
     })) as RawMyProfileStatus | RawMyProfileStatus[] | null;
 
-    const row = firstRow(raw);
-
-    return {
-      household_id: row?.household_id ?? "",
-      has_profile: Boolean(row?.has_profile),
-      profile_id: row?.profile_id ?? null,
-      profile_display_name: row?.profile_display_name ?? null,
-    };
+    return normalizeStatus(firstRow(raw));
   } catch (error) {
-    throw toDomyliError(error);
+    if (!isMissingRpcError(error)) {
+      throw toDomyliError(error);
+    }
+
+    try {
+      const raw = (await callRpc("rpc_my_profile_status", {}, {
+        unwrap: true,
+        timeoutMs: 12_000,
+        retries: 1,
+        retryDelayMs: 900,
+      })) as RawMyProfileStatus | RawMyProfileStatus[] | null;
+
+      return normalizeStatus(firstRow(raw));
+    } catch (fallbackError) {
+      throw toDomyliError(fallbackError);
+    }
   }
 }
 
@@ -164,10 +206,7 @@ export async function readMyProfile(): Promise<MyProfileReadModel | null> {
     const normalized = toDomyliError(error);
 
     if (isReadCompatibilityIssue(normalized)) {
-      console.warn(
-        "DOMYLI rpc_my_profile_read compatibility fallback =>",
-        normalized,
-      );
+      console.warn("DOMYLI rpc_my_profile_read compatibility fallback =>", normalized);
       return null;
     }
 
