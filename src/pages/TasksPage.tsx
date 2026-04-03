@@ -383,8 +383,8 @@ export default function TasksPage() {
                     onChange={(event) => setZoneCode(event.target.value)}
                     className="mt-3 w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white outline-none transition focus:border-gold/40"
                   >
-                    {zoneOptions.map((option) => (
-                      <option key={option} value={option} className="bg-[#0b1220] text-white">
+                    {zoneOptions.map((option, index) => (
+                      <option key={`zone-${option}-${index}`} value={option} className="bg-[#0b1220] text-white">
                         {option === "ALL" ? "Toutes les zones" : option}
                       </option>
                     ))}
@@ -398,8 +398,8 @@ export default function TasksPage() {
                     onChange={(event) => setFrequencyCode(event.target.value)}
                     className="mt-3 w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white outline-none transition focus:border-gold/40"
                   >
-                    {frequencyOptions.map((option) => (
-                      <option key={option} value={option} className="bg-[#0b1220] text-white">
+                    {frequencyOptions.map((option, index) => (
+                      <option key={`zone-${option}-${index}`} value={option} className="bg-[#0b1220] text-white">
                         {option === "ALL" ? "Toutes les fréquences" : option}
                       </option>
                     ))}
