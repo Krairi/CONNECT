@@ -5,15 +5,15 @@ import {
   BellRing,
   Boxes,
   ClipboardList,
+  House,
   RefreshCw,
   ShoppingCart,
   Sparkles,
+  UserRound,
   Users,
   Utensils,
-  Wrench,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
-
 import { useAuth } from "@/src/providers/AuthProvider";
 import { useDashboard } from "@/src/hooks/useDashboard";
 import { ROUTES } from "@/src/constants/routes";
@@ -36,7 +36,9 @@ function getToneClasses(tone: Tone): string {
 function getSignalTone(status: string): Tone {
   const upper = status.toUpperCase();
   if (["CRITICAL", "BLOCKED", "OVERDUE"].includes(upper)) return "danger";
-  if (["WARNING", "LOW", "PENDING", "PROFILE_REQUIRED"].includes(upper)) return "warning";
+  if (["WARNING", "LOW", "PENDING", "PROFILE_REQUIRED"].includes(upper)) {
+    return "warning";
+  }
   if (["DONE", "COMPLETED", "READY"].includes(upper)) return "success";
   return "neutral";
 }
@@ -60,15 +62,22 @@ function SummaryCard({
   tone?: Tone;
 }) {
   return (
-    <div className="rounded-[28px] border border-white/10 bg-white/5 p-5 shadow-[0_20px_60px_rgba(0,0,0,0.22)]">
-      <div className="flex items-center justify-between gap-4">
-        <div>
-          <div className="text-[11px] uppercase tracking-[0.18em] text-white/40">{label}</div>
-          <div className="mt-2 text-3xl font-semibold text-white">{value}</div>
+    <div className="border border-white/10 bg-black/20 p-5">
+      <div className="flex items-center justify-between gap-3">
+        <div className="text-[11px] uppercase tracking-[0.24em] text-white/45">
+          {label}
         </div>
-        <div className={`rounded-2xl border p-3 ${getToneClasses(tone)}`}>
-          <Icon className="h-5 w-5" />
-        </div>
+        <Icon className="h-4 w-4 text-gold/85" />
+      </div>
+      <div className="mt-5 text-3xl font-light tracking-[0.04em] text-white">
+        {value}
+      </div>
+      <div
+        className={`mt-4 inline-flex items-center border px-3 py-2 text-[11px] uppercase tracking-[0.22em] ${getToneClasses(
+          tone,
+        )}`}
+      >
+        Signal {tone}
       </div>
     </div>
   );
@@ -77,52 +86,105 @@ function SummaryCard({
 export default function DashboardPage() {
   const navigate = useNavigate();
   const {
-    sessionEmail,
-    bootstrap,
-    activeMembership,
     isAuthenticated,
     hasHousehold,
     authLoading,
     bootstrapLoading,
   } = useAuth();
-  const { loading, error, activation, valueChain, health, feed, nextAction, summary, refresh } = useDashboard();
+
+  const {
+    loading,
+    error,
+    activation,
+    valueChain,
+    health,
+    feed,
+    refresh,
+    viewMode,
+    setViewMode,
+    selectProfile,
+    availableProfiles,
+    selectedProfile,
+    householdName,
+    role,
+  } = useDashboard();
+
   const [localMessage, setLocalMessage] = useState<string | null>(null);
 
   const criticalSignals = useMemo(() => {
     return feed.filter((item) => getSignalTone(item.status) === "danger").length;
   }, [feed]);
 
-  const actionRoute = nextAction?.route || ROUTES.STATUS;
-  const actionLabel = nextAction?.label || "Continuer";
+  const warningSignals = useMemo(() => {
+    return feed.filter((item) => getSignalTone(item.status) === "warning").length;
+  }, [feed]);
+
+  const profileSummary = useMemo(() => {
+    if (!selectedProfile) return null;
+
+    const constraints = [
+      ...(selectedProfile.food_constraints ?? []),
+      ...(selectedProfile.cultural_constraints ?? []),
+    ];
+
+    return {
+      displayName: selectedProfile.display_name,
+      goal: selectedProfile.goal ?? "Non défini",
+      activity: selectedProfile.activity_level ?? "Non défini",
+      allergies:
+        (selectedProfile.allergies ?? []).length > 0
+          ? selectedProfile.allergies!.join(", ")
+          : "Aucune",
+      constraints: constraints.length > 0 ? constraints.join(", ") : "Aucune",
+    };
+  }, [selectedProfile]);
 
   if (authLoading || bootstrapLoading || loading) {
     return (
-      <section className="space-y-3 rounded-[32px] border border-white/10 bg-black/25 p-8 text-white shadow-[0_30px_80px_rgba(0,0,0,0.25)]">
-        <div className="text-xs uppercase tracking-[0.24em] text-gold/70">DOMYLI</div>
-        <h1 className="text-3xl font-semibold">Chargement du dashboard...</h1>
-        <p className="max-w-2xl text-sm text-white/65">
-          Synchronisation des signaux métier, activation, chaîne de valeur et flux prioritaire du foyer.
-        </p>
-      </section>
+      <main className="min-h-screen bg-black text-white">
+        <section className="mx-auto max-w-7xl px-6 py-16 sm:px-8 lg:px-10">
+          <div className="border border-white/10 bg-white/[0.03] p-8 backdrop-blur-sm">
+            <div className="inline-flex items-center gap-3 text-[11px] uppercase tracking-[0.28em] text-gold/75">
+              <Sparkles className="h-4 w-4" />
+              DOMYLI
+            </div>
+            <h1 className="mt-6 text-4xl font-light tracking-[0.06em] text-white">
+              Chargement du dashboard…
+            </h1>
+            <p className="mt-5 max-w-2xl text-sm leading-7 text-white/60">
+              Synchronisation du cockpit foyer, de la vue active et du flux
+              prioritaire.
+            </p>
+          </div>
+        </section>
+      </main>
     );
   }
 
   if (!isAuthenticated || !hasHousehold) {
     return (
-      <section className="space-y-6 rounded-[32px] border border-white/10 bg-black/25 p-8 text-white shadow-[0_30px_80px_rgba(0,0,0,0.25)]">
-        <div className="text-xs uppercase tracking-[0.24em] text-gold/70">DOMYLI</div>
-        <h1 className="text-3xl font-semibold">Contexte insuffisant</h1>
-        <p className="max-w-2xl text-sm text-white/65">
-          Le dashboard métier nécessite une session authentifiée et un foyer actif.
-        </p>
-        <button
-          type="button"
-          onClick={() => navigate(ROUTES.HOME)}
-          className="inline-flex items-center justify-center border border-gold/40 px-6 py-3 text-sm uppercase tracking-[0.25em] text-gold transition-colors hover:bg-gold hover:text-black"
-        >
-          Retour à l’accueil
-        </button>
-      </section>
+      <main className="min-h-screen bg-black text-white">
+        <section className="mx-auto max-w-7xl px-6 py-16 sm:px-8 lg:px-10">
+          <div className="border border-white/10 bg-white/[0.03] p-8 backdrop-blur-sm">
+            <div className="inline-flex items-center gap-3 text-[11px] uppercase tracking-[0.28em] text-gold/75">
+              <House className="h-4 w-4" />
+              DOMYLI
+            </div>
+            <h1 className="mt-6 text-4xl font-light tracking-[0.06em] text-white">
+              Contexte insuffisant
+            </h1>
+            <p className="mt-5 max-w-2xl text-sm leading-7 text-white/60">
+              Le dashboard métier nécessite une session authentifiée et un foyer actif.
+            </p>
+            <button
+              onClick={() => navigate(ROUTES.HOME)}
+              className="mt-8 inline-flex items-center justify-center border border-gold/40 px-6 py-3 text-sm uppercase tracking-[0.25em] text-gold transition-colors hover:bg-gold hover:text-black"
+            >
+              Retour à l’accueil
+            </button>
+          </div>
+        </section>
+      </main>
     );
   }
 
@@ -137,121 +199,370 @@ export default function DashboardPage() {
   };
 
   return (
-    <section className="space-y-8 text-white">
-      <div className="rounded-[32px] border border-white/10 bg-black/25 p-8 shadow-[0_30px_80px_rgba(0,0,0,0.25)]">
-        <div className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
-          <div className="max-w-3xl space-y-4">
-            <div className="text-xs uppercase tracking-[0.24em] text-gold/70">DOMYLI · Dashboard</div>
-            <h1 className="text-4xl font-semibold">Cockpit décisionnel du foyer</h1>
-            <p className="text-sm leading-7 text-white/70">
-              Le dashboard consolide l’activation, la santé opérationnelle et le flux prioritaire. Ce n’est pas une page d’accueil générique : c’est la lecture décisionnelle du foyer.
-            </p>
-          </div>
-
-          <div className="flex flex-wrap gap-3">
-            <button
-              type="button"
-              onClick={handleRefresh}
-              className="inline-flex items-center justify-center gap-3 rounded-full border border-white/10 px-5 py-3 text-sm uppercase tracking-[0.18em] text-white transition-colors hover:border-gold/40 hover:text-gold"
-            >
-              <RefreshCw className="h-4 w-4" /> Rafraîchir
-            </button>
-            <button
-              type="button"
-              onClick={() => navigate(actionRoute)}
-              className="inline-flex items-center justify-center gap-3 rounded-full bg-gold px-5 py-3 text-sm uppercase tracking-[0.18em] text-black transition-opacity hover:opacity-90"
-            >
-              {actionLabel}
-              <ArrowRight className="h-4 w-4" />
-            </button>
-          </div>
-        </div>
-
-        {(localMessage || error) && (
-          <div className="mt-6 rounded-2xl border border-amber-400/30 bg-amber-400/10 px-4 py-3 text-sm text-amber-100">
-            {localMessage ?? error?.message}
-          </div>
-        )}
-      </div>
-
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <SummaryCard label="Score d’activation" value={String(activation?.activation_score ?? 0)} icon={Sparkles} tone={(activation?.is_operational ?? false) ? "success" : "warning"} />
-        <SummaryCard label="Alertes ouvertes" value={String(summary.alerts)} icon={BellRing} tone={summary.alerts > 0 ? "danger" : "success"} />
-        <SummaryCard label="Signals critiques" value={String(criticalSignals)} icon={AlertTriangle} tone={criticalSignals > 0 ? "danger" : "neutral"} />
-        <SummaryCard label="Shopping open" value={String(summary.shopping)} icon={ShoppingCart} tone={summary.shopping > 0 ? "warning" : "neutral"} />
-      </div>
-
-      <div className="grid gap-6 xl:grid-cols-[1.4fr,0.9fr]">
-        <div className="rounded-[32px] border border-white/10 bg-white/[0.04] p-6 shadow-[0_30px_80px_rgba(0,0,0,0.20)]">
-          <div className="mb-4 flex items-center justify-between gap-3">
+    <main className="min-h-screen bg-black text-white">
+      <section className="mx-auto max-w-7xl px-6 py-16 sm:px-8 lg:px-10">
+        <div className="flex flex-col gap-6 border border-white/10 bg-white/[0.03] p-8 backdrop-blur-sm">
+          <div className="flex flex-wrap items-center justify-between gap-4">
             <div>
-              <div className="text-[11px] uppercase tracking-[0.22em] text-gold/70">Flux prioritaire</div>
-              <h2 className="mt-2 text-2xl font-semibold text-white">Signaux à traiter en premier</h2>
+              <div className="inline-flex items-center gap-3 text-[11px] uppercase tracking-[0.28em] text-gold/75">
+                <Sparkles className="h-4 w-4" />
+                DOMYLI · Dashboard
+              </div>
+              <h1 className="mt-5 text-4xl font-light tracking-[0.06em] text-white sm:text-5xl">
+                {viewMode === "PROFILE"
+                  ? "Ma vue personnelle du foyer"
+                  : "Cockpit décisionnel du foyer"}
+              </h1>
+              <p className="mt-5 max-w-3xl text-sm leading-7 text-white/60">
+                {viewMode === "PROFILE"
+                  ? "Lecture ciblée de ce qui concerne le profil humain actif : repas, tâches, blocages et signaux utiles."
+                  : "Lecture foyer consolidée : activation, santé opérationnelle, signaux prioritaires et chaîne de valeur du système."}
+              </p>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-3">
+              <button
+                onClick={handleRefresh}
+                className="inline-flex items-center justify-center gap-3 border border-white/15 px-5 py-3 text-sm uppercase tracking-[0.18em] text-white/75 transition-colors hover:border-gold/35 hover:text-gold"
+              >
+                <RefreshCw className="h-4 w-4" />
+                Rafraîchir
+              </button>
+
+              <button
+                onClick={() =>
+                  navigate(viewMode === "PROFILE" ? ROUTES.MEALS : ROUTES.STATUS)
+                }
+                className="inline-flex items-center justify-center gap-3 rounded-full bg-gold px-5 py-3 text-sm uppercase tracking-[0.18em] text-black transition-opacity hover:opacity-90"
+              >
+                {viewMode === "PROFILE" ? "Mes repas" : "Status foyer"}
+                <ArrowRight className="h-4 w-4" />
+              </button>
             </div>
           </div>
 
-          {feed.length === 0 ? (
-            <div className="rounded-[24px] border border-white/10 bg-black/20 p-6 text-sm text-white/65">
-              Aucun signal remonté pour le moment.
-            </div>
-          ) : (
-            <div className="space-y-4">
-              {feed.slice(0, 8).map((item) => (
-                <button
-                  key={`${item.entity_type ?? item.item_type}-${item.entity_id ?? item.title}`}
-                  type="button"
-                  onClick={() => navigate(item.route_hint || ROUTES.STATUS)}
-                  className="w-full rounded-[24px] border border-white/10 bg-black/20 p-5 text-left transition hover:border-gold/30 hover:bg-black/25"
-                >
-                  <div className="flex flex-wrap items-center justify-between gap-3">
-                    <div>
-                      <div className="text-[11px] uppercase tracking-[0.18em] text-white/45">{item.item_type}</div>
-                      <div className="mt-2 text-lg font-semibold text-white">{item.title}</div>
-                    </div>
-                    <span className={`inline-flex items-center rounded-full border px-3 py-1 text-[11px] font-medium uppercase tracking-[0.18em] ${getToneClasses(getSignalTone(item.status))}`}>
-                      {item.status}
-                    </span>
-                  </div>
-                  <div className="mt-3 text-sm text-white/60">{item.flow_code} · {formatDate(item.scheduled_at)}</div>
-                </button>
-              ))}
+          <div className="flex flex-wrap items-center gap-3">
+            <button
+              type="button"
+              onClick={() => setViewMode("PROFILE")}
+              className={`inline-flex items-center gap-3 border px-4 py-3 text-xs uppercase tracking-[0.24em] transition-colors ${
+                viewMode === "PROFILE"
+                  ? "border-gold bg-gold text-black"
+                  : "border-white/15 text-white/70 hover:border-gold/35 hover:text-gold"
+              }`}
+            >
+              <UserRound className="h-4 w-4" />
+              Vue profil
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setViewMode("FOYER")}
+              className={`inline-flex items-center gap-3 border px-4 py-3 text-xs uppercase tracking-[0.24em] transition-colors ${
+                viewMode === "FOYER"
+                  ? "border-gold bg-gold text-black"
+                  : "border-white/15 text-white/70 hover:border-gold/35 hover:text-gold"
+              }`}
+            >
+              <Users className="h-4 w-4" />
+              Vue foyer
+            </button>
+
+            {availableProfiles.length > 0 ? (
+              <select
+                value={selectedProfile?.profile_id ?? ""}
+                onChange={(event) =>
+                  void selectProfile(event.target.value || null)
+                }
+                className="min-w-[240px] border border-white/15 bg-black/30 px-4 py-3 text-xs uppercase tracking-[0.18em] text-white/80 outline-none transition-colors focus:border-gold/35"
+              >
+                {availableProfiles.map((profile) => (
+                  <option key={profile.profile_id} value={profile.profile_id}>
+                    {profile.display_name}
+                  </option>
+                ))}
+              </select>
+            ) : null}
+          </div>
+
+          {(localMessage || error) && (
+            <div className="border border-amber-400/25 bg-amber-400/10 px-4 py-4 text-sm text-amber-100">
+              {localMessage ?? error?.message}
             </div>
           )}
-        </div>
 
-        <div className="space-y-6">
-          <div className="rounded-[32px] border border-white/10 bg-white/[0.04] p-6 shadow-[0_30px_80px_rgba(0,0,0,0.20)]">
-            <div className="text-[11px] uppercase tracking-[0.22em] text-gold/70">Lecture métier</div>
-            <div className="mt-4 grid gap-4">
-              <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
-                <div className="text-[11px] uppercase tracking-[0.16em] text-white/35">Session</div>
-                <div className="mt-2 text-sm text-white">{sessionEmail ?? "—"}</div>
-              </div>
-              <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
-                <div className="text-[11px] uppercase tracking-[0.16em] text-white/35">Foyer actif</div>
-                <div className="mt-2 text-sm text-white">{activeMembership?.household_name ?? "—"}</div>
-                <div className="mt-1 text-xs text-white/45">Household ID : {bootstrap?.active_household_id ?? "—"}</div>
-              </div>
-              <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
-                <div className="text-[11px] uppercase tracking-[0.16em] text-white/35">Gouvernance</div>
-                <div className="mt-2 text-sm text-white">{activeMembership?.role ?? "—"}</div>
-              </div>
-            </div>
-          </div>
-
-          <div className="rounded-[32px] border border-white/10 bg-white/[0.04] p-6 shadow-[0_30px_80px_rgba(0,0,0,0.20)]">
-            <div className="text-[11px] uppercase tracking-[0.22em] text-gold/70">Chaîne de valeur</div>
-            <div className="mt-4 grid gap-3 sm:grid-cols-2">
-              <SummaryCard label="Stock manquant" value={String(health?.missing_stock_count ?? 0)} icon={Boxes} tone={(health?.missing_stock_count ?? 0) > 0 ? "danger" : "neutral"} />
-              <SummaryCard label="Repas planifiés" value={String(health?.planned_meals_count ?? 0)} icon={Utensils} tone="neutral" />
-              <SummaryCard label="Tâches en retard" value={String(health?.overdue_tasks_count ?? 0)} icon={ClipboardList} tone={(health?.overdue_tasks_count ?? 0) > 0 ? "warning" : "neutral"} />
-              <SummaryCard label="Outils bloqués" value={String(health?.blocked_tools_count ?? 0)} icon={Wrench} tone={(health?.blocked_tools_count ?? 0) > 0 ? "warning" : "neutral"} />
-              <SummaryCard label="Invitations" value={String(health?.pending_invites_count ?? 0)} icon={Users} tone={(health?.pending_invites_count ?? 0) > 0 ? "warning" : "neutral"} />
-              <SummaryCard label="Profils à finir" value={String(health?.profiles_incomplete_count ?? 0)} icon={Users} tone={(health?.profiles_incomplete_count ?? 0) > 0 ? "warning" : "neutral"} />
-            </div>
+          <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-4">
+            <SummaryCard
+              label="Repas"
+              value={String(health?.planned_meals_count ?? 0)}
+              icon={Utensils}
+              tone={(health?.planned_meals_count ?? 0) > 0 ? "success" : "neutral"}
+            />
+            <SummaryCard
+              label="Tâches"
+              value={String(valueChain?.tasks_count ?? 0)}
+              icon={ClipboardList}
+              tone={(health?.overdue_tasks_count ?? 0) > 0 ? "danger" : "neutral"}
+            />
+            <SummaryCard
+              label="Achats ouverts"
+              value={String(valueChain?.shopping_open_count ?? 0)}
+              icon={ShoppingCart}
+              tone={(valueChain?.shopping_open_count ?? 0) > 0 ? "warning" : "neutral"}
+            />
+            <SummaryCard
+              label="Alertes"
+              value={String(health?.open_alert_count ?? 0)}
+              icon={BellRing}
+              tone={criticalSignals > 0 ? "danger" : warningSignals > 0 ? "warning" : "success"}
+            />
           </div>
         </div>
-      </div>
-    </section>
+
+        <div className="mt-8 grid gap-8 lg:grid-cols-[0.9fr_1.1fr]">
+          <section className="border border-white/10 bg-white/[0.03] p-8 backdrop-blur-sm">
+            <div className="text-[11px] uppercase tracking-[0.28em] text-gold/75">
+              {viewMode === "PROFILE" ? "Vue profil humain" : "Vue foyer"}
+            </div>
+
+            <h2 className="mt-5 text-3xl font-light tracking-[0.05em] text-white">
+              {viewMode === "PROFILE"
+                ? selectedProfile?.display_name ?? "Profil humain"
+                : householdName ?? "Foyer actif"}
+            </h2>
+
+            <p className="mt-4 text-sm leading-7 text-white/60">
+              {viewMode === "PROFILE"
+                ? "Lecture personnelle : ce qui me concerne, ce qui me bloque, ce que je dois voir d’abord."
+                : "Lecture globale : état consolidé du foyer, rôle, activation et pilotage transverse."}
+            </p>
+
+            <div className="mt-8 space-y-4">
+              <div className="border border-white/10 bg-black/20 p-5">
+                <div className="text-xs uppercase tracking-[0.22em] text-white/45">
+                  Foyer
+                </div>
+                <div className="mt-2 text-lg font-medium text-white">
+                  {householdName ?? "—"}
+                </div>
+              </div>
+
+              <div className="border border-white/10 bg-black/20 p-5">
+                <div className="text-xs uppercase tracking-[0.22em] text-white/45">
+                  Gouvernance
+                </div>
+                <div className="mt-2 text-lg font-medium text-white">
+                  {role ?? "—"}
+                </div>
+              </div>
+
+              {viewMode === "PROFILE" && profileSummary ? (
+                <>
+                  <div className="border border-white/10 bg-black/20 p-5">
+                    <div className="text-xs uppercase tracking-[0.22em] text-white/45">
+                      Mon profil
+                    </div>
+                    <div className="mt-2 text-lg font-medium text-white">
+                      {profileSummary.displayName}
+                    </div>
+                    <div className="mt-4 space-y-2 text-sm leading-6 text-white/60">
+                      <div>Objectif : {profileSummary.goal}</div>
+                      <div>Activité : {profileSummary.activity}</div>
+                      <div>Allergies : {profileSummary.allergies}</div>
+                      <div>Contraintes : {profileSummary.constraints}</div>
+                    </div>
+                  </div>
+
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <div className="border border-white/10 bg-black/20 p-5">
+                      <div className="text-xs uppercase tracking-[0.22em] text-white/45">
+                        Mes repas
+                      </div>
+                      <div className="mt-2 text-2xl font-light text-white">
+                        {health?.planned_meals_count ?? 0}
+                      </div>
+                    </div>
+
+                    <div className="border border-white/10 bg-black/20 p-5">
+                      <div className="text-xs uppercase tracking-[0.22em] text-white/45">
+                        Mes blocages
+                      </div>
+                      <div className="mt-2 text-2xl font-light text-white">
+                        {(health?.open_alert_count ?? 0) + (health?.missing_stock_count ?? 0)}
+                      </div>
+                    </div>
+                  </div>
+                </>
+              ) : null}
+
+              {viewMode === "FOYER" ? (
+                <div className="grid gap-4 md:grid-cols-2">
+                  <div className="border border-white/10 bg-black/20 p-5">
+                    <div className="text-xs uppercase tracking-[0.22em] text-white/45">
+                      Profils actifs
+                    </div>
+                    <div className="mt-2 text-2xl font-light text-white">
+                      {valueChain?.profiles_count ?? 0}
+                    </div>
+                  </div>
+
+                  <div className="border border-white/10 bg-black/20 p-5">
+                    <div className="text-xs uppercase tracking-[0.22em] text-white/45">
+                      Consommables suivis
+                    </div>
+                    <div className="mt-2 text-2xl font-light text-white">
+                      {valueChain?.inventory_items_count ?? 0}
+                    </div>
+                  </div>
+                </div>
+              ) : null}
+            </div>
+          </section>
+
+          <section className="border border-white/10 bg-white/[0.03] p-8 backdrop-blur-sm">
+            <div className="text-[11px] uppercase tracking-[0.28em] text-gold/75">
+              Flux prioritaire
+            </div>
+
+            <h2 className="mt-5 text-3xl font-light tracking-[0.05em] text-white">
+              Signaux à traiter en premier
+            </h2>
+
+            <p className="mt-4 text-sm leading-7 text-white/60">
+              {viewMode === "PROFILE"
+                ? "Lecture prioritaire centrée sur l’exécution personnelle et les blocages visibles."
+                : "Lecture prioritaire du foyer : alertes, signaux critiques, manque stock et pression opérationnelle."}
+            </p>
+
+            <div className="mt-8 space-y-4">
+              {feed.length === 0 ? (
+                <div className="border border-white/10 bg-black/20 px-5 py-5 text-sm text-white/55">
+                  Aucun signal remonté pour le moment.
+                </div>
+              ) : (
+                feed.slice(0, 8).map((item) => (
+                  <button
+                    key={`${item.item_type}-${item.item_id}`}
+                    type="button"
+                    onClick={() =>
+                      navigate(
+                        viewMode === "PROFILE" ? ROUTES.TASKS : ROUTES.STATUS,
+                      )
+                    }
+                    className="w-full border border-white/10 bg-black/20 p-5 text-left transition hover:border-gold/30 hover:bg-black/25"
+                  >
+                    <div className="flex items-start justify-between gap-4">
+                      <div>
+                        <div className="text-[11px] uppercase tracking-[0.22em] text-white/45">
+                          {item.item_type}
+                        </div>
+                        <div className="mt-2 text-lg font-medium text-white">
+                          {item.title}
+                        </div>
+                        <div className="mt-3 text-sm text-white/50">
+                          {formatDate(item.scheduled_at)}
+                        </div>
+                      </div>
+
+                      <div
+                        className={`inline-flex items-center border px-3 py-2 text-[11px] uppercase tracking-[0.22em] ${getToneClasses(
+                          getSignalTone(item.status),
+                        )}`}
+                      >
+                        {item.status}
+                      </div>
+                    </div>
+                  </button>
+                ))
+              )}
+            </div>
+
+            <div className="mt-8 grid gap-4 md:grid-cols-2">
+              <div className="border border-white/10 bg-black/20 p-5">
+                <div className="text-xs uppercase tracking-[0.22em] text-white/45">
+                  Activation
+                </div>
+                <div className="mt-2 text-2xl font-light text-white">
+                  {activation?.activation_score ?? 0}
+                </div>
+                <div className="mt-3 text-sm text-white/55">
+                  {activation?.is_operational ? "Foyer opérationnel" : "Activation incomplète"}
+                </div>
+              </div>
+
+              <div className="border border-white/10 bg-black/20 p-5">
+                <div className="text-xs uppercase tracking-[0.22em] text-white/45">
+                  Chaîne de valeur
+                </div>
+                <div className="mt-2 text-2xl font-light text-white">
+                  {valueChain?.events_count ?? 0}
+                </div>
+                <div className="mt-3 text-sm text-white/55">
+                  Événements consolidés du foyer
+                </div>
+              </div>
+
+              <div className="border border-white/10 bg-black/20 p-5">
+                <div className="text-xs uppercase tracking-[0.22em] text-white/45">
+                  Stock manquant
+                </div>
+                <div className="mt-2 text-2xl font-light text-white">
+                  {health?.missing_stock_count ?? 0}
+                </div>
+                <div className="mt-3 text-sm text-white/55">
+                  Consommables critiques à corriger
+                </div>
+              </div>
+
+              <div className="border border-white/10 bg-black/20 p-5">
+                <div className="text-xs uppercase tracking-[0.22em] text-white/45">
+                  Tâches en retard
+                </div>
+                <div className="mt-2 text-2xl font-light text-white">
+                  {health?.overdue_tasks_count ?? 0}
+                </div>
+                <div className="mt-3 text-sm text-white/55">
+                  Charge opérationnelle à résorber
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-8 flex flex-wrap gap-3">
+              <button
+                onClick={() => navigate(ROUTES.MEALS)}
+                className="inline-flex items-center gap-3 border border-white/15 px-4 py-3 text-xs uppercase tracking-[0.22em] text-white/75 transition-colors hover:border-gold/35 hover:text-gold"
+              >
+                <Utensils className="h-4 w-4" />
+                Meals
+              </button>
+
+              <button
+                onClick={() => navigate(ROUTES.TASKS)}
+                className="inline-flex items-center gap-3 border border-white/15 px-4 py-3 text-xs uppercase tracking-[0.22em] text-white/75 transition-colors hover:border-gold/35 hover:text-gold"
+              >
+                <ClipboardList className="h-4 w-4" />
+                Tasks
+              </button>
+
+              <button
+                onClick={() => navigate(ROUTES.SHOPPING)}
+                className="inline-flex items-center gap-3 border border-white/15 px-4 py-3 text-xs uppercase tracking-[0.22em] text-white/75 transition-colors hover:border-gold/35 hover:text-gold"
+              >
+                <ShoppingCart className="h-4 w-4" />
+                Shopping
+              </button>
+
+              <button
+                onClick={() => navigate(ROUTES.PROFILES)}
+                className="inline-flex items-center gap-3 border border-white/15 px-4 py-3 text-xs uppercase tracking-[0.22em] text-white/75 transition-colors hover:border-gold/35 hover:text-gold"
+              >
+                <Users className="h-4 w-4" />
+                Profils
+              </button>
+            </div>
+          </section>
+        </div>
+      </section>
+    </main>
   );
 }
