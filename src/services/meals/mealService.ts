@@ -34,88 +34,6 @@ export type MealDraft = {
   inserted_ingredient_count: number;
 };
 
-type RawMealProfile = {
-  profile_id?: string | null;
-  display_name?: string | null;
-  summary?: string | null;
-  weight_kg?: number | null;
-  goal?: string | null;
-  activity_level?: string | null;
-  is_pregnant?: boolean | null;
-  has_diabetes?: boolean | null;
-  updated_at?: string | null;
-};
-
-type RawMealSlot = {
-  slot_id?: string | null;
-  meal_slot_id?: string | null;
-  slot_date?: string | null;
-  planned_for?: string | null;
-  meal_type?: MealType | null;
-  status?: string | null;
-  profile_id?: string | null;
-  profile_display_name?: string | null;
-  recipe_id?: string | null;
-  recipe_title?: string | null;
-  title?: string | null;
-  missing_count?: number | null;
-  is_feasible?: boolean | null;
-  updated_at?: string | null;
-  notes?: string | null;
-  operator_notes?: string | null;
-  portion_factor?: number | null;
-  created_at?: string | null;
-  inserted_ingredient_count?: number | null;
-};
-
-type RawRecipeTag = {
-  code?: string | null;
-  label?: string | null;
-};
-
-type RawRecipeFit = {
-  fit_status?: string | null;
-  fit_score?: number | null;
-  warnings?: string[] | null;
-  fit_reasons?: string[] | null;
-  blocked_reasons?: string[] | null;
-};
-
-type RawRecipeCandidate = {
-  recipe_id?: string | null;
-  recipe_code?: string | null;
-
-  title?: string | null;
-  recipe_title?: string | null;
-
-  short_description?: string | null;
-  compatibility_summary?: string | null;
-
-  difficulty?: string | null;
-
-  meal_types?: string[] | null;
-  meal_type?: string | null;
-
-  prep_minutes?: number | null;
-  cook_minutes?: number | null;
-  default_servings?: number | null;
-  stock_intensity?: string | null;
-
-  tags?: RawRecipeTag[] | null;
-  fit?: RawRecipeFit | null;
-
-  personalized_serving_label?: string | null;
-  portion_factor?: number | null;
-  hero_badges?: Array<{ code?: string | null; label?: string | null }> | null;
-
-  compatibility_score?: number | null;
-  missing_count?: number | null;
-  is_feasible?: boolean | null;
-  profile_id?: string | null;
-  profile_display_name?: string | null;
-  updated_at?: string | null;
-};
-
 export type RecipeCandidate = {
   recipe_id: string;
   recipe_code: string;
@@ -140,18 +58,6 @@ export type RecipeCandidate = {
   hero_badges: Array<{ code: string; label: string }>;
 };
 
-type RawRecipePreviewIngredient = {
-  recipe_ingredient_id?: string | null;
-  ingredient_code?: string | null;
-  ingredient_label?: string | null;
-  nutrition_role?: string | null;
-  unit_code?: string | null;
-  qty_base?: number | null;
-  qty_adjusted?: number | null;
-  scaling_policy?: string | null;
-  sort_order?: number | null;
-};
-
 export type RecipePreviewIngredient = {
   recipe_ingredient_id: string | null;
   ingredient_code: string;
@@ -162,20 +68,6 @@ export type RecipePreviewIngredient = {
   qty_adjusted: number;
   scaling_policy: string;
   sort_order: number;
-};
-
-type RawRecipePreview = {
-  recipe_id?: string | null;
-  title?: string | null;
-  fit_status?: string | null;
-  fit_score?: number | null;
-  fit_reasons?: string[] | null;
-  warnings?: string[] | null;
-  blocked_reasons?: string[] | null;
-  portion_factor?: number | null;
-  ingredients?: RawRecipePreviewIngredient[] | null;
-  nutrition_summary?: Record<string, unknown> | null;
-  stock_projection?: Record<string, unknown> | null;
 };
 
 export type RecipePreview = {
@@ -192,18 +84,6 @@ export type RecipePreview = {
   stock_projection: Record<string, unknown>;
 };
 
-type RawMealMutationOutput = {
-  meal_slot_id?: string | null;
-  slot_id?: string | null;
-  status?: string | null;
-  profile_id?: string | null;
-  recipe_id?: string | null;
-  portion_factor?: number | null;
-  created_at?: string | null;
-  updated_at?: string | null;
-  inserted_ingredient_count?: number | null;
-};
-
 export type MealMutationResult = {
   meal_slot_id: string;
   status: string | null;
@@ -215,20 +95,21 @@ export type MealMutationResult = {
   inserted_ingredient_count: number;
 };
 
-type RawConfirmOutput = {
-  meal_slot_id?: string | null;
-  status?: string | null;
-  consumption_lines?: Array<Record<string, unknown>> | null;
-  shopping_rebuild_status?: string | null;
-  alerts?: Array<Record<string, unknown>> | null;
-};
-
 export type MealConfirmResult = {
   meal_slot_id: string | null;
   status: string | null;
   consumption_lines: Array<Record<string, unknown>>;
   shopping_rebuild_status: string | null;
   alerts: Array<Record<string, unknown>>;
+};
+
+export type MealConfirmationServer = {
+  meal_slot_id: string;
+  status: string | null;
+  consumption_lines: Array<Record<string, unknown>>;
+  shopping_rebuild_status: string | null;
+  alerts: Array<Record<string, unknown>>;
+  updated_at: string | null;
 };
 
 export type CreateMealRpcInput = {
@@ -254,10 +135,144 @@ export type ListMealSlotsFeedInput = {
   profileId?: string | null;
 };
 
+type RawMealProfile = {
+  profile_id?: string | null;
+  display_name?: string | null;
+  summary?: string | null;
+  weight_kg?: number | null;
+  goal?: string | null;
+  activity_level?: string | null;
+  is_pregnant?: boolean | null;
+  has_diabetes?: boolean | null;
+  updated_at?: string | null;
+};
+
+type RawMealSlot = {
+  slot_id?: string | null;
+  meal_slot_id?: string | null;
+  slot_date?: string | null;
+  planned_for?: string | null;
+  meal_type?: MealType | null;
+  status?: string | null;
+  profile_id?: string | null;
+  profile_display_name?: string | null;
+  recipe_id?: string | null;
+  recipe_title?: string | null;
+  title?: string | null;
+  notes?: string | null;
+  operator_notes?: string | null;
+  missing_count?: number | null;
+  is_feasible?: boolean | null;
+  portion_factor?: number | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+  inserted_ingredient_count?: number | null;
+};
+
+type RawRecipeTag = {
+  code?: string | null;
+  label?: string | null;
+};
+
+type RawRecipeFit = {
+  fit_status?: string | null;
+  fit_score?: number | null;
+  warnings?: string[] | null;
+  fit_reasons?: string[] | null;
+  blocked_reasons?: string[] | null;
+};
+
+type RawRecipeCandidate = {
+  recipe_id?: string | null;
+  recipe_code?: string | null;
+  title?: string | null;
+  recipe_title?: string | null;
+  short_description?: string | null;
+  compatibility_summary?: string | null;
+  difficulty?: string | null;
+  meal_types?: string[] | null;
+  meal_type?: string | null;
+  prep_minutes?: number | null;
+  cook_minutes?: number | null;
+  default_servings?: number | null;
+  stock_intensity?: string | null;
+  tags?: RawRecipeTag[] | null;
+  fit?: RawRecipeFit | null;
+  personalized_serving_label?: string | null;
+  portion_factor?: number | null;
+  hero_badges?: Array<{ code?: string | null; label?: string | null }> | null;
+  compatibility_score?: number | null;
+  missing_count?: number | null;
+  is_feasible?: boolean | null;
+  profile_id?: string | null;
+  profile_display_name?: string | null;
+  updated_at?: string | null;
+};
+
+type RawRecipePreviewIngredient = {
+  recipe_ingredient_id?: string | null;
+  ingredient_code?: string | null;
+  ingredient_label?: string | null;
+  nutrition_role?: string | null;
+  unit_code?: string | null;
+  qty_base?: number | null;
+  qty_adjusted?: number | null;
+  scaling_policy?: string | null;
+  sort_order?: number | null;
+};
+
+type RawRecipePreview = {
+  recipe_id?: string | null;
+  title?: string | null;
+  fit_status?: string | null;
+  fit_score?: number | null;
+  fit_reasons?: string[] | null;
+  warnings?: string[] | null;
+  blocked_reasons?: string[] | null;
+  portion_factor?: number | null;
+  ingredients?: RawRecipePreviewIngredient[] | null;
+  nutrition_summary?: Record<string, unknown> | null;
+  stock_projection?: Record<string, unknown> | null;
+};
+
+type RawMealMutationOutput = {
+  meal_slot_id?: string | null;
+  slot_id?: string | null;
+  status?: string | null;
+  profile_id?: string | null;
+  recipe_id?: string | null;
+  portion_factor?: number | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+  inserted_ingredient_count?: number | null;
+};
+
+type RawConfirmOutput = {
+  meal_slot_id?: string | null;
+  status?: string | null;
+  consumption_lines?: Array<Record<string, unknown>> | null;
+  shopping_rebuild_status?: string | null;
+  alerts?: Array<Record<string, unknown>> | null;
+};
+
+type RawMealConfirmationServer = {
+  meal_slot_id?: string | null;
+  status?: string | null;
+  consumption_lines?: Array<Record<string, unknown>> | null;
+  shopping_rebuild_status?: string | null;
+  alerts?: Array<Record<string, unknown>> | null;
+  updated_at?: string | null;
+};
+
 function pickRows<T>(value: T[] | T | null | undefined): T[] {
   if (Array.isArray(value)) return value;
   if (!value) return [];
   return [value];
+}
+
+function toNumber(value: unknown, fallback = 0): number {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : fallback;
 }
 
 function normalizeMealProfile(raw: RawMealProfile): ActiveMealProfile {
@@ -309,7 +324,7 @@ function normalizeFitStatus(raw: RawRecipeCandidate): RecipeFitStatus {
     return "BLOCKED" as RecipeFitStatus;
   }
 
-  if (Number(raw.missing_count ?? 0) > 0) {
+  if (toNumber(raw.missing_count, 0) > 0) {
     return "WARNING" as RecipeFitStatus;
   }
 
@@ -321,7 +336,7 @@ function normalizeWarnings(raw: RawRecipeCandidate): string[] {
     return raw.fit.warnings.filter(Boolean);
   }
 
-  const missingCount = Number(raw.missing_count ?? 0);
+  const missingCount = toNumber(raw.missing_count, 0);
 
   if (missingCount > 0) {
     return [`${missingCount} élément(s) manquant(s).`];
@@ -361,10 +376,11 @@ function normalizeRecipeCandidate(
   raw: RawRecipeCandidate,
   requestedMealType?: MealType,
 ): RecipeCandidate {
-  const missingCount = Number(raw.missing_count ?? 0);
+  const missingCount = toNumber(raw.missing_count, 0);
   const isFeasible = raw.is_feasible ?? true;
-  const fitScore = Number(
+  const fitScore = toNumber(
     raw.fit?.fit_score ?? raw.compatibility_score ?? (isFeasible ? 100 : 0),
+    isFeasible ? 100 : 0,
   );
 
   return {
@@ -377,9 +393,9 @@ function normalizeRecipeCandidate(
       "Description non renseignée.",
     difficulty: raw.difficulty ?? "EASY",
     meal_types: normalizeMealTypes(raw, requestedMealType),
-    prep_minutes: Number(raw.prep_minutes ?? 0),
-    cook_minutes: Number(raw.cook_minutes ?? 0),
-    default_servings: Number(raw.default_servings ?? 1),
+    prep_minutes: toNumber(raw.prep_minutes, 0),
+    cook_minutes: toNumber(raw.cook_minutes, 0),
+    default_servings: toNumber(raw.default_servings, 1),
     stock_intensity:
       raw.stock_intensity ?? (missingCount > 0 ? "HIGH" : "LOW"),
     tags: Array.isArray(raw.tags)
@@ -399,7 +415,7 @@ function normalizeRecipeCandidate(
     },
     personalized_serving_label:
       raw.personalized_serving_label?.trim() || "Portion personnalisée",
-    portion_factor: Number(raw.portion_factor ?? 1),
+    portion_factor: toNumber(raw.portion_factor, 1),
     hero_badges: Array.isArray(raw.hero_badges)
       ? raw.hero_badges
           .map((badge) => ({
@@ -420,10 +436,10 @@ function normalizeRecipePreviewIngredient(
     ingredient_label: raw.ingredient_label ?? "Ingrédient",
     nutrition_role: raw.nutrition_role ?? "OTHER",
     unit_code: raw.unit_code ?? "UNIT",
-    qty_base: Number(raw.qty_base ?? 0),
-    qty_adjusted: Number(raw.qty_adjusted ?? 0),
+    qty_base: toNumber(raw.qty_base, 0),
+    qty_adjusted: toNumber(raw.qty_adjusted, 0),
     scaling_policy: raw.scaling_policy ?? "FULL",
-    sort_order: Number(raw.sort_order ?? 100),
+    sort_order: toNumber(raw.sort_order, 100),
   };
 }
 
@@ -434,13 +450,13 @@ function normalizeRecipePreview(raw: RawRecipePreview | null): RecipePreview | n
     recipe_id: raw.recipe_id ?? "",
     title: raw.title ?? "Recette DOMYLI",
     fit_status: (raw.fit_status ?? "OK") as RecipeFitStatus,
-    fit_score: Number(raw.fit_score ?? 100),
+    fit_score: toNumber(raw.fit_score, 100),
     fit_reasons: Array.isArray(raw.fit_reasons) ? raw.fit_reasons.filter(Boolean) : [],
     warnings: Array.isArray(raw.warnings) ? raw.warnings.filter(Boolean) : [],
     blocked_reasons: Array.isArray(raw.blocked_reasons)
       ? raw.blocked_reasons.filter(Boolean)
       : [],
-    portion_factor: Number(raw.portion_factor ?? 1),
+    portion_factor: toNumber(raw.portion_factor, 1),
     ingredients: Array.isArray(raw.ingredients)
       ? raw.ingredients.map(normalizeRecipePreviewIngredient)
       : [],
@@ -471,7 +487,7 @@ function normalizeMealMutationResult(
           : null,
     created_at: raw?.created_at ?? null,
     updated_at: raw?.updated_at ?? null,
-    inserted_ingredient_count: Number(raw?.inserted_ingredient_count ?? 0),
+    inserted_ingredient_count: toNumber(raw?.inserted_ingredient_count, 0),
   };
 }
 
@@ -486,6 +502,25 @@ function normalizeConfirmResult(
       : [],
     shopping_rebuild_status: raw?.shopping_rebuild_status ?? null,
     alerts: Array.isArray(raw?.alerts) ? raw.alerts : [],
+  };
+}
+
+function normalizeMealConfirmationServer(
+  raw: RawMealConfirmationServer | null | undefined,
+): MealConfirmationServer | null {
+  if (!raw?.meal_slot_id) {
+    return null;
+  }
+
+  return {
+    meal_slot_id: raw.meal_slot_id,
+    status: raw.status ?? null,
+    consumption_lines: Array.isArray(raw.consumption_lines)
+      ? raw.consumption_lines
+      : [],
+    shopping_rebuild_status: raw.shopping_rebuild_status ?? null,
+    alerts: Array.isArray(raw.alerts) ? raw.alerts : [],
+    updated_at: raw.updated_at ?? null,
   };
 }
 
@@ -507,7 +542,7 @@ function normalizeMealDraft(raw: RawMealSlot): MealDraft {
           : null,
     created_at: raw.created_at ?? null,
     updated_at: raw.updated_at ?? null,
-    inserted_ingredient_count: Number(raw.inserted_ingredient_count ?? 0),
+    inserted_ingredient_count: toNumber(raw.inserted_ingredient_count, 0),
   };
 }
 
@@ -562,7 +597,7 @@ export async function listMealSlotsFeed(
 async function readBuild3ACandidates(
   profileId: string,
   mealType: MealType,
-  search?: string,
+  _search?: string,
   limit = 120,
 ): Promise<RecipeCandidate[]> {
   const raw = (await callRpc(
@@ -570,7 +605,6 @@ async function readBuild3ACandidates(
     {
       p_profile_id: profileId.trim(),
       p_meal_type: mealType,
-      p_search: search?.trim() || null,
       p_limit: limit,
     },
     { timeoutMs: 15_000, retries: 1, retryDelayMs: 900 },
@@ -652,6 +686,10 @@ export async function readRecipePreviewForMeal(
 
     return normalizeRecipePreview(raw);
   } catch (error) {
+    if (isMissingRpcError(error)) {
+      return null;
+    }
+
     throw toDomyliError(error);
   }
 }
@@ -684,6 +722,30 @@ export async function updateMeal(
 
     return normalizeMealMutationResult(raw);
   } catch (error) {
+    throw toDomyliError(error);
+  }
+}
+
+export async function readMealConfirmationServer(
+  mealSlotId: string,
+): Promise<MealConfirmationServer | null> {
+  try {
+    if (!mealSlotId.trim()) {
+      return null;
+    }
+
+    const raw = (await callRpc(
+      "rpc_meal_confirmation_read_v1",
+      { p_meal_slot_id: mealSlotId.trim() },
+      { unwrap: true, timeoutMs: 15_000, retries: 1, retryDelayMs: 900 },
+    )) as RawMealConfirmationServer | null;
+
+    return normalizeMealConfirmationServer(raw);
+  } catch (error) {
+    if (isMissingRpcError(error)) {
+      return null;
+    }
+
     throw toDomyliError(error);
   }
 }
@@ -731,6 +793,6 @@ export function buildSessionMealDraft(input: {
       typeof input.portion_factor === "number" ? input.portion_factor : null,
     created_at: input.created_at ?? null,
     updated_at: input.updated_at ?? null,
-    inserted_ingredient_count: Number(input.inserted_ingredient_count ?? 0),
+    inserted_ingredient_count: toNumber(input.inserted_ingredient_count, 0),
   };
 }
