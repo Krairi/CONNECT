@@ -1,14 +1,10 @@
 import { useCallback, useEffect, useState } from "react";
 import { toDomyliError, type DomyliAppError } from "@/src/lib/errors";
 import {
-  getActivationStatus,
   getTodayHealth,
   getTodayLoadFeed,
-  getValueChainStatus,
-  type ActivationStatus,
-  type DashboardFeedItem,
   type TodayHealth,
-  type ValueChainStatus,
+  type TodayLoadFeed,
 } from "@/src/services/dashboard/dashboardService";
 import {
   getDashboardViewContext,
@@ -21,9 +17,7 @@ type DashboardState = {
   loading: boolean;
   error: DomyliAppError | null;
   health: TodayHealth | null;
-  feed: DashboardFeedItem[];
-  activation: ActivationStatus | null;
-  valueChain: ValueChainStatus | null;
+  feed: TodayLoadFeed;
   viewContext: DashboardViewContext | null;
   viewMode: DashboardViewMode;
   selectedProfileId: string | null;
@@ -36,9 +30,7 @@ const initialState: DashboardState = {
   loading: false,
   error: null,
   health: null,
-  feed: [],
-  activation: null,
-  valueChain: null,
+  feed: { members: [] },
   viewContext: null,
   viewMode: "FOYER",
   selectedProfileId:
@@ -62,14 +54,11 @@ export function useDashboard() {
       }));
 
       try {
-        const [health, feed, activation, valueChain, viewContext] =
-          await Promise.all([
-            getTodayHealth(),
-            getTodayLoadFeed(),
-            getActivationStatus(),
-            getValueChainStatus(),
-            getDashboardViewContext(selectedProfileId),
-          ]);
+        const [health, feed, viewContext] = await Promise.all([
+          getTodayHealth(),
+          getTodayLoadFeed(),
+          getDashboardViewContext(selectedProfileId),
+        ]);
 
         const persistedViewMode =
           typeof window !== "undefined"
@@ -99,8 +88,6 @@ export function useDashboard() {
           error: null,
           health,
           feed,
-          activation,
-          valueChain,
           viewContext,
           viewMode:
             resolvedViewMode === "PROFILE" && !viewContext.selected_profile
@@ -108,8 +95,6 @@ export function useDashboard() {
               : resolvedViewMode,
           selectedProfileId: resolvedProfileId,
         });
-
-        return { health, feed, activation, valueChain, viewContext };
       } catch (error) {
         const normalized = toDomyliError(error);
         setState((prev) => ({
@@ -117,7 +102,6 @@ export function useDashboard() {
           loading: false,
           error: normalized,
         }));
-        throw normalized;
       }
     },
     [state.selectedProfileId],
