@@ -84,6 +84,8 @@ export type RecipePreview = {
   stock_projection: Record<string, unknown>;
 };
 
+export type MealRecipeDetail = RecipePreview;
+
 export type MealMutationResult = {
   meal_slot_id: string;
   status: string | null;
@@ -692,6 +694,14 @@ export async function readRecipePreviewForMeal(
 
     throw toDomyliError(error);
   }
+}
+
+export async function readMealRecipeDetail(
+  profileId: string,
+  recipeId: string,
+  mealType: MealType,
+): Promise<MealRecipeDetail | null> {
+  return readRecipePreviewForMeal(profileId, recipeId, mealType);
 }
 
 export async function createMeal(
