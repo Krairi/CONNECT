@@ -1,95 +1,150 @@
-import { callRpc } from "@/src/services/rpc";
+import { callRpc } from "../rpc";
+import { isMissingRpcError } from "../../lib/errors";
 
-export type TodayHealth = {
-  day: string | null;
-  inventory_low_stock_count: number;
+export type DashboardHealth = {
+  day: string;
   open_alert_count: number;
-  open_shopping_count: number;
-  today_meal_count: number;
-  today_task_count: number;
+  blocked_tools_count: number;
+  missing_stock_count: number;
+  planned_meals_count: number;
+  confirmed_meals_count: number;
+  overdue_tasks_count: number;
 };
 
-type RawTodayHealth = {
+type RawTodayHealthJson = {
+  household_id?: string | null;
   day?: string | null;
-  inventory_low_stock_count?: number | null;
-  missing_stock_count?: number | null;
   open_alert_count?: number | null;
   blocked_tools_count?: number | null;
-  open_shopping_count?: number | null;
-  shopping_count?: number | null;
-  today_meal_count?: number | null;
+  missing_stock_count?: number | null;
   planned_meals_count?: number | null;
-  today_task_count?: number | null;
+  confirmed_meals_count?: number | null;
   overdue_tasks_count?: number | null;
+
+  inventory_low_stock_count?: number | null;
+  today_meal_count?: number | null;
+  today_task_count?: number | null;
+  today_task_done_count?: number | null;
 };
 
-export type TodayLoadFeedMember = {
-  user_id: string;
-  role: string;
-  capacity_points_daily: number;
-  assigned_task_count: number;
+export type DashboardFeedItem = {
+  item_id: string;
+  item_type: string;
+  title: string;
+  scheduled_at: string | null;
+  status: string;
 };
 
-export type TodayLoadFeed = {
-  members: TodayLoadFeedMember[];
+type RawTodayLoadFeedItem = {
+  item_id?: string | null;
+  item_type?: string | null;
+  title?: string | null;
+  scheduled_at?: string | null;
+  status?: string | null;
 };
 
-type RawFeedMember = {
-  user_id?: string | null;
-  member_user_id?: string | null;
-  role?: string | null;
-  capacity_points_daily?: number | null;
-  assigned_task_count?: number | null;
+type RawTodayLoadFeedEnvelope = {
+  household_id?: string | null;
+  day?: string | null;
+  items?: RawTodayLoadFeedItem[] | null;
+  feed?: RawTodayLoadFeedItem[] | null;
+  rows?: RawTodayLoadFeedItem[] | null;
 };
 
-type RawTodayLoadFeed =
-  | {
-      members?: RawFeedMember[] | null;
-    }
-  | RawFeedMember[]
-  | null;
+function todayIso(): string {
+  return new Date().toISOString().slice(0, 10);
+}
 
-export async function getTodayHealth(): Promise<TodayHealth> {
-  const raw = (await callRpc("rpc_today_health", {}, { unwrap: true })) as
-    | RawTodayHealth
-    | null
-    | undefined;
+function normalizeNumber(value: unknown): number {
+  const parsed = Number(value ?? 0);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
 
+function normalizeHealth(raw: RawTodayHealthJson | null | undefined): DashboardHealth {
   return {
-    day: raw?.day ?? null,
-    inventory_low_stock_count: Number(
-      raw?.inventory_low_stock_count ?? raw?.missing_stock_count ?? 0,
+    day: raw?.day ?? todayIso(),
+    open_alert_count: normalizeNumber(raw?.open_alert_count),
+    blocked_tools_count: normalizeNumber(raw?.blocked_tools_count),
+    missing_stock_count: normalizeNumber(
+      raw?.missing_stock_count ?? raw?.inventory_low_stock_count,
     ),
-    open_alert_count: Number(
-      raw?.open_alert_count ?? raw?.blocked_tools_count ?? 0,
+    planned_meals_count: normalizeNumber(
+      raw?.planned_meals_count ?? raw?.today_meal_count,
     ),
-    open_shopping_count: Number(
-      raw?.open_shopping_count ?? raw?.shopping_count ?? 0,
-    ),
-    today_meal_count: Number(
-      raw?.today_meal_count ?? raw?.planned_meals_count ?? 0,
-    ),
-    today_task_count: Number(
-      raw?.today_task_count ?? raw?.overdue_tasks_count ?? 0,
-    ),
+    confirmed_meals_count: normalizeNumber(raw?.confirmed_meals_count),
+    overdue_tasks_count: normalizeNumber(raw?.overdue_tasks_count),
   };
 }
 
-export async function getTodayLoadFeed(): Promise<TodayLoadFeed> {
-  const raw = (await callRpc("rpc_today_load_feed", {})) as RawTodayLoadFeed;
-
-  const membersArray = Array.isArray(raw)
-    ? raw
-    : Array.isArray(raw?.members)
-      ? raw.members
-      : [];
-
+function normalizeFeedItem(raw: RawTodayLoadFeedItem): DashboardFeedItem {
   return {
-    members: membersArray.map((member) => ({
-      user_id: member.user_id ?? member.member_user_id ?? "",
-      role: member.role ?? "MEMBER",
-      capacity_points_daily: Number(member.capacity_points_daily ?? 0),
-      assigned_task_count: Number(member.assigned_task_count ?? 0),
-    })),
+    item_id: String(raw.item_id ?? ""),
+    item_type: String(raw.item_type ?? "SYSTEM"),
+    title: String(raw.title ?? "Signal DOMYLI"),
+    scheduled_at: raw.scheduled_at ?? null,
+    status: String(raw.status ?? "OPEN"),
   };
+}
+
+function pickFeedRows(
+  raw:
+    | RawTodayLoadFeedEnvelope
+    | RawTodayLoadFeedItem[]
+    | RawTodayLoadFeedItem
+    | null
+    | undefined,
+): RawTodayLoadFeedItem[] {
+  if (Array.isArray(raw)) {
+    return raw;
+  }
+
+  if (!raw || typeof raw !== "object") {
+    return [];
+  }
+
+  const envelope = raw as RawTodayLoadFeedEnvelope;
+
+  if (Array.isArray(envelope.items)) {
+    return envelope.items;
+  }
+
+  if (Array.isArray(envelope.feed)) {
+    return envelope.feed;
+  }
+
+  if (Array.isArray(envelope.rows)) {
+    return envelope.rows;
+  }
+
+  return [];
+}
+
+export async function getTodayHealth(): Promise<DashboardHealth> {
+  try {
+    const raw = await callRpc<RawTodayHealthJson>("rpc_today_health", {});
+    return normalizeHealth(raw);
+  } catch (error) {
+    if (isMissingRpcError(error)) {
+      return normalizeHealth(null);
+    }
+
+    throw error;
+  }
+}
+
+export async function getTodayLoadFeed(): Promise<DashboardFeedItem[]> {
+  try {
+    const raw = await callRpc<RawTodayLoadFeedEnvelope | RawTodayLoadFeedItem[]>(
+      "rpc_today_load_feed",
+      {},
+    );
+
+    return pickFeedRows(raw).map(normalizeFeedItem);
+  } catch (error) {
+    if (isMissingRpcError(error)) {
+      return [];
+    }
+
+    throw error;
+  }
 }
