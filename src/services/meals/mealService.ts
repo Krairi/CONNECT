@@ -34,6 +34,8 @@ export type MealDraft = {
   inserted_ingredient_count: number;
 };
 
+export type MealSlotDetail = MealDraft;
+
 export type RecipeCandidate = {
   recipe_id: string;
   recipe_code: string;
@@ -596,6 +598,44 @@ export async function listMealSlotsFeed(
   }
 }
 
+export async function readMealSlotDetail(
+  mealSlotId: string,
+): Promise<MealSlotDetail | null> {
+  try {
+    if (!mealSlotId.trim()) {
+      return null;
+    }
+
+    const raw = (await callRpc(
+      "rpc_meal_slot_detail_v1",
+      { p_meal_slot_id: mealSlotId.trim() },
+      { unwrap: true, timeoutMs: 12_000, retries: 1, retryDelayMs: 900 },
+    )) as RawMealSlot | null;
+
+    return raw ? normalizeMealDraft(raw) : null;
+  } catch (error) {
+    if (isMissingRpcError(error)) {
+      try {
+        const fallback = (await callRpc(
+          "rpc_meal_slot_read_v1",
+          { p_meal_slot_id: mealSlotId.trim() },
+          { unwrap: true, timeoutMs: 12_000, retries: 1, retryDelayMs: 900 },
+        )) as RawMealSlot | null;
+
+        return fallback ? normalizeMealDraft(fallback) : null;
+      } catch (fallbackError) {
+        if (isMissingRpcError(fallbackError)) {
+          return null;
+        }
+
+        throw toDomyliError(fallbackError);
+      }
+    }
+
+    throw toDomyliError(error);
+  }
+}
+
 async function readBuild3ACandidates(
   profileId: string,
   mealType: MealType,
@@ -754,6 +794,56 @@ export async function readMealConfirmationServer(
   } catch (error) {
     if (isMissingRpcError(error)) {
       return null;
+    }
+
+    throw toDomyliError(error);
+  }
+}
+
+export async function reopenMealSlot(
+  mealSlotId: string,
+): Promise<MealMutationResult> {
+  const emptyResult = normalizeMealMutationResult({
+    meal_slot_id: mealSlotId,
+    status: "PLANNED",
+  });
+
+  try {
+    if (!mealSlotId.trim()) {
+      return emptyResult;
+    }
+
+    const raw = (await callRpc(
+      "rpc_meal_slot_reopen_v1",
+      { p_meal_slot_id: mealSlotId.trim() },
+      { unwrap: true, timeoutMs: 15_000, retries: 1, retryDelayMs: 900 },
+    )) as RawMealMutationOutput | null;
+
+    return normalizeMealMutationResult(
+      raw ?? { meal_slot_id: mealSlotId.trim(), status: "PLANNED" },
+    );
+  } catch (error) {
+    if (isMissingRpcError(error)) {
+      try {
+        const fallback = (await callRpc(
+          "rpc_meal_reopen_v1",
+          { p_meal_slot_id: mealSlotId.trim() },
+          { unwrap: true, timeoutMs: 15_000, retries: 1, retryDelayMs: 900 },
+        )) as RawMealMutationOutput | null;
+
+        return normalizeMealMutationResult(
+          fallback ?? { meal_slot_id: mealSlotId.trim(), status: "PLANNED" },
+        );
+      } catch (fallbackError) {
+        if (isMissingRpcError(fallbackError)) {
+          return normalizeMealMutationResult({
+            meal_slot_id: mealSlotId.trim(),
+            status: "PLANNED",
+          });
+        }
+
+        throw toDomyliError(fallbackError);
+      }
     }
 
     throw toDomyliError(error);
