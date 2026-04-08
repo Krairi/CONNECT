@@ -46,6 +46,28 @@ type RawMealProfile = {
   updated_at?: string | null;
 };
 
+type RawMealSlot = {
+  slot_id?: string | null;
+  meal_slot_id?: string | null;
+  slot_date?: string | null;
+  planned_for?: string | null;
+  meal_type?: MealType | null;
+  status?: string | null;
+  profile_id?: string | null;
+  profile_display_name?: string | null;
+  recipe_id?: string | null;
+  recipe_title?: string | null;
+  title?: string | null;
+  missing_count?: number | null;
+  is_feasible?: boolean | null;
+  updated_at?: string | null;
+  notes?: string | null;
+  operator_notes?: string | null;
+  portion_factor?: number | null;
+  created_at?: string | null;
+  inserted_ingredient_count?: number | null;
+};
+
 type RawRecipeTag = {
   code?: string | null;
   label?: string | null;
@@ -172,6 +194,7 @@ export type RecipePreview = {
 
 type RawMealMutationOutput = {
   meal_slot_id?: string | null;
+  slot_id?: string | null;
   status?: string | null;
   profile_id?: string | null;
   recipe_id?: string | null;
@@ -225,6 +248,12 @@ export type UpdateMealRpcInput = {
   p_operator_notes?: string | null;
 };
 
+export type ListMealSlotsFeedInput = {
+  from: string;
+  to: string;
+  profileId?: string | null;
+};
+
 function pickRows<T>(value: T[] | T | null | undefined): T[] {
   if (Array.isArray(value)) return value;
   if (!value) return [];
@@ -237,7 +266,11 @@ function normalizeMealProfile(raw: RawMealProfile): ActiveMealProfile {
     display_name: raw.display_name?.trim() || "Profil sans nom",
     summary: raw.summary?.trim() || "Profil DOMYLI",
     weight_kg:
-      typeof raw.weight_kg === "number" ? Number(raw.weight_kg) : raw.weight_kg != null ? Number(raw.weight_kg) : null,
+      typeof raw.weight_kg === "number"
+        ? Number(raw.weight_kg)
+        : raw.weight_kg != null
+          ? Number(raw.weight_kg)
+          : null,
     goal: raw.goal ?? null,
     activity_level: raw.activity_level ?? null,
     is_pregnant: Boolean(raw.is_pregnant),
@@ -426,7 +459,7 @@ function normalizeMealMutationResult(
   raw: RawMealMutationOutput | null | undefined,
 ): MealMutationResult {
   return {
-    meal_slot_id: raw?.meal_slot_id ?? "",
+    meal_slot_id: raw?.meal_slot_id ?? raw?.slot_id ?? "",
     status: raw?.status ?? null,
     profile_id: raw?.profile_id ?? null,
     recipe_id: raw?.recipe_id ?? null,
@@ -456,6 +489,28 @@ function normalizeConfirmResult(
   };
 }
 
+function normalizeMealDraft(raw: RawMealSlot): MealDraft {
+  return {
+    meal_slot_id: raw.meal_slot_id ?? raw.slot_id ?? "",
+    planned_for: raw.planned_for ?? raw.slot_date ?? "",
+    meal_type: (raw.meal_type ?? "LUNCH") as MealType,
+    profile_id: raw.profile_id ?? null,
+    recipe_id: raw.recipe_id ?? null,
+    title: raw.title ?? raw.recipe_title ?? null,
+    notes: raw.notes ?? raw.operator_notes ?? null,
+    status: raw.status ?? null,
+    portion_factor:
+      typeof raw.portion_factor === "number"
+        ? Number(raw.portion_factor)
+        : raw.portion_factor != null
+          ? Number(raw.portion_factor)
+          : null,
+    created_at: raw.created_at ?? null,
+    updated_at: raw.updated_at ?? null,
+    inserted_ingredient_count: Number(raw.inserted_ingredient_count ?? 0),
+  };
+}
+
 export async function listMealActiveProfiles(): Promise<ActiveMealProfile[]> {
   try {
     const raw = (await callRpc(
@@ -469,6 +524,37 @@ export async function listMealActiveProfiles(): Promise<ActiveMealProfile[]> {
       .map(normalizeMealProfile)
       .sort((a, b) => a.display_name.localeCompare(b.display_name, "fr"));
   } catch (error) {
+    throw toDomyliError(error);
+  }
+}
+
+export async function listMealSlotsFeed(
+  input: ListMealSlotsFeedInput,
+): Promise<MealDraft[]> {
+  try {
+    const raw = (await callRpc(
+      "rpc_meal_slots_feed_v1",
+      {
+        p_from: input.from,
+        p_to: input.to,
+        p_profile_id: input.profileId?.trim() || null,
+      },
+      { timeoutMs: 12_000, retries: 1, retryDelayMs: 900 },
+    )) as RawMealSlot[] | RawMealSlot | null;
+
+    return pickRows(raw)
+      .map(normalizeMealDraft)
+      .filter((row) => Boolean(row.meal_slot_id))
+      .sort((a, b) => {
+        const dateCompare = a.planned_for.localeCompare(b.planned_for, "fr");
+        if (dateCompare !== 0) return dateCompare;
+        return a.meal_type.localeCompare(b.meal_type, "fr");
+      });
+  } catch (error) {
+    if (isMissingRpcError(error)) {
+      return [];
+    }
+
     throw toDomyliError(error);
   }
 }
