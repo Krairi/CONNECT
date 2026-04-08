@@ -48,7 +48,7 @@ export type DashboardValueChain = {
 type DashboardState = {
   loading: boolean;
   error: DomyliAppError | null;
-  health: DashboardHealth | null;
+  health: DashboardHealth;
   feed: DashboardFeedItem[];
   activation: DashboardActivation;
   valueChain: DashboardValueChain;
@@ -106,7 +106,10 @@ function normalizeFeed(raw: any): DashboardFeedItem[] {
   }));
 }
 
-function buildActivation(health: DashboardHealth, feed: DashboardFeedItem[]): DashboardActivation {
+function buildActivation(
+  health: DashboardHealth,
+  feed: DashboardFeedItem[],
+): DashboardActivation {
   const has_members = true;
   const has_profiles = true;
   const has_inventory = true;
